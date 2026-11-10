@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import Workspace from "@/components/workspace";
+import OmegaLogo from "@/components/omega-logo";
 import { ADMIN_EMAIL, auth, isLoginConfigured } from "@/auth";
 
 export const dynamic = "force-dynamic";
@@ -13,7 +14,7 @@ export default async function Page() {
     return (
       <main className="auth-page">
         <section className="auth-card">
-          <div className="auth-wordmark"><span>Ω</span> OMEGA</div>
+          <div className="auth-wordmark"><OmegaLogo variant="dark" width={280} /></div>
           <div className="auth-eyebrow">SECURE WORKSPACE SETUP</div>
           <h1>Administrator login is not configured.</h1>
           <p>The Omega Bond Proposal Generator is ready for a single-user login using <strong>{ADMIN_EMAIL}</strong>.</p>
