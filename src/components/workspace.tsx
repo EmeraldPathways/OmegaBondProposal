@@ -2,6 +2,7 @@
 import {useMemo,useRef,useState} from "react";
 import { signOut } from "next-auth/react";
 import {Activity,ArrowDownToLine,ArrowRight,BookOpen,ChartNoAxesCombined,Check,ChevronDown,CircleHelp,Database,FileCheck,FileText,Files,Filter,FlaskConical,FolderOpen,LayoutDashboard,Menu,Plus,RefreshCw,Search,Settings2,ShieldAlert,ShieldCheck,SlidersHorizontal,TrendingUp,UploadCloud,Wallet, X, LogOut} from "lucide-react";
+import OmegaLogo from "@/components/omega-logo";
 import {demoFunds,demoPortfolios} from "@/lib/sample";
 import type {Fund,Portfolio,SeriesPoint} from "@/lib/types";
 import {blendedFee,fmtEuro,fmtPercent,isValidPortfolio,metrics,portfolioSeries,sumWeights} from "@/lib/analytics";
@@ -114,7 +115,7 @@ export default function Workspace() {
  const canPrint=validComparison && historical.some(Boolean);
  return <div className="app-shell">
    <aside className={"sidebar "+(mobile?"mobile-open":"")}>
-     <div className="sidebar-brand"><span className="monogram">Ω</span><span><b>OMEGA</b><small>FINANCIAL MANAGEMENT</small></span><button className="sidebar-close" onClick={()=>setMobile(false)}><X size={18}/></button></div>
+     <div className="sidebar-brand"><OmegaLogo variant="dark" width={177} /><button className="sidebar-close" onClick={()=>setMobile(false)}><X size={18}/></button></div>
      <div className="sidebar-group-label">WORKSPACE</div>
      <nav className="nav-list">{NAV.map(item=><button key={item.key} className={"nav-link "+(view===item.key?"selected":"")} onClick={()=>go(item.key)}><item.icon size={18}/>{item.label}{item.key==="compare"&&<span className="nav-count">3</span>}</button>)}</nav>
      <div className="sidebar-bottom"><div className="sidebar-help"><FlaskConical size={19}/><b>Demo workspace</b><p>Synthetic fund data only. Do not enter real client information.</p></div><p className="side-footer">OFM Financial Ltd T/A Omega Financial Management, regulated by the Central Bank of Ireland.</p></div>
@@ -182,7 +183,7 @@ export default function Workspace() {
          <div className="page-heading no-print"><div><span className="eyebrow">CLIENT DOCUMENTS</span><h1>Investment bond proposal</h1><p>Prepare the client report using the same layout, figures and illustrations as the analysis workspace.</p></div><button className="btn primary" disabled={!canPrint} onClick={()=>{setIssued(true);setTimeout(()=>window.print(),100);}}><ArrowDownToLine size={16}/> Print / Save as PDF</button></div>
          <div className="panel padded proposal-config no-print"><div><label className="form-label" htmlFor="client">Client name (demonstration only)</label><input id="client" className="form-input" placeholder="Use fictional test data only" value={client} onChange={e=>setClient(e.target.value)} /></div><div><label className="form-label" htmlFor="adviser">Prepared by</label><input id="adviser" className="form-input" placeholder="Adviser" value={adviser} onChange={e=>setAdviser(e.target.value)}/></div><div className="full-column"><label className="form-label" htmlFor="objective">Client objective</label><textarea className="form-input textarea" id="objective" rows={2} value={objective} onChange={e=>setObjective(e.target.value)}/></div><p className="fineprint full-column">Demo-only: do not enter real client names, objectives, or other personal information. A secure authenticated client workflow will be built after provisioning storage and database.</p></div>
          <article className="proposal-sheet">
-           <div className="proposal-header"><div><div className="proposal-wordmark">Ω <span>OMEGA<small>FINANCIAL MANAGEMENT</small></span></div><div className="proposal-header-title">INVESTMENT BOND PROPOSAL</div></div><span className="proposal-tag">CLIENT ILLUSTRATION · DEMO</span></div>
+           <div className="proposal-header"><div><div className="proposal-wordmark"><OmegaLogo variant="light" width={260} /></div><div className="proposal-header-title">INVESTMENT BOND PROPOSAL</div></div><span className="proposal-tag">CLIENT ILLUSTRATION · DEMO</span></div>
            <div className="proposal-body">
              <div className="proposal-kicker">INVESTMENT STRATEGY & PORTFOLIO ANALYSIS</div><div className="proposal-main-title"><h2>Investment bond proposal</h2><span>Prepared {new Date().toLocaleDateString("en-IE",{day:"numeric",month:"long",year:"numeric"})}</span></div>
              <div className="proposal-summary"><div><small>PREPARED FOR</small><b>{client||"Example Client"}</b></div><div><small>PREPARED BY</small><b>{adviser||"Omega Financial Management"}</b></div><div><small>INVESTMENT AMOUNT</small><b>{money(investment)}</b></div></div>
