@@ -1,0 +1,20 @@
+-- Target schema for Neon PostgreSQL. Migrations and access controls required before client data is enabled.
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+CREATE TABLE providers (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), name text NOT NULL UNIQUE, website text);
+CREATE TABLE funds (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), provider_id uuid NOT NULL REFERENCES providers(id), name text NOT NULL, category text, description text, active boolean NOT NULL DEFAULT true);
+CREATE TABLE fund_series (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), fund_id uuid NOT NULL REFERENCES funds(id), fund_code text, unit_class text, wrapper text, currency char(3) NOT NULL, distribution_basis text, price_basis text, UNIQUE(fund_id,unit_class,wrapper,currency));
+CREATE TABLE imports (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), filename text NOT NULL, storage_key text NOT NULL, sha256 text NOT NULL, status text NOT NULL DEFAULT 'pending', uploaded_at timestamptz NOT NULL DEFAULT now(), reviewed_at timestamptz);
+CREATE TABLE factsheets (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), fund_series_id uuid NOT NULL REFERENCES fund_series(id), import_id uuid NOT NULL REFERENCES imports(id), published_on date, extracted_data jsonb, approved boolean NOT NULL DEFAULT false, approved_at timestamptz);
+CREATE TABLE price_series (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), fund_series_id uuid NOT NULL REFERENCES fund_series(id), source text NOT NULL, currency char(3) NOT NULL, price_type text NOT NULL, distribution_basis text, fee_basis text);
+CREATE TABLE price_observations (price_series_id uuid NOT NULL REFERENCES price_series(id), price_date date NOT NULL, unit_price numeric(24,10) NOT NULL CHECK(unit_price>0), import_id uuid NOT NULL REFERENCES imports(id), PRIMARY KEY(price_series_id,price_date));
+CREATE INDEX price_observations_date_idx ON price_observations(price_date);
+CREATE TABLE users (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), auth_id text NOT NULL UNIQUE, display_name text, role text NOT NULL CHECK(role IN ('admin','adviser','viewer')));
+CREATE TABLE clients (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), full_name text NOT NULL, client_ref text, created_at timestamptz NOT NULL DEFAULT now());
+CREATE TABLE portfolios (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), client_id uuid REFERENCES clients(id), title text NOT NULL, owner_id uuid REFERENCES users(id), created_at timestamptz NOT NULL DEFAULT now());
+CREATE TABLE portfolio_versions (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), portfolio_id uuid NOT NULL REFERENCES portfolios(id), investment numeric(18,2) NOT NULL CHECK(investment>0), version int NOT NULL, as_of date, status text NOT NULL DEFAULT 'draft', UNIQUE(portfolio_id,version));
+CREATE TABLE allocations (portfolio_version_id uuid NOT NULL REFERENCES portfolio_versions(id), fund_series_id uuid NOT NULL REFERENCES fund_series(id), weight numeric(10,6) NOT NULL CHECK(weight>=0 AND weight<=100), PRIMARY KEY(portfolio_version_id,fund_series_id));
+CREATE TABLE comparison_sets (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), name text NOT NULL, portfolio_version_ids uuid[] NOT NULL, methodology jsonb NOT NULL DEFAULT '{}');
+CREATE TABLE calculation_runs (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), comparison_id uuid REFERENCES comparison_sets(id), as_of timestamptz NOT NULL DEFAULT now(), engine_version text NOT NULL, input_snapshot jsonb NOT NULL, output jsonb NOT NULL, warnings jsonb NOT NULL DEFAULT '[]');
+CREATE TABLE proposals (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), client_id uuid NOT NULL REFERENCES clients(id), adviser_id uuid REFERENCES users(id), issued_at timestamptz, content jsonb NOT NULL, pdf_storage_key text);
+CREATE TABLE audit_events (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), actor_id uuid REFERENCES users(id), action text NOT NULL, resource text NOT NULL, resource_id uuid, occurred_at timestamptz NOT NULL DEFAULT now(), metadata jsonb NOT NULL DEFAULT '{}');
+-- Provision PostgreSQL users and least-privilege grants separately; do not expose SQL credentials to browsers.
