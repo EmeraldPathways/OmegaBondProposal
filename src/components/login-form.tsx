@@ -4,6 +4,7 @@ import { useState, type FormEvent } from "react";
 import { signIn } from "next-auth/react";
 import { Eye, EyeOff, LockKeyhole } from "lucide-react";
 import { useRouter } from "next/navigation";
+import OmegaLogo from "@/components/omega-logo";
 
 export default function LoginForm({ email }: { email: string }) {
   const router = useRouter();
@@ -41,8 +42,8 @@ export default function LoginForm({ email }: { email: string }) {
   return (
     <main className="auth-page">
       <section className="auth-card" aria-labelledby="auth-title">
-        <div className="auth-wordmark"><span>Ω</span> OMEGA</div>
-        <div className="auth-eyebrow">FINANCIAL MANAGEMENT</div>
+        <div className="auth-wordmark"><OmegaLogo variant="dark" width={280} /></div>
+        <div className="auth-eyebrow">SECURE ADVISER WORKSPACE</div>
         <div className="auth-icon"><LockKeyhole size={23} aria-hidden="true" /></div>
         <h1 id="auth-title">Welcome back.</h1>
         <p>Sign in to your secure investment proposal workspace.</p>
