@@ -2,12 +2,12 @@
 
 Adviser-facing investment bond portfolio analysis and proposal application for OFM Financial Ltd T/A Omega Financial Management.
 
-**Status: Interactive demonstration; not production-ready for client information.**
+**Status: Single-user login implementation deployed. Fund import remains a demonstration until secure persistent workflows are enabled.**
 
 ## Live build
 https://omega-bond-proposal.vercel.app
 
-The Vercel deployment currently uses Vercel Authentication protection, so access may require sign-in to the authorised Vercel account. No client records or official fund data should be entered at this stage.
+The Vercel deployment currently retains Vercel Authentication protection. The application additionally uses a single email-and-password login for `info@omegafinancial.ie`, which remains locked until the required private production secrets are configured. See [login setup](docs/SINGLE_USER_LOGIN.md). No client records or official fund data should be entered at this stage.
 
 ## Current functionality
 - Omega-branded Next.js workspace (Overview, Fund Library, Data Imports, Portfolio Builder, Comparison, Client Proposal).
@@ -19,15 +19,19 @@ The Vercel deployment currently uses Vercel Authentication protection, so access
 - Web proposal with print / Save as PDF layout.
 - Preliminary PostgreSQL schema in `src/lib/schema.sql`.
 
-## Not connected yet
-- Neon production database and migrations.
-- Private Vercel Blob storage and server-side factsheet extraction.
-- Staff accounts/permissions and secure sessions.
+## Not enabled yet
+- Neon and Vercel Blob are connected; the initial Postgres schema has been created, but the authenticated data import API is not yet enabled.
+- Private Blob upload/download/delete round-trip verification and server-side factsheet extraction.
+- A single-user Auth.js login is implemented; its production password and session secret must be configured privately in Vercel before use.
 - Persisted fund records, portfolio versions or client proposals.
 - Adviser-reviewed data provenance and distribution-corrected historical price series.
 - True issuer-backed PDF generation and immutable report archive.
 
 **Do not store real clients, financial information, or private fund factsheets in this prototype or the public repository.**
+
+## Single-user login setup
+
+The only permitted email is **info@omegafinancial.ie**. Add `AUTH_SECRET` (at least 32 random characters) and `OMEGA_LOGIN_PASSWORD` (a unique password of at least 16 characters) as server-only Vercel Sensitive/Secret environment variables for **Production**, then redeploy. Do not share the password or secret in this repository or any chat. Login is intentionally fail-closed until they are set. See [setup instructions](docs/SINGLE_USER_LOGIN.md).
 
 ## Local development
 ```bash
