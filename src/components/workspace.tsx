@@ -1,6 +1,7 @@
 "use client";
 import {useMemo,useRef,useState} from "react";
-import {Activity,ArrowDownToLine,ArrowRight,BookOpen,ChartNoAxesCombined,Check,ChevronDown,CircleHelp,Database,FileCheck,FileText,Files,Filter,FlaskConical,FolderOpen,LayoutDashboard,Menu,Plus,RefreshCw,Search,Settings2,ShieldAlert,ShieldCheck,SlidersHorizontal,TrendingUp,UploadCloud,Wallet, X} from "lucide-react";
+import { signOut } from "next-auth/react";
+import {Activity,ArrowDownToLine,ArrowRight,BookOpen,ChartNoAxesCombined,Check,ChevronDown,CircleHelp,Database,FileCheck,FileText,Files,Filter,FlaskConical,FolderOpen,LayoutDashboard,Menu,Plus,RefreshCw,Search,Settings2,ShieldAlert,ShieldCheck,SlidersHorizontal,TrendingUp,UploadCloud,Wallet, X, LogOut} from "lucide-react";
 import {demoFunds,demoPortfolios} from "@/lib/sample";
 import type {Fund,Portfolio,SeriesPoint} from "@/lib/types";
 import {blendedFee,fmtEuro,fmtPercent,isValidPortfolio,metrics,portfolioSeries,sumWeights} from "@/lib/analytics";
@@ -120,7 +121,7 @@ export default function Workspace() {
    </aside>
    {mobile&&<div className="mobile-backdrop" onClick={()=>setMobile(false)}/>}
    <div className="main-area">
-     <header className="topbar"><button className="mobile-menu" onClick={()=>setMobile(true)}><Menu size={22}/></button><span className="crumb">OMEGA <span>/</span> BOND PROPOSALS <span>/</span> <b>{NAV.find(n=>n.key===view)?.label}</b></span><div className="topbar-right"><span className="status-dot"/> <span className="desktop-only">Prototype environment</span><span className="avatar">OF</span></div></header>
+     <header className="topbar"><button className="mobile-menu" onClick={()=>setMobile(true)}><Menu size={22}/></button><span className="crumb">OMEGA <span>/</span> BOND PROPOSALS <span>/</span> <b>{NAV.find(n=>n.key===view)?.label}</b></span><div className="topbar-right"><span className="status-dot"/> <span className="desktop-only">Prototype environment</span><span className="avatar">OF</span><button className="app-signout" type="button" title="Sign out" aria-label="Sign out" onClick={() => signOut({ redirectTo: "/login" })}><LogOut size={16}/><span>Sign out</span></button></div></header>
      <main className="content">
        <div className="demo-warning"><FlaskConical size={17}/><span><strong>Demonstration only.</strong> All preloaded funds and historical prices are synthetic. Files imported here remain in this browser session; no database or secure client storage is connected.</span></div>
        {view==="overview"&&<>

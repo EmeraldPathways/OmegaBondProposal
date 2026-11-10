@@ -1,0 +1,29 @@
+/* Omega single-user login – aligned to the bond proposal brand. */
+.auth-page{min-height:100vh;display:grid;place-items:center;padding:32px 18px;background:radial-gradient(circle at 10% 0%,#ece4db 0%,transparent 37%),linear-gradient(145deg,#f9f8f5,#efede7)}
+.auth-card{width:100%;max-width:470px;background:#fff;border-radius:14px;border:1px solid #e8e3dc;padding:38px 40px;box-shadow:0 20px 75px rgba(64,37,36,.08)}
+.auth-wordmark{color:#69252e;letter-spacing:2.6px;font:28px Georgia,serif;display:flex;align-items:center;gap:12px}
+.auth-wordmark span{font:40px Georgia,serif;line-height:1}
+.auth-eyebrow{font-size:10px;font-weight:700;letter-spacing:3px;color:#9c905d;margin-top:6px}
+.auth-icon{margin-top:27px;width:51px;height:51px;border-radius:12px;background:#f7eff0;display:grid;place-items:center;color:#69252e}
+.auth-card h1{font:38px/1.2 Georgia,serif;color:#303633;margin:22px 0 8px;letter-spacing:-.7px}
+.auth-card p{color:#83867f;font-size:13px;line-height:1.7;margin:10px 0 20px}
+.auth-card form{margin-top:25px}
+.auth-card form label{display:block;color:#515650;font-size:12px;font-weight:700;margin:18px 0 8px}
+.auth-card input{width:100%;padding:13px 14px;border:1px solid #deddd7;border-radius:7px;outline:none;background:#fff;color:#343834;font-size:13px;height:46px}
+.auth-card input[readonly]{background:#f7f7f4;color:#6c6f69}
+.auth-card input:focus{border-color:#9c905d;box-shadow:0 0 0 2px #e7dfc6}
+.auth-password{position:relative}
+.auth-password input{padding-right:54px}
+.auth-password button{position:absolute;right:11px;top:50%;transform:translateY(-50%);border:0;background:transparent;color:#8b8a81;display:grid;place-items:center;padding:8px}
+.auth-button{display:flex;justify-content:center;align-items:center;gap:8px;width:100%;margin-top:24px;border:0;border-radius:7px;min-height:45px;background:#69252e;color:#fff;font-size:12px;font-weight:700;padding:12px;text-decoration:none;cursor:pointer}
+.auth-button:hover{background:#552129}
+.auth-button:disabled{opacity:.5;cursor:not-allowed}
+.auth-card .auth-helper{text-align:center;font-size:11px;margin-top:22px}
+.auth-card .auth-legal{border-top:1px solid #f0ede8;padding-top:19px;margin:22px 0 0;font-size:10px;line-height:1.6;color:#a5a49c}
+.auth-error{background:#fff1f0;color:#a83c41;border-radius:6px;font-size:11px;padding:11px;margin-top:12px}
+.auth-setup-vars{display:flex;gap:10px;flex-wrap:wrap}
+.auth-setup-vars code{padding:8px;border-radius:6px;background:#f4f1eb;font-size:11px}
+.auth-link{margin-bottom:22px}
+.app-signout{background:transparent;color:#7f817c;border:0;border-radius:6px;padding:6px 7px;display:flex;align-items:center;gap:5px;font-size:11px}
+.app-signout:hover{background:#f7eff0;color:#69252e}
+@media(max-width:540px){.auth-card{padding:28px 24px}.auth-card h1{font-size:33px}.auth-page{padding:14px}.app-signout span{display:none}}
