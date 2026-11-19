@@ -28,7 +28,8 @@ export function reconcilePdfOnly(fund: ApprovedFund, factsheets: FactSheetData[]
   // shortlist must also appear in the PDF itself. Never silently drop it.
   const expected = classSignals(fund.name);
   const printed = classSignals(title);
-  const classConsistent = [...expected].every(signal => printed.has(signal));
+  const classConsistent = [...expected].every(signal => printed.has(signal)) &&
+    [...printed].every(signal => expected.has(signal));
   const sameTitleCount = best
     ? ranked.filter(x => normalName(x.document.title!) === normalName(title)).length
     : 0;
