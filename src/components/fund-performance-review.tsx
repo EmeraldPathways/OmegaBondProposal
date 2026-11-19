@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowUpRight, CheckCircle2, Database, FileText, LoaderCircle, RefreshCw, ShieldAlert } from "lucide-react";
+import { ArrowDownToLine, ArrowUpRight, CheckCircle2, Database, FileText, LoaderCircle, RefreshCw, ShieldAlert } from "lucide-react";
 
 type Returns = Record<string,number|null>;
 type Review = {
@@ -34,6 +34,7 @@ export default function FundPerformanceReview(){
   const [error,setError]=useState(""),[message,setMessage]=useState("");
   const [query,setQuery]=useState("");
   const [provider,setProvider]=useState("All providers");
+  const [statusFilter,setStatusFilter]=useState("All statuses");
   const [expanded,setExpanded]=useState<string|null>(null);
   const running=useRef(false),alive=useRef(true);
 
@@ -93,8 +94,31 @@ export default function FundPerformanceReview(){
   }
   const filtered=status.reviews.filter(r=>
     (provider==="All providers"||r.provider===provider)&&
+    (statusFilter==="All statuses"||r.status===statusFilter)&&
     (r.approved_name+" "+r.provider+" "+(r.selected_source_name||"")).toLowerCase().includes(query.toLowerCase())
   );
+  function downloadExceptions(){
+    const exceptions=status.reviews.filter(r=>r.status!=="auto_matched");
+    const columns=["Provider","Approved fund","Status","Candidate workbook series","Candidate PDF title","MoneyMate ID","Factsheet date","Match score","Reason","Other workbook candidates"];
+    const safe=(v:unknown)=>{
+      let value=String(v??"").replace(/\r?\n/g," ");
+      if(/^[=+@\-\t\r]/.test(value))value="'"+value;
+      return '"'+value.replace(/"/g,'""')+'"';
+    };
+    const rows=exceptions.map(r=>[
+      r.provider,r.approved_name,r.status,r.selected_source_name,
+      r.extracted_factsheet?.title,r.extracted_factsheet?.moneyMateId,
+      r.extracted_factsheet?.asOf,r.confidence,r.reason,
+      (r.evidence?.candidatePerformanceRows??[]).map(v=>v.name).join(" | ")
+    ]);
+    const blob=new Blob(["\uFEFF"+[columns,...rows].map(r=>r.map(safe).join(",")).join("\r\n")],
+      {type:"text/csv;charset=utf-8"});
+    const url=URL.createObjectURL(blob);
+    const link=document.createElement("a");
+    link.href=url;link.download="Omega-Fund-Reconciliation-Exceptions.csv";
+    document.body.appendChild(link);link.click();link.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),1000);
+  }
   const count=(kind:string)=>status.reviews.filter(r=>r.status===kind).length;
   const loaded=status.reviews.length>0;
 
@@ -111,6 +135,8 @@ export default function FundPerformanceReview(){
         {busy?"Reconciling documents…":loaded?"Resume / rescan documents":"Start full reconciliation"}
       </button>
       <button className="btn quiet" type="button" disabled={busy} onClick={()=>void refresh()}><RefreshCw size={15}/> Refresh results</button>
+      <button className="btn quiet" type="button" disabled={busy||!status.reviews.length}
+        onClick={downloadExceptions}><ArrowDownToLine size={15}/> Download exception report</button>
     </div>
     {busy&&<div className="notice neutral" role="status"><LoaderCircle className="pdf-spin" size={16}/>{step}. Keep this tab open until the reconciliation finishes.</div>}
     {error&&<div role="alert" className="notice error"><ShieldAlert size={17}/>{error}</div>}
@@ -122,6 +148,17 @@ export default function FundPerformanceReview(){
       <div className="stat"><span>Auto-matched identities</span><strong>{count("auto_matched")}</strong></div>
       <div className="stat"><span>Manual exceptions</span><strong>{count("needs_review")+count("unmatched")}</strong></div>
     </div>
+    {loaded&&<div className="table-scroll" style={{marginTop:18}}>
+      <table className="data-table">
+        <thead><tr><th>PROVIDER</th><th>STRONG IDENTITY</th><th>REVIEW REQUIRED</th><th>UNMATCHED</th></tr></thead>
+        <tbody>{["Aviva","Zurich","Standard Life","New Ireland"].map(name=>
+          <tr key={name}><td><b>{name}</b></td>
+            <td>{status.reviews.filter(r=>r.provider===name&&r.status==="auto_matched").length}</td>
+            <td>{status.reviews.filter(r=>r.provider===name&&r.status==="needs_review").length}</td>
+            <td>{status.reviews.filter(r=>r.provider===name&&r.status==="unmatched").length}</td>
+          </tr>)}</tbody>
+      </table>
+    </div>}
 
     {loaded?<>
       <div className="filter-row" style={{marginTop:18}}>
@@ -130,7 +167,14 @@ export default function FundPerformanceReview(){
         <label className="select-wrap"><select value={provider} onChange={e=>setProvider(e.target.value)}>
           <option>All providers</option>{["Aviva","Zurich","New Ireland","Standard Life"].map(x=><option key={x}>{x}</option>)}
         </select></label>
+        <label className="select-wrap"><select aria-label="Filter match status" value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}>
+          <option>All statuses</option>
+          <option value="auto_matched">Strong identity matches</option>
+          <option value="needs_review">Review required</option>
+          <option value="unmatched">Unmatched</option>
+        </select></label>
       </div>
+      <p className="fineprint">Showing {filtered.length} of {status.reviews.length} approved funds. A strong identity match does not approve published return figures.</p>
       <div className="table-scroll"><table className="data-table">
         <thead><tr><th>APPROVED FUND</th><th>PROVIDER</th><th>IDENTITY</th><th>RETURNS</th><th></th></tr></thead>
         <tbody>{filtered.map(r=><tr key={r.fund_id}>
@@ -151,12 +195,14 @@ export default function FundPerformanceReview(){
           <h3>{r.approved_name}</h3>
           <p className="muted">{r.reason}</p>
           <p><strong>Workbook row:</strong> {r.selected_source_name||"Unmatched"}</p>
-          {r.reported_returns&&<div className="table-scroll"><table className="data-table">
+          {r.reported_returns&&<div>
+            <p className="fineprint"><strong>Unapproved candidate figures:</strong> shown only to help reconcile the original workbook and factsheet. Do not use these figures in client proposals.</p>
+            <div className="table-scroll"><table className="data-table">
             <thead><tr>{Object.values(labels).map(l=><th key={l}>{l}</th>)}</tr></thead>
             <tbody><tr>{Object.keys(labels).map(k=><td key={k}>{fmt(r.reported_returns?.[k])}</td>)}</tr></tbody>
-          </table></div>}
+          </table></div></div>}
           {data&&<>
-            <p><strong>PDF title:</strong> {data.title||"Could not extract"}</p>
+            <p><strong>Candidate PDF title:</strong> {data.title||"Could not extract"}</p>
             <p><strong>MoneyMate ID:</strong> {data.moneyMateId||"N/A"} · <strong>Factsheet date:</strong> {data.asOf||"N/A"}</p>
             <p><strong>AMC:</strong> {fmt(data.amcPct)} · <strong>CIV:</strong> {fmt(data.civPct)}</p>
             {data.objective&&<p><strong>Objective:</strong> {data.objective.slice(0,1200)}</p>}
