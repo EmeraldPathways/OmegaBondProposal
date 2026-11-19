@@ -151,18 +151,53 @@ export async function GET(){
   if(!await authorised())return NextResponse.json({error:"Unauthorised"},{status:401,headers});
   try{
     const sql=getNeonSql();
-    const status=await sql.query("SELECT to_regclass('public.fund_reconciliations') AS reconciliations, to_regclass('public.fund_source_factsheets') AS factsheets, to_regclass('public.fund_source_performance') AS performance");
+    const status=await sql.query("SELECT to_regclass('public.fund_reconciliations') AS reconciliations, "+
+      "to_regclass('public.fund_source_factsheets') AS factsheets, "+
+      "to_regclass('public.fund_source_performance') AS performance, "+
+      "to_regclass('public.fund_identity_reviews') AS manual");
     const tables=status[0];
     const files=await sql.query("SELECT COUNT(*)::int AS count FROM imports WHERE storage_key LIKE 'funds/factsheets/%'");
     if(!tables?.reconciliations || !tables?.factsheets || !tables?.performance)
       return NextResponse.json({initialized:false,approvedUniverse:115,totalFactsheets:Number(files[0].count),processedFactsheets:0,workbookRows:0,reviews:[]},{headers});
-    const [details,processed,performance]=await Promise.all([
-      sql.query("SELECT fund_id,provider,approved_name,status,confidence,selected_source_name,reported_returns,extracted_factsheet,evidence,reason,returns_approved, factsheet_import_id::text FROM fund_reconciliations ORDER BY provider,approved_name"),
+    const [details,processed,performance,manualReviews]=await Promise.all([
+      sql.query("SELECT fund_id,provider,approved_name,status,confidence,selected_source_name,reported_returns,extracted_factsheet,evidence,reason,returns_approved,factsheet_import_id::text FROM fund_reconciliations ORDER BY provider,approved_name"),
       sql.query("SELECT COUNT(*)::int AS count FROM fund_source_factsheets"),
-      sql.query("SELECT COUNT(*)::int AS count FROM fund_source_performance")
+      sql.query("SELECT COUNT(*)::int AS count FROM fund_source_performance"),
+      tables.manual?sql.query(
+        "SELECT m.fund_id,m.decision,m.note AS manual_note,m.reviewed_at::text AS reviewed_at,"+
+        "m.score_at_review::float AS reviewed_score,m.factsheet_import_id::text AS manual_factsheet_id,"+
+        "p.source_name AS manual_source_name,p.reported_returns AS manual_returns,"+
+        "f.data AS manual_factsheet "+
+        "FROM fund_identity_reviews m "+
+        "LEFT JOIN fund_source_performance p ON p.import_id=m.performance_import_id AND p.row_number=m.performance_row "+
+        "LEFT JOIN fund_source_factsheets f ON f.import_id=m.factsheet_import_id"
+      ):Promise.resolve([])
     ]);
+    const manualMap=new Map(manualReviews.map(m=>[String(m.fund_id),m]));
     const approved=new Set(APPROVED_FUNDS.map(f=>f.id));
-    return NextResponse.json({initialized:true,approvedUniverse:115,totalFactsheets:Number(files[0].count),processedFactsheets:Number(processed[0].count),workbookRows:Number(performance[0].count),reviews:details.filter(x=>approved.has(String(x.fund_id)))},{headers});
+    const reviews=details.filter(x=>approved.has(String(x.fund_id))).map(record=>{
+      const m=manualMap.get(String(record.fund_id));
+      const originalStatus=record.status;
+      const originalScore=Number(record.confidence??0);
+      if(!m)return {...record,auto_status:originalStatus,auto_score:originalScore,manual_decision:null};
+      const base={...record,auto_status:originalStatus,auto_score:originalScore,
+        manual_decision:m.decision,manual_note:m.manual_note,reviewed_at:m.reviewed_at};
+      if(m.decision==="confirmed")
+        return {...base,status:"manually_confirmed",confidence:m.reviewed_score??record.confidence,
+          selected_source_name:m.manual_source_name??null,
+          reported_returns:m.manual_returns??null,
+          extracted_factsheet:m.manual_factsheet??null,
+          factsheet_import_id:m.manual_factsheet_id??null,
+          reason:"Manually confirmed identity and selected source documents; reported returns remain unapproved.",
+          returns_approved:false};
+      return {...base,status:"manual_rejected",reported_returns:null,
+        selected_source_name:null,extracted_factsheet:null,factsheet_import_id:null,
+        reason:"Automatic proposal rejected during manual identity review; select different sources or reset the review.",
+        returns_approved:false};
+    });
+    return NextResponse.json({initialized:true,approvedUniverse:115,
+      totalFactsheets:Number(files[0].count),processedFactsheets:Number(processed[0].count),
+      workbookRows:Number(performance[0].count),reviews},{headers});
   }catch{
     console.error("Reconciliation review query failed.");
     return NextResponse.json({error:"Unable to read reconciliation progress."},{status:500,headers});
