@@ -1,5 +1,6 @@
 import { extractText, getDocumentProxy } from "unpdf";
 import type { FactSheetData } from "./engine";
+import { parsePdfPerformance } from "./pdf-performance";
 
 const DATE = /(?:\b\d{1,2}\s+(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+20\d{2}\b)/i;
 function first(pattern:RegExp,text:string):string|null {
@@ -162,6 +163,7 @@ export function parseFactsheetText(params:{
     holdings:candidates(text,/\bTop 10 Holdings\b/i,/\bRegional Allocation\b|ASSET MIX|SECTOR BREAKDOWN/i),
     allocations:candidates(text,/\bASSET MIX\b/i,/\bSECTOR BREAKDOWN\b|RISKS\b|CHARGES\b/i),
     chartReferences:chartReferences(pages),
+    performance:parsePdfPerformance({provider,title,pages}),
     pageCount:pages.length,
     extractionWarnings:warnings,
     titleEvidence:title?"PDF page 1: "+title:null,
