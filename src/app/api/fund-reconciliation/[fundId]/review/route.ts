@@ -135,6 +135,10 @@ export async function POST(request:Request,{params}:{params:Promise<{fundId:stri
     const title=(factRows[0].data as FactSheetData).title!;
     const workbookName=String(perfRows[0].source_name);
     const scores=matchScore(fund.name,title,workbookName);
+    if((scores.score<0.60 || !scores.classConsistent) && data.note.trim().length<8)
+      return NextResponse.json({
+        error:"Explain the discrepancy in your review note before confirming a low-score or share-class-conflicting match."
+      },{status:422,headers:noStore});
 
     // A reviewer may override heuristic similarity; preserve scores and their
     // explicit decision. Prevent accidental assignments to two distinct funds.
