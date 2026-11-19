@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { signOut } from "next-auth/react";
 import {
   ArrowRight, BookOpen, CheckCircle2, ChevronDown, Database,
@@ -29,6 +29,22 @@ const INITIAL_PORTFOLIOS: Portfolio[] = [
   { id: "c", title: "Portfolio C", description: "Alternative strategy", weights: {} },
 ];
 
+type ReconciledFund = {
+  fund_id:string; status:string; confidence:number;selected_source_name:string|null;
+  reported_returns:Record<string,number|null>|null;returns_approved:boolean;
+  factsheet_import_id:string|null;
+  reason:string;
+  extracted_factsheet:{
+    title?:string;moneyMateId?:string|null;asOf?:string|null;launchDate?:string|null;
+    baseCurrency?:string|null;objective?:string|null;strategy?:string|null;
+    amcPct?:number|null;civPct?:number|null;riskRating?:number|null;
+    holdings?:{name:string;percentage:number}[];
+    allocations?:{name:string;percentage:number}[];
+    chartReferences?:{page:number;label:string}[];
+    extractionWarnings?:string[];
+  }|null;
+};
+const formatReported=(value:number|null|undefined)=>value==null?"—":(value>0?"+":"")+value.toFixed(2)+"%";
 const PROVIDERS = Object.keys(APPROVED_FUND_GROUPS);
 const names = new Map(APPROVED_FUNDS.map(f => [f.id, f.name]));
 const isValidWeight = (weight: number) => Number.isFinite(weight) && weight >= 0 && weight <= 100;
@@ -45,6 +61,17 @@ function MoneyInput({ value, onChange }: { value: number; onChange: (v: number) 
 export default function Workspace() {
   const [view, setView] = useState<View>("overview");
   const [mobile, setMobile] = useState(false);
+  const [published,setPublished] = useState<Record<string,ReconciledFund>>({});
+  useEffect(()=>{
+    if(view!=="funds"&&view!=="builder"&&view!=="overview")return;
+    let active=true;
+    fetch("/api/fund-reconciliation",{credentials:"same-origin",cache:"no-store"})
+      .then(async response=>{if(!response.ok)return null;return response.json() as Promise<{reviews?:ReconciledFund[]}>})
+      .then(data=>{if(active&&data?.reviews){
+        setPublished(Object.fromEntries(data.reviews.map(row=>[row.fund_id,row])));
+      }}).catch(()=>{});
+    return ()=>{active=false};
+  },[view]);
   const [search, setSearch] = useState("");
   const [provider, setProvider] = useState("All providers");
   const [selectedFund, setSelectedFund] = useState<ApprovedFund | null>(null);
@@ -163,15 +190,19 @@ export default function Workspace() {
               </select><ChevronDown size={15}/></label>
             </div>
             <div className="table-scroll"><table className="data-table">
-              <thead><tr><th>FUND</th><th>PROVIDER</th><th>PERFORMANCE STATUS</th><th></th></tr></thead>
+              <thead><tr><th>FUND</th><th>PROVIDER</th><th>1 YEAR*</th><th>3 YEARS*</th><th>5 YEARS*</th><th>10 YEARS*</th><th>MATCH STATUS</th><th></th></tr></thead>
               <tbody>{filtered.map(f=><tr key={f.id}>
                 <td><b>{f.name}</b></td><td>{f.provider}</td>
-                <td><span className="soft-pill">Pending source match</span></td>
+                <td>{formatReported(published[f.id]?.reported_returns?.oneYear)}</td>
+                <td>{formatReported(published[f.id]?.reported_returns?.threeYear)}</td>
+                <td>{formatReported(published[f.id]?.reported_returns?.fiveYear)}</td>
+                <td>{formatReported(published[f.id]?.reported_returns?.tenYear)}</td>
+                <td><span className="soft-pill">{published[f.id]?.status==="auto_matched"?"Strong identity match":published[f.id]?.status==="needs_review"?"Review required":published[f.id]?.status==="unmatched"?"Unmatched":"Not reconciled"}</span></td>
                 <td><button className="icon-action" aria-label={"View " + f.name} onClick={()=>setSelectedFund(f)}><ArrowRight size={17}/></button></td>
               </tr>)}</tbody>
             </table>{filtered.length===0 && <div className="empty">No matching funds found.</div>}</div>
           </div>
-          <p className="fineprint">{filtered.length} of 115 approved funds displayed. Unselected funds in the source workbook are intentionally excluded.</p>
+          <p className="fineprint">{filtered.length} of 115 approved funds displayed. Unselected funds in the source workbook are intentionally excluded. * Reported percentages are unapproved source figures, not verified returns for client use; their reporting basis still requires confirmation.</p>
         </>}
 
         {view === "imports" && <SecureFundUploads/>}
@@ -298,7 +329,25 @@ export default function Workspace() {
         <button className="modal-close" aria-label="Close" onClick={()=>setSelectedFund(null)}><X size={20}/></button>
         <span className="eyebrow">OMEGA-APPROVED FUND</span><h2>{selectedFund.name}</h2>
         <p className="muted">{selectedFund.provider}</p>
-        <div className="notice neutral"><ShieldAlert size={17}/> This fund is on the approved shortlist. Its exact share-class mapping, charges, risk and reported returns are awaiting verification.</div>
+        {published[selectedFund.id] ? <>
+          <p><strong>Workbook series:</strong> {published[selectedFund.id].selected_source_name??"Not identified"}</p>
+          <p><strong>Match:</strong> {published[selectedFund.id].status.replaceAll("_"," ")} — {published[selectedFund.id].reason}</p>
+          <div className="mini-stats">
+            <Stat label="1-year reported" value={formatReported(published[selectedFund.id].reported_returns?.oneYear)} />
+            <Stat label="3-year reported" value={formatReported(published[selectedFund.id].reported_returns?.threeYear)} />
+            <Stat label="5-year reported" value={formatReported(published[selectedFund.id].reported_returns?.fiveYear)} />
+            <Stat label="10-year reported" value={formatReported(published[selectedFund.id].reported_returns?.tenYear)} />
+          </div>
+          {published[selectedFund.id].extracted_factsheet && <>
+            <h3>Official factsheet extraction</h3>
+            <p><strong>Fund title:</strong> {published[selectedFund.id].extracted_factsheet?.title??"Not extracted"}</p>
+            <p><strong>MoneyMate ID:</strong> {published[selectedFund.id].extracted_factsheet?.moneyMateId??"N/A"} · <strong>Factsheet date:</strong> {published[selectedFund.id].extracted_factsheet?.asOf??"N/A"}</p>
+            <p><strong>AMC:</strong> {formatReported(published[selectedFund.id].extracted_factsheet?.amcPct)} · <strong>CIV charge:</strong> {formatReported(published[selectedFund.id].extracted_factsheet?.civPct)}</p>
+            {published[selectedFund.id].extracted_factsheet?.objective && <p><strong>Objective:</strong> {published[selectedFund.id].extracted_factsheet!.objective}</p>}
+            {published[selectedFund.id].factsheet_import_id && <a target="_blank" rel="noopener noreferrer" href={"/api/fund-uploads/"+published[selectedFund.id].factsheet_import_id+"/download?view=1"}>View original factsheet and charts</a>}
+          </>}
+        </>:<div className="notice neutral"><ShieldAlert size={17}/> No reconciled factsheet and performance series yet. Use Fund uploads to start the process.</div>}
+        <p className="fineprint">Source figures are not approved for client distribution. Exact share class, as-of date and return basis must be confirmed.</p>
         <button className="btn quiet" onClick={()=>setSelectedFund(null)}>Close details</button>
       </div>
     </div>}
