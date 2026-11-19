@@ -142,14 +142,22 @@ export async function POST(request:Request,{params}:{params:Promise<{fundId:stri
 
     // A reviewer may override heuristic similarity; preserve scores and their
     // explicit decision. Prevent accidental assignments to two distinct funds.
-    const conflicts=await sql.query(
+    const sameSeries=await sql.query(
       "SELECT fund_id FROM fund_identity_reviews WHERE fund_id<>$1 AND decision='confirmed' "+
-      "AND (factsheet_import_id=$2::uuid OR "+
-      "(performance_import_id=$3::uuid AND performance_row=$4)) LIMIT 1",
-      [fundId,data.factsheetImportId,data.performanceImportId,data.performanceRow]);
-    if(conflicts.length)return NextResponse.json({
-      error:"This PDF or workbook row has already been confirmed for another fund. Resolve that review first."
+      "AND performance_import_id=$2::uuid AND performance_row=$3 LIMIT 1",
+      [fundId,data.performanceImportId,data.performanceRow]);
+    if(sameSeries.length)return NextResponse.json({
+      error:"This published performance series is already confirmed for another shortlisted fund. Resolve that assignment first."
     },{status:409,headers:noStore});
+    const sharedPdf=await sql.query(
+      "SELECT fund_id FROM fund_identity_reviews WHERE fund_id<>$1 AND decision='confirmed' "+
+      "AND factsheet_import_id=$2::uuid LIMIT 1",
+      [fundId,data.factsheetImportId]);
+    // Distinct instrument share classes can use the same umbrella factsheet,
+    // but a reviewer must document why two approved funds share the PDF.
+    if(sharedPdf.length && data.note.trim().length<20)return NextResponse.json({
+      error:"Another fund uses this factsheet. Explain why it also applies to this distinct share class (at least 20 characters)."
+    },{status:422,headers:noStore});
 
     await sql.query(
       "INSERT INTO fund_identity_reviews("+
