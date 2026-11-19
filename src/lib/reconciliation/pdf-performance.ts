@@ -51,7 +51,7 @@ function nextValues(lines:string[],idx:number,size:number,requirePercent:boolean
   return null;
 }
 function set(
-  dest:ReportedReturns,vals:Array<number|null>|null,
+  dest:Partial<ReportedReturns>,vals:Array<number|null>|null,
   keys:(keyof ReportedReturns)[]
 ){if(!vals)return;keys.forEach((key,index)=>{dest[key]=vals[index]??null})}
 function calendarReturns(lines:string[],marker:RegExp,years=5):Record<string,number|null>{
