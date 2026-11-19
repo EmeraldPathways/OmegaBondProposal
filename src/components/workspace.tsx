@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { signOut } from "next-auth/react";
 import {
   ArrowRight, BookOpen, CheckCircle2, ChevronDown, Database,
-  FileText, FlaskConical, FolderOpen, LayoutDashboard, LogOut,
+  FileText, FolderOpen, LayoutDashboard, LogOut,
   Menu, Plus, Search, ShieldAlert, SlidersHorizontal, UploadCloud, X
 } from "lucide-react";
 import OmegaLogo from "@/components/omega-logo";
@@ -245,7 +245,7 @@ export default function Workspace() {
             <button className="btn quiet" onClick={()=>go("builder")}>Edit allocations <ArrowRight size={16}/></button>
           </div>
           <div className="portfolio-card-grid">{portfolios.map(p=>{
-            const holdings=Object.entries(p.weights).filter(([,v])=>v>0&&names.has(Object.keys(p.weights).find(k=>p.weights[k]===v)??""));
+            const holdings=Object.entries(p.weights).filter(([id,v])=>v>0 && names.has(id));
             const valid=Math.abs(sumWeights(p)-100)<0.00001;
             return <div className="portfolio-card" key={p.id}>
               <span className="eyebrow">PORTFOLIO {p.id.toUpperCase()}</span>
