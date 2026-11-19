@@ -88,7 +88,7 @@ async function workbook(){
   await book.xlsx.load(bytes as unknown as Parameters<typeof book.xlsx.load>[0]);
   const rows=workbookRows(book);
   const payload=JSON.stringify(rows);
-  await sql.query("INSERT INTO fund_source_performance (import_id,provider,row_number,source_name,reported_returns) SELECT $1::uuid, v.provider, v."rowNumber", v."sourceName", v.returns FROM jsonb_to_recordset($2::jsonb) AS v(provider text,\"rowNumber\" integer,\"sourceName\" text,returns jsonb) ON CONFLICT (import_id,provider,row_number) DO UPDATE SET source_name=EXCLUDED.source_name,reported_returns=EXCLUDED.reported_returns",[stored.id,payload]);
+  await sql.query('INSERT INTO fund_source_performance (import_id,provider,row_number,source_name,reported_returns) SELECT $1::uuid, v.provider, v."rowNumber", v."sourceName", v.returns FROM jsonb_to_recordset($2::jsonb) AS v(provider text,\"rowNumber\" integer,\"sourceName\" text,returns jsonb) ON CONFLICT (import_id,provider,row_number) DO UPDATE SET source_name=EXCLUDED.source_name,reported_returns=EXCLUDED.reported_returns',[stored.id,payload]);
   return {phase:"workbook",rows:rows.length,sourceFile:stored.filename,alreadyProcessed:false};
 }
 async function factsheets(){
