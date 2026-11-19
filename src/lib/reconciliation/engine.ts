@@ -13,9 +13,10 @@ export type FactSheetData = {
   pageCount:number; extractionWarnings:string[]; titleEvidence:string|null;
 };
 export type Review = {
-  fundId:string; provider:string; name:string; status:"auto_matched"|"needs_review"|"unmatched";
-  score:number; reason:string; workbookRow:WorkbookEntry|null; factsheet:FactSheetData|null;
-  alternativeRows:WorkbookEntry[]; alternativeFactsheets:{importId:string;title:string|null;filename:string}[];
+  fundId:string; provider:string; name:string; status:"auto_matched"|"suggested"|"needs_review"|"unmatched";
+  score:number; factsheetScore:number; workbookScore:number; reason:string; workbookRow:WorkbookEntry|null; factsheet:FactSheetData|null;
+  alternativeRows:(WorkbookEntry & {score:number})[];
+  alternativeFactsheets:{importId:string;title:string|null;filename:string;score:number}[];
 };
 
 // Provider-specific short names are used only to find candidates, not to infer a unit class.
@@ -104,69 +105,79 @@ function rank<T>(items:T[],getName:(v:T)=>string,target:string){
   return items.map(item=>({item,score:similarity(target,getName(item))}))
     .filter(x=>x.score>=.34).sort((a,b)=>b.score-a.score);
 }
+/** Heuristic name/evidence score, not a calibrated probability of correctness. */
+export function matchScore(fundName:string,pdfTitle:string,workbookName:string){
+  const factsheetScore=similarity(fundName,pdfTitle);
+  const workbookScore=similarity(pdfTitle,workbookName);
+  const baseScore=similarity(fundName,workbookName);
+  const consistent=isClassConsistent(fundName,workbookName) &&
+    isClassConsistent(pdfTitle,workbookName) && signalsSupported(fundName,pdfTitle,workbookName);
+  const joint=.35*factsheetScore+.45*workbookScore+.2*baseScore;
+  return {
+    factsheetScore:Math.round(factsheetScore*1000)/1000,
+    workbookScore:Math.round(workbookScore*1000)/1000,
+    score:Math.round(Math.max(0,Math.min(1,consistent?joint:Math.min(.49,joint*.65)))*1000)/1000,
+    classConsistent:consistent
+  };
+}
+
 export function reconcileOne(fund:ApprovedFund,rows:WorkbookEntry[],factsheets:FactSheetData[]):Review{
   const providerRows=rows.filter(r=>r.provider===fund.provider);
-  const providerFacts=factsheets.filter(f=>f.providerHint===fund.provider);
-
-  // The document's extracted title is authoritative. Never use the uploaded
-  // filename for identity ranking: files can be misnamed.
-  const titledFacts=providerFacts.filter((f):f is FactSheetData & {title:string}=>Boolean(f.title?.trim()));
-  const rankedFacts=rank(titledFacts,f=>f.title,fund.name);
+  const providerFacts=factsheets.filter(f=>f.providerHint===fund.provider && !!f.title?.trim());
+  // Never score on the archive filename; internal PDF title is the only identity evidence.
+  const rankedFacts=rank(providerFacts,f=>f.title!,fund.name);
   const topFact=rankedFacts[0];
-  const exactFact=Boolean(topFact?.item.title &&
-    normalName(topFact.item.title)===normalName(fund.name));
-  const exactFactCount=rankedFacts.filter(x=>x.item.title &&
-    normalName(x.item.title)===normalName(fund.name)).length;
-  const factUnique=exactFact ? exactFactCount===1 :
-    rankedFacts.length===1 || (topFact && rankedFacts[1] && topFact.score-rankedFacts[1].score>=.10);
-  const factClear=Boolean(topFact && topFact.score>=.74 && factUnique &&
-    topFact.item.title);
+  const factTitle=topFact?.item.title??"";
+  const exactPdf=topFact ? normalName(factTitle)===normalName(fund.name) : false;
+  const equalFacts=topFact ? rankedFacts.filter(f=>normalName(f.item.title!)===normalName(factTitle)).length : 0;
+  const uniqueFact=!!topFact && equalFacts<=1 &&
+    (exactPdf || !rankedFacts[1] || topFact.score-rankedFacts[1].score>=.025);
 
-  const target=factClear ? topFact.item.title! : fund.name;
-  const candidates=rank(providerRows,r=>r.sourceName,target);
-  const best=candidates[0];
-  const exactRow=Boolean(best&&normalName(target)===normalName(best.item.sourceName));
-  const duplicateExactRows=exactRow?
-    candidates.filter(c=>normalName(c.item.sourceName)===normalName(target)).length:0;
-  const runner=candidates[1];
-  const rowUnique=exactRow ? duplicateExactRows===1 :
-    candidates.length===1 || Boolean(best&&runner&&best.score-runner.score>=.11);
-  const classConsistent=Boolean(best &&
-    isClassConsistent(fund.name,best.item.sourceName) &&
-    (!factClear||isClassConsistent(topFact.item.title!,best.item.sourceName)));
-  const classDocumented=Boolean(best&&factClear&&
-    signalsSupported(fund.name,topFact.item.title!,best.item.sourceName));
-  const rowClear=Boolean(best && best.score>=.80 && rowUnique && classConsistent);
-  const titleAgreement=Boolean(factClear && best &&
-    normalName(topFact.item.title!)===normalName(best.item.sourceName));
-  // Only corroborated series identities auto-match; reporting dates, return
-  // basis and charges still need separate verification before client use.
-  const auto=Boolean(titleAgreement && rowClear && classDocumented &&
-    best!.score>=.84 && topFact!.score>=.74);
+  // Once a plausible PDF title is present, rank workbook series against the printed
+  // title. The shortlist remains an independent cross-check.
+  const target=topFact && topFact.score>=.48 ? factTitle : fund.name;
+  const rankedRows=rank(providerRows,r=>r.sourceName,target);
+  const best=rankedRows[0],runner=rankedRows[1];
+  const exactRow=!!best&&normalName(target)===normalName(best.item.sourceName);
+  const identicalRows=best?
+    rankedRows.filter(r=>normalName(r.item.sourceName)===normalName(best.item.sourceName)).length:0;
+  const uniqueRow=!!best&&identicalRows===1 &&
+    (exactRow || !runner || best.score-runner.score>=.025);
 
-  const status:Review["status"]=auto?"auto_matched":
-    (topFact||best)?"needs_review":"unmatched";
-  const reason=auto?
-    "Unique PDF title and workbook series agree, with documented class. Identity matched; published return basis and as-of date remain unapproved.":
-    !topFact?"No matching factsheet title was found in the uploaded documents.":
-    !factClear?"Official PDF title is ambiguous or requires manual verification.":
-    !best?"No plausible reported-performance row was found.":
-    !classConsistent?"Published series/share class conflicts with the factsheet or shortlist.":
-    !classDocumented?"Workbook identifies a share class not established by the factsheet or shortlist.":
-    !rowUnique?"More than one plausible performance series remains; no automatic assignment.":
-    "Document and workbook titles differ or require additional corroboration.";
+  const summary=topFact&&best ? matchScore(fund.name,factTitle,best.item.sourceName) : null;
+  const solid=!!summary && summary.classConsistent && uniqueFact && uniqueRow &&
+    summary.factsheetScore>=.62 && summary.workbookScore>=.70 && summary.score>=.70;
+  const suggested=!!summary && summary.classConsistent &&
+    summary.factsheetScore>=.40 && summary.workbookScore>=.45;
+  const status:Review["status"]=solid?"auto_matched":
+    suggested?"suggested":topFact||best?"needs_review":"unmatched";
+  const reason=solid?
+    "Automatic high-score identity suggestion: printed PDF title and workbook row agree without known class conflict. Manual review remains available; returns are not approved.":
+    suggested?
+    "Plausible PDF-title and workbook-series match; check exact share class before confirming.":
+    topFact&&!best?"A PDF title was found but there is no comparable workbook performance row.":
+    !topFact&&best?"Workbook candidate found, but no reliable fund title extracted from a PDF.":
+    topFact&&best&&summary&&!summary.classConsistent?
+      "Share class or pension/growth basis is not corroborated; manual review required.":
+      topFact&&best?"Name evidence is weak or competing source rows remain; manual review required.":
+      "No plausible PDF-title and performance-row combination found.";
+
+  const rowCandidates=rankedRows.slice(0,10).map(v=>({
+    ...v.item,score:Math.round(v.score*1000)/1000
+  }));
+  const pdfCandidates=rankedFacts.slice(0,10).map(v=>({
+    importId:v.item.importId,title:v.item.title,filename:v.item.filename,
+    score:Math.round(v.score*1000)/1000
+  }));
 
   return {
     fundId:fund.id,provider:fund.provider,name:fund.name,status,
-    score:Math.round(1000*Math.min(best?.score??0,topFact?.score??0))/1000,
+    score:summary?.score??Math.round(Math.min(topFact?.score??0,best?.score??0)*1000)/1000,
+    factsheetScore:summary?.factsheetScore??topFact?.score??0,
+    workbookScore:summary?.workbookScore??best?.score??0,
     reason,
-    // Tentative candidate only. Never treat it as an approved source record.
-    workbookRow:best&&best.score>=.60?best.item:null,
+    workbookRow:best && best.score>=.38?best.item:null,
     factsheet:topFact?.item??null,
-    alternativeRows:candidates.slice(0,5).map(v=>v.item),
-    // The filename is provided for archive navigation only, never matching.
-    alternativeFactsheets:rankedFacts.slice(0,5).map(v=>({
-      importId:v.item.importId,title:v.item.title,filename:v.item.filename
-    })),
+    alternativeRows:rowCandidates,alternativeFactsheets:pdfCandidates
   };
 }
