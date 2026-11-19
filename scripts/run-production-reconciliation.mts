@@ -144,8 +144,9 @@ async function main(){
     factsheetId:r.factsheet?.importId??null,
     extracted:r.factsheet??null,reason:r.reason,
     evidence:{
-      candidatePerformanceRows:r.alternativeRows.map(row=>({name:row.sourceName,row:row.rowNumber,returns:row.returns})),
+      candidatePerformanceRows:r.alternativeRows.map(row=>({name:row.sourceName,row:row.rowNumber,returns:row.returns,score:row.score})),
       candidateFactsheets:r.alternativeFactsheets,
+      matchScores:{factsheet:r.factsheetScore,workbook:r.workbookScore,combined:r.score},
       identityOnly:true,performanceSourceBasis:"not_confirmed",workbookAsOf:"not_confirmed",
       manualConflict:duplicates.has(r.fundId)
     }
@@ -158,7 +159,7 @@ async function main(){
   ].join(" ");
   for(let i=0;i<staged.length;i+=20)await sql.query(upsert,[JSON.stringify(staged.slice(i,i+20))]);
 
-  const counts=Object.fromEntries(["auto_matched","needs_review","unmatched"].map(status=>[status,reconciled.filter(r=>r.status===status).length]));
+  const counts=Object.fromEntries(["auto_matched","suggested","needs_review","unmatched"].map(status=>[status,reconciled.filter(r=>r.status===status).length]));
   report("COMPLETE",{approvedFunds:reconciled.length,workbookRows:rows.length,
     pdfs:pdfs.length,pdfsParsed:parsed.length,withFactsheet:reconciled.filter(r=>!!r.factsheet).length,
     withPerformance:reconciled.filter(r=>!!r.workbookRow).length,duplicates:duplicates.size,
