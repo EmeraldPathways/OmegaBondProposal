@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "npm test && next build && node scripts/verify-pdfkit-trace.mjs && OMEGA_REPARSE_FACTSHEETS=1 npx tsx scripts/run-production-reconciliation.mts",
+    "build": "npm test && next build && node scripts/verify-pdfkit-trace.mjs",
     "start": "next start",
     "lint": "tsc --noEmit",
     "test": "node --test tests/*.test.mjs && node --import tsx --test tests/reconciliation-engine.test.mts",
