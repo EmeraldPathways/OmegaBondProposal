@@ -137,7 +137,7 @@ export default function Workspace() {
       )}</nav>
       <div className="sidebar-bottom">
         <div className="sidebar-help"><CheckCircle2 size={19}/><b>Approved fund shortlist</b>
-          <p>115 funds from the November 2026 Omega workbook. Published performance and factsheet figures require source verification.</p>
+          <p>115 selected funds. Published returns come from their original provider PDFs. Missing periods remain unavailable.</p>
         </div>
         <p className="side-footer">OFM Financial Ltd T/A Omega Financial Management, regulated by the Central Bank of Ireland.</p>
       </div>

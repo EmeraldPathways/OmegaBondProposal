@@ -149,13 +149,16 @@ export default function FundPerformanceReview(){
       if(alive.current){setBusy(false);setStep("")}
     }
   }
+  const pdfIdentityApproved=(r:Review)=>r.status!=="manual_rejected" &&
+    (r.status==="manually_confirmed" || (!r.manual_decision && Boolean(r.evidence?.factsheetIdentityApproved)));
+  const needsPdfReview=(r:Review)=>!pdfIdentityApproved(r);
+  const pdfScore=(r:Review)=>Math.round(Number(r.evidence?.matchScores?.factsheet??r.auto_score??r.confidence??0)*100);
   const rank:Record<string,number>={suggested:0,needs_review:1,manual_rejected:2,unmatched:3,auto_approved:4,manually_confirmed:5};
   const filtered=status.reviews.filter(r=>
     (provider==="All providers"||r.provider===provider)&&
-    (statusFilter==="All statuses"||statusFilter==="Needs manual review"&&
-      ["suggested","needs_review","unmatched","manual_rejected"].includes(r.status)||
-      r.status===statusFilter)&&
-    (r.approved_name+" "+r.provider+" "+(r.selected_source_name||"")).toLowerCase().includes(query.toLowerCase())
+    (statusFilter==="All statuses"||statusFilter==="Needs manual review"&&needsPdfReview(r)||
+      statusFilter==="pdf_approved"&&pdfIdentityApproved(r)||r.status===statusFilter)&&
+    (r.approved_name+" "+r.provider+" "+(r.extracted_factsheet?.title||"")).toLowerCase().includes(query.toLowerCase())
   ).sort((a,b)=>(rank[a.status]??9)-(rank[b.status]??9)||
     Number(b.auto_score??b.confidence??0)-Number(a.auto_score??a.confidence??0));
   const advanceReview=()=>{
@@ -163,7 +166,7 @@ export default function FundPerformanceReview(){
     setExpanded(filtered[currentIndex>=0?currentIndex+1:0]?.fund_id??null);
   };
   function downloadExceptions(){
-    const exceptions=status.reviews.filter(r=>!["auto_approved","manually_confirmed"].includes(r.status));
+    const exceptions=status.reviews.filter(needsPdfReview);
     const columns=["Provider","Approved fund","Status","Candidate workbook series","Candidate PDF title","MoneyMate ID","Factsheet date","Automatic score","Current score","Manual decision","Reason","Other workbook candidates"];
     const safe=(v:unknown)=>{
       let value=String(v??"").replace(/\r?\n/g," ");
@@ -192,7 +195,7 @@ export default function FundPerformanceReview(){
       <span className="eyebrow">EVIDENCE-BASED DATA RECONCILIATION</span>
       <h2 style={{marginTop:8}}>Factsheets and reported performance</h2>
     </div><span className="soft-pill">Four providers · 115 approved funds</span></div>
-    <p className="muted">Clear, uniquely corroborated PDF-title and workbook-series identities are approved automatically. Only uncertain or conflicting matches need manual approval or rejection; you can also override any automatic approval. Only names inside the PDFs are used to establish fund identity; filenames are not used for matching.</p>
+    <p className="muted">Original provider PDF factsheets are the primary source of fund identities and published performance. Clear PDF-title matches are approved automatically; uncertain titles can be accepted or rejected below. The Excel workbook is optional for cross-checking and is never used for displayed returns. Filenames are not used for identity matching.</p>
 
     <div className="button-row">
       <button className="btn primary" type="button"
@@ -204,7 +207,7 @@ export default function FundPerformanceReview(){
       <button className="btn quiet" type="button" onClick={()=>void run()}
         disabled={busy||pdfBusy||status.totalFactsheets===0}>
         {busy?<LoaderCircle className="pdf-spin" size={17}/>:<RefreshCw size={16}/>}
-        {busy?"Checking identities…":"Recheck fund identity suggestions"}
+        {busy?"Checking optional references…":"Recheck workbook references (optional)"}
       </button>
       <button className="btn quiet" type="button" disabled={busy||pdfBusy}
         onClick={()=>void Promise.all([refresh(),refreshPdf()])}><RefreshCw size={15}/> Refresh results</button>
@@ -227,10 +230,10 @@ export default function FundPerformanceReview(){
 
     <div className="stats-grid" style={{marginTop:18}}>
       <div className="stat"><span>Factsheets processed</span><strong>{status.processedFactsheets} / {status.totalFactsheets}</strong></div>
-      <div className="stat"><span>Workbook series rows</span><strong>{status.workbookRows}</strong></div>
+      <div className="stat"><span>Funds displaying original PDF returns</span><strong>{status.reviews.filter(r=>r.evidence?.displayedReturnsSource==="official_factsheet_pdf").length}</strong></div>
       <div className="stat"><span>Auto-approved factsheet identities</span><strong>{status.reviews.filter(r=>r.evidence?.factsheetIdentityApproved && !r.manual_decision).length}</strong></div>
-      <div className="stat"><span>Fully auto-approved matches</span><strong>{count("auto_approved")}</strong></div>
-      <div className="stat"><span>Needs manual decision</span><strong>{status.reviews.filter(r=>["suggested","needs_review","unmatched","manual_rejected"].includes(r.status)).length}</strong></div>
+      <div className="stat"><span>PDF sources linked</span><strong>{status.reviews.filter(r=>r.extracted_factsheet?.title).length}</strong></div>
+      <div className="stat"><span>PDF identities needing review</span><strong>{status.reviews.filter(needsPdfReview).length}</strong></div>
       <div className="stat"><span>Manually confirmed</span><strong>{count("manually_confirmed")}</strong></div>
     </div>
     {loaded&&<div className="table-scroll" style={{marginTop:18}}>
@@ -255,7 +258,7 @@ export default function FundPerformanceReview(){
           <option>All providers</option>{["Aviva","Zurich","New Ireland","Standard Life"].map(x=><option key={x}>{x}</option>)}
         </select></label>
         <label className="select-wrap"><select aria-label="Filter match status" value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}>
-          <option>Needs manual review</option>
+          <option>Needs manual review</option><option value="pdf_approved">PDF identities approved</option>
           <option>All statuses</option>
           <option value="auto_approved">Automatically approved</option>
           <option value="suggested">Automatic suggestions</option>
@@ -267,18 +270,18 @@ export default function FundPerformanceReview(){
       </div>
       <p className="fineprint">Showing {filtered.length} of {status.reviews.length} approved funds. Performance figures are taken from original provider PDFs, not workbook rows. Identity scores are heuristic similarity measures (0–100), not measured accuracy. PDF and workbook scores are shown separately. Even manual identity confirmation does not approve returns for client use.</p>
       <div className="table-scroll"><table className="data-table">
-        <thead><tr><th>APPROVED FUND</th><th>PROVIDER</th><th>AUTO SCORE</th><th>PDF / WORKBOOK</th><th>PDF FACTSHEET</th><th>REVIEW STATUS</th><th></th></tr></thead>
+        <thead><tr><th>APPROVED FUND</th><th>PROVIDER</th><th>PDF MATCH SCORE</th><th>PERFORMANCE DATE</th><th>PDF FACTSHEET</th><th>REVIEW STATUS</th><th></th></tr></thead>
         <tbody>{filtered.map(r=><Fragment key={r.fund_id}><tr>
-          <td><b>{r.approved_name}</b><small>{r.selected_source_name||"No source series selected"}</small></td>
+          <td><b>{r.approved_name}</b><small>{r.extracted_factsheet?.title||"PDF title not identified"}</small></td>
           <td>{r.provider}</td>
-          <td><strong>{Math.round(Number(r.auto_score??r.confidence??0)*100)}/100</strong></td>
-          <td>{Math.round(Number(r.evidence?.matchScores?.factsheet??0)*100)}/100 · {Math.round(Number(r.evidence?.matchScores?.workbook??0)*100)}/100</td>
+          <td><strong>{pdfScore(r)}/100</strong></td>
+          <td>{r.extracted_factsheet?.performance?.asOf??"Not available"}</td>
           <td>{r.extracted_factsheet?.title??"No verified PDF"}
             {r.extracted_factsheet?.performance?.asOf?
               <small>As of {r.extracted_factsheet.performance.asOf}</small>:null}</td>
           <td><span className="soft-pill">{r.status==="manually_confirmed"?"Confirmed by adviser":
             r.status==="manual_rejected"?"Rejected by adviser":
-            r.status==="auto_approved"?"Automatically approved":r.evidence?.factsheetIdentityApproved?"PDF approved · series review":r.status==="suggested"?"Possible match":
+            pdfIdentityApproved(r)?"PDF identity approved":r.status==="suggested"?"Possible PDF match":
             r.status==="needs_review"?"Needs checking":"Unmatched"}</span></td>
           <td><button type="button" className="btn quiet"
             aria-expanded={expanded===r.fund_id}
@@ -294,7 +297,7 @@ export default function FundPerformanceReview(){
                 <div>
                   <span className="eyebrow">FUND RECONCILIATION</span>
                   <h3>Review match · {r.approved_name}</h3>
-                  <p className="muted">{r.provider} · Compare the printed PDF title against the workbook series.</p>
+                  <p className="muted">{r.provider} · Check the printed PDF title and performance. Excel comparison is optional.</p>
                 </div>
                 <button type="button" className="btn quiet"
                   onClick={()=>setExpanded(null)}>Close review</button>
@@ -309,6 +312,6 @@ export default function FundPerformanceReview(){
     </>:<div className="notice neutral" style={{marginTop:16}}>
       <ShieldAlert size={17}/> Source documents are stored privately. The full reconciliation has not yet been run against these uploads.
     </div>}
-    <p className="fineprint" style={{marginTop:12}}>No monthly price history is requested or inferred. Factsheet charts are accessible as their original PDF pages, not reconstructed numerical time series.</p>
+    <p className="fineprint" style={{marginTop:12}}>No monthly price history is requested or inferred; displayed performance uses original PDFs only. Factsheet charts are accessible as their original PDF pages, not reconstructed numerical time series.</p>
   </section>;
 }

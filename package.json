@@ -4,12 +4,14 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "npm test && next build && node scripts/verify-pdfkit-trace.mjs && npx tsx scripts/stage-official-pdf-performance.mts && node scripts/official-pdf-performance-summary.mjs",
+    "build": "npm test && next build && node scripts/verify-pdfkit-trace.mjs",
     "start": "next start",
     "lint": "tsc --noEmit",
     "test": "node --test tests/*.test.mjs && node --import tsx --test tests/reconciliation-engine.test.mts tests/reconciliation-ocr.test.mts tests/pdf-performance.test.mts",
     "db:migrate": "node scripts/migrate.mjs",
-    "reconcile:run": "tsx scripts/run-production-reconciliation.mts"
+    "reconcile:run": "tsx scripts/run-production-reconciliation.mts",
+    "pdf:stage": "tsx scripts/stage-official-pdf-performance.mts",
+    "pdf:summary": "node scripts/official-pdf-performance-summary.mjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.0.2",
