@@ -1,11 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowDownToLine, ArrowUpRight, CheckCircle2, Database, FileText, LoaderCircle, RefreshCw, ShieldAlert } from "lucide-react";
+import { ArrowDownToLine, CheckCircle2, Database, LoaderCircle, RefreshCw, ShieldAlert } from "lucide-react";
+import FundManualReview from "@/components/fund-manual-review";
 
 type Returns = Record<string,number|null>;
 type Review = {
   fund_id:string; provider:string; approved_name:string; status:string; confidence:number;
+  auto_score?:number;auto_status?:string;manual_decision?:"confirmed"|"rejected"|null;
   selected_source_name:string|null; reported_returns:Returns|null;
   extracted_factsheet:{
     title?:string; filename?:string; moneyMateId?:string|null; asOf?:string|null; launchDate?:string|null;
@@ -24,8 +26,6 @@ type Status={
   reviews:Review[];error?:string;
 };
 type Phase="workbook"|"factsheets"|"reconcile";
-const labels:Record<string,string>={ytd:"YTD",oneMonth:"1m",threeMonth:"3m",sixMonth:"6m",oneYear:"1y",threeYear:"3y",fiveYear:"5y",tenYear:"10y",sinceLaunch:"Since launch"};
-const fmt=(value:number|null|undefined)=>value==null?"N/A":(value>0?"+":"")+value.toFixed(2)+"%";
 const empty:Status={initialized:false,approvedUniverse:115,totalFactsheets:0,processedFactsheets:0,workbookRows:0,reviews:[]};
 
 export default function FundPerformanceReview(){
@@ -82,8 +82,9 @@ export default function FundPerformanceReview(){
       const result=await invoke("reconcile");
       await refresh();
       if(alive.current)setMessage("Reconciliation complete: "+result.total+" shortlisted funds reviewed. "+
-        (result.counts?.auto_matched||0)+" strong identity matches; "+
-        (result.counts?.needs_review||0)+" need review; "+
+        (result.counts?.auto_matched||0)+" strong identity matches and "+
+        (result.counts?.suggested||0)+" additional automatic suggestions; "+
+        (result.counts?.needs_review||0)+" need further review; "+
         (result.counts?.unmatched||0)+" unmatched. No unverified return has been approved for client use.");
     }catch(e){
       if(alive.current)setError(e instanceof Error?e.message:"Reconciliation failed. You can resume it.");
@@ -98,8 +99,8 @@ export default function FundPerformanceReview(){
     (r.approved_name+" "+r.provider+" "+(r.selected_source_name||"")).toLowerCase().includes(query.toLowerCase())
   );
   function downloadExceptions(){
-    const exceptions=status.reviews.filter(r=>r.status!=="auto_matched");
-    const columns=["Provider","Approved fund","Status","Candidate workbook series","Candidate PDF title","MoneyMate ID","Factsheet date","Match score","Reason","Other workbook candidates"];
+    const exceptions=status.reviews.filter(r=>r.manual_decision!=="confirmed");
+    const columns=["Provider","Approved fund","Status","Candidate workbook series","Candidate PDF title","MoneyMate ID","Factsheet date","Automatic score","Current score","Manual decision","Reason","Other workbook candidates"];
     const safe=(v:unknown)=>{
       let value=String(v??"").replace(/\r?\n/g," ");
       if(/^[=+@\-\t\r]/.test(value))value="'"+value;
@@ -108,7 +109,7 @@ export default function FundPerformanceReview(){
     const rows=exceptions.map(r=>[
       r.provider,r.approved_name,r.status,r.selected_source_name,
       r.extracted_factsheet?.title,r.extracted_factsheet?.moneyMateId,
-      r.extracted_factsheet?.asOf,r.confidence,r.reason,
+      r.extracted_factsheet?.asOf,r.auto_score??r.confidence,r.confidence,r.manual_decision??"pending",r.reason,
       (r.evidence?.candidatePerformanceRows??[]).map(v=>v.name).join(" | ")
     ]);
     const blob=new Blob(["\uFEFF"+[columns,...rows].map(r=>r.map(safe).join(",")).join("\r\n")],
@@ -127,7 +128,7 @@ export default function FundPerformanceReview(){
       <span className="eyebrow">EVIDENCE-BASED DATA RECONCILIATION</span>
       <h2 style={{marginTop:8}}>Factsheets and reported performance</h2>
     </div><span className="soft-pill">Four providers · 115 approved funds</span></div>
-    <p className="muted">The workflow reads every stored PDF, extracts provider-specific fund fields and original chart page references, then reconciles its title against the workbook’s exact performance series. It will flag mismatched documents and ambiguous share classes.</p>
+    <p className="muted">Automatic scoring is more permissive and presents likely candidates for review. Every fund can be manually confirmed, rejected or reassigned to a different factsheet and workbook row. Only names inside the PDFs are used to establish fund identity; filenames are not used for matching.</p>
 
     <div className="button-row">
       <button className="btn primary" type="button" onClick={()=>void run()} disabled={busy||status.totalFactsheets===0}>
@@ -145,17 +146,18 @@ export default function FundPerformanceReview(){
     <div className="stats-grid" style={{marginTop:18}}>
       <div className="stat"><span>Factsheets processed</span><strong>{status.processedFactsheets} / {status.totalFactsheets}</strong></div>
       <div className="stat"><span>Workbook series rows</span><strong>{status.workbookRows}</strong></div>
-      <div className="stat"><span>Auto-matched identities</span><strong>{count("auto_matched")}</strong></div>
-      <div className="stat"><span>Manual exceptions</span><strong>{count("needs_review")+count("unmatched")}</strong></div>
+      <div className="stat"><span>Automatic strong / suggested</span><strong>{count("auto_matched")} / {count("suggested")}</strong></div>
+      <div className="stat"><span>Manually confirmed</span><strong>{count("manually_confirmed")} / 115</strong></div>
     </div>
     {loaded&&<div className="table-scroll" style={{marginTop:18}}>
       <table className="data-table">
-        <thead><tr><th>PROVIDER</th><th>STRONG IDENTITY</th><th>REVIEW REQUIRED</th><th>UNMATCHED</th></tr></thead>
+        <thead><tr><th>PROVIDER</th><th>AUTO MATCHED</th><th>SUGGESTED</th><th>MANUAL CONFIRMED</th><th>NEEDS REVIEW</th></tr></thead>
         <tbody>{["Aviva","Zurich","Standard Life","New Ireland"].map(name=>
           <tr key={name}><td><b>{name}</b></td>
             <td>{status.reviews.filter(r=>r.provider===name&&r.status==="auto_matched").length}</td>
-            <td>{status.reviews.filter(r=>r.provider===name&&r.status==="needs_review").length}</td>
-            <td>{status.reviews.filter(r=>r.provider===name&&r.status==="unmatched").length}</td>
+            <td>{status.reviews.filter(r=>r.provider===name&&r.status==="suggested").length}</td>
+            <td>{status.reviews.filter(r=>r.provider===name&&r.status==="manually_confirmed").length}</td>
+            <td>{status.reviews.filter(r=>r.provider===name&&["needs_review","unmatched","manual_rejected"].includes(r.status)).length}</td>
           </tr>)}</tbody>
       </table>
     </div>}
@@ -169,64 +171,32 @@ export default function FundPerformanceReview(){
         </select></label>
         <label className="select-wrap"><select aria-label="Filter match status" value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}>
           <option>All statuses</option>
-          <option value="auto_matched">Strong identity matches</option>
+          <option value="auto_matched">Strong automatic matches</option>
+          <option value="suggested">Automatic suggestions</option>
+          <option value="manually_confirmed">Manually confirmed</option>
+          <option value="manual_rejected">Manually rejected</option>
           <option value="needs_review">Review required</option>
           <option value="unmatched">Unmatched</option>
         </select></label>
       </div>
-      <p className="fineprint">Showing {filtered.length} of {status.reviews.length} approved funds. A strong identity match does not approve published return figures.</p>
+      <p className="fineprint">Showing {filtered.length} of {status.reviews.length} approved funds. Scores are heuristic similarity measures (0–100), not measured accuracy. Even manual identity confirmation does not approve returns for client use.</p>
       <div className="table-scroll"><table className="data-table">
-        <thead><tr><th>APPROVED FUND</th><th>PROVIDER</th><th>IDENTITY</th><th>RETURNS</th><th></th></tr></thead>
+        <thead><tr><th>APPROVED FUND</th><th>PROVIDER</th><th>AUTO SCORE</th><th>CURRENT MATCH</th><th>REVIEW STATUS</th><th></th></tr></thead>
         <tbody>{filtered.map(r=><tr key={r.fund_id}>
           <td><b>{r.approved_name}</b><small>{r.selected_source_name||"No source series selected"}</small></td>
           <td>{r.provider}</td>
-          <td><span className="soft-pill">{r.status==="auto_matched"?"Strong match":r.status==="needs_review"?"Review required":"Unmatched"}</span></td>
-          <td>{r.returns_approved?"Approved":"Not approved"}</td>
+          <td><strong>{Math.round(Number(r.auto_score??r.confidence??0)*100)}/100</strong></td>
+          <td>{r.selected_source_name||"No series selected"}</td>
+          <td><span className="soft-pill">{r.status==="manually_confirmed"?"Confirmed by adviser":
+            r.status==="manual_rejected"?"Rejected by adviser":
+            r.status==="auto_matched"?"Strong suggestion":r.status==="suggested"?"Possible match":
+            r.status==="needs_review"?"Needs checking":"Unmatched"}</span></td>
           <td><button type="button" className="btn quiet" onClick={()=>setExpanded(expanded===r.fund_id?null:r.fund_id)}>
-            {expanded===r.fund_id?"Close":"Inspect"}
+            {expanded===r.fund_id?"Close":"Review match"}
           </button></td>
         </tr>)}</tbody>
       </table></div>
-      {expanded ? (()=>{
-        const r=status.reviews.find(x=>x.fund_id===expanded);
-        if(!r)return null;
-        const data=r.extracted_factsheet;
-        return <div className="panel padded" style={{marginTop:14,background:"#faf9f7"}}>
-          <h3>{r.approved_name}</h3>
-          <p className="muted">{r.reason}</p>
-          <p><strong>Workbook row:</strong> {r.selected_source_name||"Unmatched"}</p>
-          {r.reported_returns&&<div>
-            <p className="fineprint"><strong>Unapproved candidate figures:</strong> shown only to help reconcile the original workbook and factsheet. Do not use these figures in client proposals.</p>
-            <div className="table-scroll"><table className="data-table">
-            <thead><tr>{Object.values(labels).map(l=><th key={l}>{l}</th>)}</tr></thead>
-            <tbody><tr>{Object.keys(labels).map(k=><td key={k}>{fmt(r.reported_returns?.[k])}</td>)}</tr></tbody>
-          </table></div></div>}
-          {data&&<>
-            <p><strong>Candidate PDF title:</strong> {data.title||"Could not extract"}</p>
-            <p><strong>MoneyMate ID:</strong> {data.moneyMateId||"N/A"} · <strong>Factsheet date:</strong> {data.asOf||"N/A"}</p>
-            <p><strong>AMC:</strong> {fmt(data.amcPct)} · <strong>CIV:</strong> {fmt(data.civPct)}</p>
-            {data.objective&&<p><strong>Objective:</strong> {data.objective.slice(0,1200)}</p>}
-            {data.extractionWarnings?.length?data.extractionWarnings.map((warning,i)=>
-              <div key={i} className="notice neutral"><ShieldAlert size={15}/>{warning}</div>):null}
-            {r.factsheet_import_id&&<p><a href={"/api/fund-uploads/"+r.factsheet_import_id+"/download?view=1"}
-              target="_blank" rel="noopener noreferrer">Open original factsheet PDF <ArrowUpRight size={13}/></a></p>}
-            {data.chartReferences?.length?<>
-              <strong>Original charts and tables</strong>
-              {data.chartReferences.map((chart,i)=><p key={i}>
-                <a target="_blank" rel="noopener noreferrer" href={"/api/fund-uploads/"+r.factsheet_import_id+"/download?view=1#page="+chart.page}>
-                  <FileText size={14}/> {chart.label} · PDF page {chart.page} <ArrowUpRight size={12}/>
-                </a>
-              </p>)}
-            </>:null}
-          </>}
-          {r.evidence?.candidatePerformanceRows?.length?<div>
-            <h3>Other possible series</h3>
-            {r.evidence.candidatePerformanceRows.slice(0,5).map(x=>
-              <p className="muted" key={x.row}>{x.name} · Source workbook row {x.row}</p>)}
-          </div>:null}
-          <p className="fineprint">Identity matching is distinct from return approval. Source dates, reporting basis and fee treatment still require evidence before figures can appear in a client proposal.</p>
-        </div>;
-      })() : null}
+      {expanded&&<FundManualReview key={expanded} fundId={expanded} onSaved={refresh}/>}
     </>:<div className="notice neutral" style={{marginTop:16}}>
       <ShieldAlert size={17}/> Source documents are stored privately. The full reconciliation has not yet been run against these uploads.
     </div>}
