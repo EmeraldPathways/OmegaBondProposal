@@ -35,7 +35,7 @@ export default function FundPerformanceReview(){
   const [error,setError]=useState(""),[message,setMessage]=useState("");
   const [query,setQuery]=useState("");
   const [provider,setProvider]=useState("All providers");
-  const [statusFilter,setStatusFilter]=useState("All statuses");
+  const [statusFilter,setStatusFilter]=useState("Needs manual review");
   const [expanded,setExpanded]=useState<string|null>(null);
   const running=useRef(false),alive=useRef(true);
 
@@ -96,11 +96,13 @@ export default function FundPerformanceReview(){
   }
   const filtered=status.reviews.filter(r=>
     (provider==="All providers"||r.provider===provider)&&
-    (statusFilter==="All statuses"||r.status===statusFilter)&&
+    (statusFilter==="All statuses"||statusFilter==="Needs manual review"&&
+      ["suggested","needs_review","unmatched","manual_rejected"].includes(r.status)||
+      r.status===statusFilter)&&
     (r.approved_name+" "+r.provider+" "+(r.selected_source_name||"")).toLowerCase().includes(query.toLowerCase())
   );
   function downloadExceptions(){
-    const exceptions=status.reviews.filter(r=>r.manual_decision!=="confirmed");
+    const exceptions=status.reviews.filter(r=>!["auto_approved","manually_confirmed"].includes(r.status));
     const columns=["Provider","Approved fund","Status","Candidate workbook series","Candidate PDF title","MoneyMate ID","Factsheet date","Automatic score","Current score","Manual decision","Reason","Other workbook candidates"];
     const safe=(v:unknown)=>{
       let value=String(v??"").replace(/\r?\n/g," ");
@@ -148,7 +150,7 @@ export default function FundPerformanceReview(){
       <div className="stat"><span>Factsheets processed</span><strong>{status.processedFactsheets} / {status.totalFactsheets}</strong></div>
       <div className="stat"><span>Workbook series rows</span><strong>{status.workbookRows}</strong></div>
       <div className="stat"><span>Auto-approved / suggested</span><strong>{count("auto_approved")} / {count("suggested")}</strong></div>
-      <div className="stat"><span>Manually confirmed</span><strong>{count("manually_confirmed")} / 115</strong></div>
+      <div className="stat"><span>Manual review queue</span><strong>{status.reviews.filter(r=>["suggested","needs_review","unmatched","manual_rejected"].includes(r.status)).length}</strong></div>
     </div>
     {loaded&&<div className="table-scroll" style={{marginTop:18}}>
       <table className="data-table">
@@ -171,6 +173,7 @@ export default function FundPerformanceReview(){
           <option>All providers</option>{["Aviva","Zurich","New Ireland","Standard Life"].map(x=><option key={x}>{x}</option>)}
         </select></label>
         <label className="select-wrap"><select aria-label="Filter match status" value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}>
+          <option>Needs manual review</option>
           <option>All statuses</option>
           <option value="auto_approved">Automatically approved</option>
           <option value="suggested">Automatic suggestions</option>
