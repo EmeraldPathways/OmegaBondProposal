@@ -3,6 +3,7 @@ import {useMemo,useRef,useState} from "react";
 import { signOut } from "next-auth/react";
 import {Activity,ArrowDownToLine,ArrowRight,BookOpen,ChartNoAxesCombined,Check,ChevronDown,CircleHelp,Database,FileCheck,FileText,Files,Filter,FlaskConical,FolderOpen,LayoutDashboard,Menu,Plus,RefreshCw,Search,Settings2,ShieldAlert,ShieldCheck,SlidersHorizontal,TrendingUp,UploadCloud,Wallet, X, LogOut} from "lucide-react";
 import OmegaLogo from "@/components/omega-logo";
+import ProposalPdfViewer from "@/components/proposal-pdf-viewer";
 import {demoFunds,demoPortfolios} from "@/lib/sample";
 import type {Fund,Portfolio,SeriesPoint} from "@/lib/types";
 import {blendedFee,fmtEuro,fmtPercent,isValidPortfolio,metrics,portfolioSeries,sumWeights} from "@/lib/analytics";
@@ -180,23 +181,45 @@ export default function Workspace() {
          </tbody></table></div><p className="fineprint padded-note">* Synthetic prices, fees and hypothetical returns for interface testing only. This table is not suitable for investment decisions or client distribution. Regulatory risk classifications cannot be inferred from a weighted average of SRI ratings.</p></div>
        </>}
        {view==="proposal"&&<>
-         <div className="page-heading no-print"><div><span className="eyebrow">CLIENT DOCUMENTS</span><h1>Investment bond proposal</h1><p>Prepare the client report using the same layout, figures and illustrations as the analysis workspace.</p></div><button className="btn primary" disabled={!canPrint} onClick={()=>{setIssued(true);setTimeout(()=>window.print(),100);}}><ArrowDownToLine size={16}/> Print / Save as PDF</button></div>
-         <div className="panel padded proposal-config no-print"><div><label className="form-label" htmlFor="client">Client name (demonstration only)</label><input id="client" className="form-input" placeholder="Use fictional test data only" value={client} onChange={e=>setClient(e.target.value)} /></div><div><label className="form-label" htmlFor="adviser">Prepared by</label><input id="adviser" className="form-input" placeholder="Adviser" value={adviser} onChange={e=>setAdviser(e.target.value)}/></div><div className="full-column"><label className="form-label" htmlFor="objective">Client objective</label><textarea className="form-input textarea" id="objective" rows={2} value={objective} onChange={e=>setObjective(e.target.value)}/></div><p className="fineprint full-column">Demo-only: do not enter real client names, objectives, or other personal information. A secure authenticated client workflow will be built after provisioning storage and database.</p></div>
-         <article className="proposal-sheet">
-           <div className="proposal-header"><div><div className="proposal-wordmark"><OmegaLogo variant="white" width={260} /></div><div className="proposal-header-title">INVESTMENT BOND PROPOSAL</div></div><span className="proposal-tag">CLIENT ILLUSTRATION · DEMO</span></div>
-           <div className="proposal-body">
-             <div className="proposal-kicker">INVESTMENT STRATEGY & PORTFOLIO ANALYSIS</div><div className="proposal-main-title"><h2>Investment bond proposal</h2><span>Prepared {new Date().toLocaleDateString("en-IE",{day:"numeric",month:"long",year:"numeric"})}</span></div>
-             <div className="proposal-summary"><div><small>PREPARED FOR</small><b>{client||"Example Client"}</b></div><div><small>PREPARED BY</small><b>{adviser||"Omega Financial Management"}</b></div><div><small>INVESTMENT AMOUNT</small><b>{money(investment)}</b></div></div>
-             <section className="proposal-section"><div className="eyebrow">INVESTMENT OBJECTIVE</div><p>{objective}</p></section>
-             <section className="proposal-section"><div className="proposal-main-title"><h3>Portfolio performance illustration</h3><span>{chartWindow}-year historical sample</span></div><LineChart series={validComparison?series:[]}/><div className="chart-key">{portfolios.map((p,i)=><span key={p.id}><i style={{background:BARS[i]}}/>Portfolio {p.id.toUpperCase()}</span>)}</div></section>
-             <section className="proposal-section"><div className="eyebrow">COMPARATIVE OVERVIEW</div><h3>Portfolio comparison</h3><div className="table-scroll"><table className="proposal-table"><thead><tr><th>MEASURE</th>{portfolios.map(p=><th key={p.id}>{p.id.toUpperCase()}: {p.title}</th>)}</tr></thead><tbody><tr><td>Investment</td>{portfolios.map(p=><td key={p.id}>{money(investment)}</td>)}</tr><tr><td>{chartWindow}-year total return*</td>{historical.map((r,i)=><td key={i}>{validComparison&&r?fmtPercent(r.returnPct,true):"—"}</td>)}</tr><tr><td>Annualised return*</td>{historical.map((r,i)=><td key={i}>{validComparison&&r?fmtPercent(r.cagrPct):"—"}</td>)}</tr><tr><td>Volatility*</td>{historical.map((r,i)=><td key={i}>{validComparison&&r?fmtPercent(r.volatilityPct):"—"}</td>)}</tr><tr><td>Indicative fund fees*</td>{portfolios.map(p=><td key={p.id}>{fmtPercent(blendedFee(p,funds))}</td>)}</tr></tbody></table></div></section>
-             <section className="proposal-section"><div className="eyebrow">FUND ALLOCATION</div><h3>Investment composition</h3>{portfolios.map(p=><div className="proposal-allocation" key={p.id}><strong>Portfolio {p.id.toUpperCase()} — {p.title}</strong><p>{Object.entries(p.weights).filter(([,w])=>w>0).map(([id,w])=>(funds.find(f=>f.id===id)?.name??id)+" ("+w+"%)").join(" · ")}</p></div>)}</section>
-             <div className="proposal-disclaimer"><b>IMPORTANT — DEMONSTRATION DATA ONLY</b><p>All prices, providers, returns, risk ratings and fees included in this prototype are synthetic test figures. They must not be used as advice, represented as actual historical returns or distributed as a genuine client proposal. Past performance is not a reliable indicator of future results. The value of investments may fall as well as rise. Any tax, product fees and distribution adjustments require independent verification before live use.</p></div>
-             <div className="proposal-cta"><span>DISCUSS YOUR PLANS WITH OUR TEAM</span><p>Schedule a free consultation at +353 1 293 8554 (Sandyford office).</p></div>
-             <footer className="proposal-footer">OFM Financial Ltd T/A Omega Financial Management, regulated by the Central Bank of Ireland.</footer>
+         <div className="page-heading">
+           <div>
+             <span className="eyebrow">CLIENT DOCUMENTS</span>
+             <h1>Investment bond proposal</h1>
+             <p>The A4 viewer and downloaded PDF use the same professionally formatted document, based on the Omega projection report design.</p>
            </div>
-         </article>
-         {issued&&<p className="fineprint no-print">Your browser print dialog can save this illustration as PDF. This is not an issued or persistently stored proposal.</p>}
+         </div>
+         <div className="panel padded proposal-config">
+           <div>
+             <label className="form-label" htmlFor="client">Client name (demonstration only)</label>
+             <input id="client" className="form-input" placeholder="Use fictional test data only" value={client}
+               maxLength={120} onChange={e=>setClient(e.target.value)} />
+           </div>
+           <div>
+             <label className="form-label" htmlFor="adviser">Prepared by</label>
+             <input id="adviser" className="form-input" placeholder="Adviser" value={adviser}
+               maxLength={120} onChange={e=>setAdviser(e.target.value)} />
+           </div>
+           <div>
+             <label className="form-label" htmlFor="analysis-period">Historical review period</label>
+             <select id="analysis-period" className="form-input" value={chartWindow} onChange={e=>setChartWindow(Number(e.target.value) as 3|5|10)}>
+               <option value={3}>3 years</option>
+               <option value={5}>5 years</option>
+               <option value={10}>10 years</option>
+             </select>
+           </div>
+           <div>
+             <label className="form-label" htmlFor="proposal-investment">Investment amount (EUR)</label>
+             <input id="proposal-investment" type="number" min={1} max={1000000000} className="form-input"
+               value={investment} onChange={e=>setInvestment(Math.max(1,Number(e.target.value)||1))}/>
+           </div>
+           <div className="full-column">
+             <label className="form-label" htmlFor="objective">Client objective</label>
+             <textarea className="form-input textarea" id="objective" rows={2} maxLength={600} value={objective}
+               onChange={e=>setObjective(e.target.value)}/>
+           </div>
+           <p className="fineprint full-column">Demo-only: do not enter actual client information. Fund prices are synthetic or session-provided and are not verified for financial advice.</p>
+         </div>
+         <ProposalPdfViewer input={{ client, adviser, objective, investment, chartWindow, funds, portfolios }}/>
        </>}
      </main>
    </div>
