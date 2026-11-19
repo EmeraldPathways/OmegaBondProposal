@@ -1,18 +1,18 @@
 "use client";
-import {useMemo,useRef,useState} from "react";
+import {useMemo,useState} from "react";
 import { signOut } from "next-auth/react";
 import {Activity,ArrowDownToLine,ArrowRight,BookOpen,ChartNoAxesCombined,Check,ChevronDown,CircleHelp,Database,FileCheck,FileText,Files,Filter,FlaskConical,FolderOpen,LayoutDashboard,Menu,Plus,RefreshCw,Search,Settings2,ShieldAlert,ShieldCheck,SlidersHorizontal,TrendingUp,UploadCloud,Wallet, X, LogOut} from "lucide-react";
 import OmegaLogo from "@/components/omega-logo";
 import ProposalPdfViewer from "@/components/proposal-pdf-viewer";
+import SecureFundUploads from "@/components/secure-fund-uploads";
 import {demoFunds,demoPortfolios} from "@/lib/sample";
 import type {Fund,Portfolio,SeriesPoint} from "@/lib/types";
 import {blendedFee,fmtEuro,fmtPercent,isValidPortfolio,metrics,portfolioSeries,sumWeights} from "@/lib/analytics";
-import {monthlyPrices,parsePriceCSV} from "@/lib/csv";
 type View="overview"|"funds"|"imports"|"builder"|"compare"|"proposal";
 const NAV:{key:View;label:string;icon:typeof Activity}[]=[
   {key:"overview",label:"Overview",icon:LayoutDashboard},
   {key:"funds",label:"Fund library",icon:Database},
-  {key:"imports",label:"Data imports",icon:UploadCloud},
+  {key:"imports",label:"Fund uploads",icon:UploadCloud},
   {key:"builder",label:"Portfolio builder",icon:SlidersHorizontal},
   {key:"compare",label:"Compare portfolios",icon:ChartNoAxesCombined},
   {key:"proposal",label:"Client proposal",icon:FileText},
@@ -62,14 +62,6 @@ export default function Workspace() {
  const [search,setSearch]=useState("");
  const [category,setCategory]=useState("All categories");
  const [selectedFund,setSelectedFund]=useState<string|null>(null);
- const [importFund,setImportFund]=useState(demoFunds[0].id);
- const [importError,setImportError]=useState("");
- const [importResult,setImportResult]=useState("");
- const [uploadName,setUploadName]=useState("");
- const [pendingCSV,setPendingCSV]=useState("");
- const [pendingFactsheet,setPendingFactsheet]=useState<{name:string;size:number}|null>(null);
- const uploadRef=useRef<HTMLInputElement|null>(null);
- const factsheetRef=useRef<HTMLInputElement|null>(null);
  const [chartWindow,setChartWindow]=useState<3|5|10>(5);
  const [issued,setIssued]=useState(false);
  const lastAsOf=funds[0]?.prices.at(-1)?.date??"—";
@@ -90,28 +82,6 @@ export default function Workspace() {
    setPortfolios(prev=>prev.map((p,i)=>i===activePortfolio?{...p,[key]:value}:p));setIssued(false);
  }
  function go(next:View){setView(next);setMobile(false);}
- function downloadCSV(){
-  const lines=["provider,fund_name,fund_code,unit_class,series_currency,price_date,unit_price,price_type,distribution_basis,source","Example Provider,Example Fund,EX123,Series A,EUR,2026-10-30,1.234567,NAV,accumulation,Provider price export"];
-  const blob=new Blob([lines.join("\n")],{type:"text/csv"});
-  const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download="omega-fund-import-template.csv";a.click();URL.revokeObjectURL(url);
- }
- function previewCSV(file:File){
-   setImportError("");setImportResult("");setUploadName(file.name);
-   const reader=new FileReader();
-   reader.onload=()=>{try{const parsed=parsePriceCSV(String(reader.result??""));setPendingCSV(String(reader.result??""));setImportResult(parsed.prices.length+" valid rows, "+parsed.rejected.length+" flagged. Review before loading into the temporary demonstration session.");}catch(err){setPendingCSV("");setImportError(err instanceof Error?err.message:"Could not read file.");}};
-   reader.readAsText(file);
- }
- function applyCSV(){
-   try{
-     const {prices,rejected}=parsePriceCSV(pendingCSV);
-     if(rejected.length)throw new Error("Resolve "+rejected.length+" rejected rows before accepting prices.");
-     if(prices.length<13)throw new Error("At least 13 price observations are needed for the initial analysis.");
-     const reduced=monthlyPrices(prices);
-     setFunds(old=>old.map(f=>f.id===importFund?{...f,prices:reduced,source:"session",factsheetName:undefined}:f));
-     setPendingCSV("");setImportResult("Loaded "+reduced.length+" monthly observations into this browser session. No server storage has occurred.");
-     setIssued(false);
-   }catch(err){setImportError(err instanceof Error?err.message:"Import failed.");}
- }
  const validComparison=portfolios.every(p=>isValidPortfolio(p,funds));
  const canPrint=validComparison && historical.some(Boolean);
  return <div className="app-shell">
@@ -125,12 +95,12 @@ export default function Workspace() {
    <div className="main-area">
      <header className="topbar"><button className="mobile-menu" onClick={()=>setMobile(true)}><Menu size={22}/></button><span className="crumb">OMEGA <span>/</span> BOND PROPOSALS <span>/</span> <b>{NAV.find(n=>n.key===view)?.label}</b></span><div className="topbar-right"><span className="status-dot"/> <span className="desktop-only">Prototype environment</span><span className="avatar">OF</span><button className="app-signout" type="button" title="Sign out" aria-label="Sign out" onClick={() => signOut({ redirectTo: "/login" })}><LogOut size={16}/><span>Sign out</span></button></div></header>
      <main className="content">
-       <div className="demo-warning"><FlaskConical size={17}/><span><strong>Demonstration only.</strong> All preloaded funds and historical prices are synthetic. Files imported here remain in this browser session; no database or secure client storage is connected.</span></div>
+       <div className="demo-warning"><FlaskConical size={17}/><span><strong>Portfolio analytics are demonstration-only.</strong> Published performance data and factsheets can be archived securely under Fund uploads, but remain pending review and are not yet used in comparisons.</span></div>
        {view==="overview"&&<>
          <section className="page-heading hero-heading"><div><span className="eyebrow">INVESTMENT PROPOSAL WORKSPACE</span><h1>Clearer investment decisions.</h1><p>Bring your funds, portfolio strategies and client proposals together in one considered workspace.</p><div className="button-row"><button className="btn primary" onClick={()=>go("builder")}><Plus size={16}/> Build a portfolio</button><button className="btn quiet" onClick={()=>go("compare")}>Compare strategies <ArrowRight size={16}/></button></div></div><div className="hero-art"><span className="orbit orbit-a"/><span className="orbit orbit-b"/><span className="orbit orbit-c"/><span className="hero-initial">Ω</span></div></section>
          <div className="stats-grid"><Stat label="Funds in library" value={String(funds.length).padStart(2,"0")} sub="Including sample strategies"/><Stat label="Prepared portfolios" value={String(portfolios.length).padStart(2,"0")} sub="Ready for comparison"/><Stat label="Reference investment" value={money(investment)} sub="Editable in portfolio builder"/><Stat label="Latest sample price" value={lastAsOf} sub="Synthetic observation date"/></div>
          <section className="two-col"><div className="panel"><div className="panel-heading"><div><span className="eyebrow">ANALYTICS</span><h2>Portfolio growth overview</h2></div><button className="tiny-link" onClick={()=>go("compare")}>Full comparison <ArrowRight size={14}/></button></div><LineChart series={series}/><div className="chart-key">{portfolios.map((p,i)=><span key={p.id}><i style={{background:BARS[i]}}/>{p.title}</span>)}</div><p className="fineprint">Illustrative buy-and-hold results derived from generated test prices, not actual market history.</p></div>
-         <div className="panel action-panel"><span className="eyebrow">QUICK ACCESS</span><h2>What would you like to do?</h2><button onClick={()=>go("funds")}><span className="action-icon"><Database size={19}/></span><span><b>Explore fund library</b><small>Review fund records and available history</small></span><ArrowRight size={17}/></button><button onClick={()=>go("imports")}><span className="action-icon"><UploadCloud size={19}/></span><span><b>Import fund data</b><small>Preview your price files for validation</small></span><ArrowRight size={17}/></button><button onClick={()=>go("proposal")}><span className="action-icon"><FileText size={19}/></span><span><b>Prepare a proposal</b><small>Review the print-ready investment report</small></span><ArrowRight size={17}/></button></div></section>
+         <div className="panel action-panel"><span className="eyebrow">QUICK ACCESS</span><h2>What would you like to do?</h2><button onClick={()=>go("funds")}><span className="action-icon"><Database size={19}/></span><span><b>Explore fund library</b><small>Review fund records and available history</small></span><ArrowRight size={17}/></button><button onClick={()=>go("imports")}><span className="action-icon"><UploadCloud size={19}/></span><span><b>Upload fund documents</b><small>Save official factsheets and performance workbooks</small></span><ArrowRight size={17}/></button><button onClick={()=>go("proposal")}><span className="action-icon"><FileText size={19}/></span><span><b>Prepare a proposal</b><small>Review the print-ready investment report</small></span><ArrowRight size={17}/></button></div></section>
        </>}
        {view==="funds"&&<>
          <div className="page-heading"><div><span className="eyebrow">SOURCE DATA</span><h1>Fund library</h1><p>A central reference for every fund, its documented characteristics and historic unit prices.</p></div><button className="btn primary" onClick={()=>go("imports")}><UploadCloud size={16}/> Import data</button></div>
@@ -138,22 +108,7 @@ export default function Workspace() {
          <div className="table-scroll"><table className="data-table"><thead><tr><th>FUND / PROVIDER</th><th>CATEGORY</th><th>RISK*</th><th>INDICATIVE FEE*</th><th>PRICE HISTORY</th><th></th></tr></thead><tbody>{filtered.map(f=><tr key={f.id}><td><b>{f.name}</b><small>{f.provider} · {f.code}</small></td><td><span className="soft-pill">{f.category}</span></td><td>{f.risk??"—"} / 7</td><td>{fmtPercent(f.fee)}</td><td>{f.prices.length} observations</td><td><button className="icon-action" aria-label={"Open "+f.name} onClick={()=>setSelectedFund(f.id)}><ArrowRight size={17}/></button></td></tr>)}</tbody></table>{filtered.length===0&&<div className="empty">No matching funds found.</div>}</div></div>
          <p className="fineprint">* Risk indicators and charges in this table are fabricated demonstration values; verify actual figures against the exact product factsheet/KID.</p>
        </>}
-       {view==="imports"&&<>
-         <div className="page-heading"><div><span className="eyebrow">DATA MANAGEMENT</span><h1>Import fund information</h1><p>Prepare fund factsheets and historical prices for the verified database.</p></div><button className="btn quiet" onClick={downloadCSV}><ArrowDownToLine size={16}/> Example CSV template</button></div>
-         <div className="two-col import-grid">
-           <div className="panel"><div className="panel-heading"><div className="section-icon"><UploadCloud size={20}/></div><span className="soft-pill">CSV price history</span></div><h2>Historical unit prices</h2><p className="muted">Preview date and unit price records. Imported data affects only this temporary browser session.</p><label className="form-label" htmlFor="importTarget">Fund to update for preview</label><select id="importTarget" className="form-input" value={importFund} onChange={e=>setImportFund(e.target.value)}>{funds.map(f=><option key={f.id} value={f.id}>{f.name}</option>)}</select>
-           <input type="file" accept=".csv,text/csv" hidden ref={uploadRef} onChange={e=>{const file=e.target.files?.[0];if(file)previewCSV(file);}}/>
-           <button className="dropzone" onClick={()=>uploadRef.current?.click()}><UploadCloud size={29}/><b>{uploadName||"Choose a CSV price file"}</b><small>Columns: date + price or unit_price · ISO dates YYYY-MM-DD</small></button>
-           {importResult&&<div className="notice success"><Check size={16}/>{importResult}</div>}{importError&&<div className="notice error"><ShieldAlert size={16}/>{importError}</div>}
-           {pendingCSV&&<button className="btn primary full" onClick={applyCSV}><Check size={16}/> Accept into demo session</button>}</div>
-           <div className="panel"><div className="panel-heading"><div className="section-icon"><Files size={20}/></div><span className="soft-pill">PDF factsheets</span></div><h2>Official fund factsheets</h2><p className="muted">The production workflow will extract figures into a review queue and retain original, versioned PDFs in private storage.</p>
-           <input type="file" accept=".pdf,application/pdf" hidden ref={factsheetRef} onChange={e=>{const f=e.target.files?.[0];if(f)setPendingFactsheet({name:f.name,size:f.size});}}/>
-           <button className="dropzone" onClick={()=>factsheetRef.current?.click()}><FileText size={29}/><b>{pendingFactsheet?.name||"Choose a PDF factsheet"}</b><small>{pendingFactsheet?"Selected locally — not uploaded":"PDF documents · select for demonstration"}</small></button>
-           <div className="notice neutral"><ShieldCheck size={18}/>Actual server-side storage, OCR/extraction, human review and import audit trails will be enabled only after secure services and authentication are configured.</div>
-           </div>
-         </div>
-         <div className="panel padded"><h2>Recommended source requirements</h2><div className="requirement-grid"><div><FileCheck size={19}/><b>Exact fund class</b><p>Confirm the product, unit class and fund identifier.</p></div><div><Activity size={19}/><b>Consistent price basis</b><p>Verify NAV, currency and treatment of distributions.</p></div><div><BookOpen size={19}/><b>Source traceability</b><p>Record provider, publication dates and reported charges.</p></div></div></div>
-       </>}
+       {view==="imports"&&<SecureFundUploads />}
        {view==="builder"&&<>
          <div className="page-heading"><div><span className="eyebrow">PORTFOLIO CONSTRUCTION</span><h1>Portfolio builder</h1><p>Allocate funds, review historical behaviour and prepare strategies for comparison.</p></div><button className="btn primary" onClick={()=>go("compare")}>Compare portfolios <ArrowRight size={16}/></button></div>
          <div className="portfolio-tabs">{portfolios.map((p,i)=><button key={p.id} className={i===activePortfolio?"active":""} onClick={()=>setActivePortfolio(i)}><span className="tab-letter">{p.id.toUpperCase()}</span>{p.title}</button>)}</div>
