@@ -135,16 +135,25 @@ async function reconcile(){
       performanceImportId:x.performance_import_id?String(x.performance_import_id):null,
       rowNumber:x.performance_row==null?null:Number(x.performance_row)}))
   );
-  const payload=JSON.stringify(results.map((r:Review)=>({
+  const payload=JSON.stringify(results.map((r:Review)=>{
+    const pdfPerf=r.factsheetIdentityApproved?r.factsheet?.performance:null;
+    const published=pdfPerf?.status==="extracted"&&Boolean(pdfPerf.asOf);
+    return {
     fundId:r.fundId,provider:r.provider,name:r.name,status:r.status,score:r.score,
     performanceImportId:r.workbookRow?book.id:null,
     sourceRow:r.workbookRow?.rowNumber??null,
     sourceName:r.workbookRow?.sourceName??null,
-    returnData:r.workbookRow?.returns??null,
+    returnData:published?pdfPerf!.returns:null,
     factsheetId:r.factsheet?.importId??null,
     extracted:r.factsheet??null,
     reason:r.reason,
     evidence:{
+      displayedReturnsSource:published?"official_factsheet_pdf":null,
+      workbookReturnsUsed:false,
+      publishedPerformance:pdfPerf?{
+        source:"official_factsheet_pdf",asOf:pdfPerf.asOf,
+        feeBasis:pdfPerf.feeBasis,page:pdfPerf.page
+      }:null,
       candidatePerformanceRows:r.alternativeRows.map(row=>({name:row.sourceName,row:row.rowNumber,returns:row.returns,score:row.score})),
       candidateFactsheets:r.alternativeFactsheets,
       matchScores:{factsheet:r.factsheetScore,workbook:r.workbookScore,combined:r.score},
@@ -154,7 +163,7 @@ async function reconcile(){
       performanceSourceBasis:"not_confirmed",
       workbookAsOf:"not_confirmed"
     }
-  })));
+  }}));
   await sql.query("INSERT INTO fund_reconciliations (fund_id,provider,approved_name,status,confidence,performance_import_id,factsheet_import_id,selected_workbook_row,selected_source_name,reported_returns,extracted_factsheet,evidence,reason,returns_approved) SELECT x.\"fundId\",x.provider,x.name,x.status,x.score,(x.\"performanceImportId\")::uuid,(x.\"factsheetId\")::uuid,x.\"sourceRow\",x.\"sourceName\",x.\"returnData\",x.extracted,x.evidence,x.reason,false FROM jsonb_to_recordset($1::jsonb) AS x(\"fundId\" text,provider text,name text,status text,score numeric,\"performanceImportId\" text,\"factsheetId\" text,\"sourceRow\" integer,\"sourceName\" text,\"returnData\" jsonb,extracted jsonb,evidence jsonb,reason text) ON CONFLICT (fund_id) DO UPDATE SET provider=EXCLUDED.provider,approved_name=EXCLUDED.approved_name,status=EXCLUDED.status,confidence=EXCLUDED.confidence,performance_import_id=EXCLUDED.performance_import_id,factsheet_import_id=EXCLUDED.factsheet_import_id,selected_workbook_row=EXCLUDED.selected_workbook_row,selected_source_name=EXCLUDED.selected_source_name,reported_returns=EXCLUDED.reported_returns,extracted_factsheet=EXCLUDED.extracted_factsheet,evidence=EXCLUDED.evidence,reason=EXCLUDED.reason,returns_approved=false,updated_at=now()",[payload]);
   const counts=results.reduce((acc,r)=>{acc[r.status]=(acc[r.status]||0)+1;return acc;},{} as Record<string,number>);
   return {phase:"reconcile",total:results.length,counts,returnsApproved:0};
