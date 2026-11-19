@@ -136,8 +136,9 @@ async function reconcile(){
     extracted:r.factsheet??null,
     reason:r.reason,
     evidence:{
-      candidatePerformanceRows:r.alternativeRows.map(row=>({name:row.sourceName,row:row.rowNumber,returns:row.returns})),
+      candidatePerformanceRows:r.alternativeRows.map(row=>({name:row.sourceName,row:row.rowNumber,returns:row.returns,score:row.score})),
       candidateFactsheets:r.alternativeFactsheets,
+      matchScores:{factsheet:r.factsheetScore,workbook:r.workbookScore,combined:r.score},
       identityOnly:true,
       performanceSourceBasis:"not_confirmed",
       workbookAsOf:"not_confirmed"
