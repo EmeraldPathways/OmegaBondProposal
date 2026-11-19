@@ -32,6 +32,7 @@ const INITIAL_PORTFOLIOS: Portfolio[] = [
 type ReconciledFund = {
   fund_id:string; status:string; confidence:number;selected_source_name:string|null;
   reported_returns:Record<string,number|null>|null;returns_approved:boolean;
+  evidence?:{factsheetIdentityApproved?:boolean;seriesIdentityApproved?:boolean};
   factsheet_import_id:string|null;
   reason:string;
   extracted_factsheet:{
@@ -197,7 +198,7 @@ export default function Workspace() {
                 <td>{formatReported(published[f.id]?.status==="auto_approved"?published[f.id]?.reported_returns?.threeYear:null)}</td>
                 <td>{formatReported(published[f.id]?.status==="auto_approved"?published[f.id]?.reported_returns?.fiveYear:null)}</td>
                 <td>{formatReported(published[f.id]?.status==="auto_approved"?published[f.id]?.reported_returns?.tenYear:null)}</td>
-                <td><span className="soft-pill">{published[f.id]?.status==="auto_approved"?"Identity auto-approved · returns pending":published[f.id]?.status==="needs_review"?"Review required":published[f.id]?.status==="unmatched"?"Unmatched":"Not reconciled"}</span></td>
+                <td><span className="soft-pill">{published[f.id]?.status==="auto_approved"?"Fund & series identity approved":published[f.id]?.evidence?.factsheetIdentityApproved?"Factsheet approved · series review":published[f.id]?.status==="needs_review"?"Review required":published[f.id]?.status==="unmatched"?"Unmatched":"Not reconciled"}</span></td>
                 <td><button className="icon-action" aria-label={"View " + f.name} onClick={()=>setSelectedFund(f)}><ArrowRight size={17}/></button></td>
               </tr>)}</tbody>
             </table>{filtered.length===0 && <div className="empty">No matching funds found.</div>}</div>
