@@ -90,7 +90,8 @@ test("Duplicate exactly equivalent workbook rows are not auto-matched",()=>{
   const x=reconcileOne(approved("Standard Life",name),
     [row("Standard Life",name,2),row("Standard Life",name,3)],
     [pdf("Standard Life",name)]);
-  assert.equal(x.status,"needs_review");
+  assert.equal(x.status,"suggested");
+  assert.notEqual(x.status,"auto_matched");
 });
 
 test("PDF internal title wins over deliberately misleading filename",()=>{
