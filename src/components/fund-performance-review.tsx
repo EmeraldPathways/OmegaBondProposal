@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowDownToLine, CheckCircle2, Database, LoaderCircle, RefreshCw, ShieldAlert, X } from "lucide-react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import { ArrowDownToLine, CheckCircle2, Database, LoaderCircle, RefreshCw, ShieldAlert } from "lucide-react";
 import FundManualReview from "@/components/fund-manual-review";
 
 type Returns = Record<string,number|null>;
@@ -104,20 +104,6 @@ export default function FundPerformanceReview(){
     (r.approved_name+" "+r.provider+" "+(r.selected_source_name||"")).toLowerCase().includes(query.toLowerCase())
   ).sort((a,b)=>(rank[a.status]??9)-(rank[b.status]??9)||
     Number(b.auto_score??b.confidence??0)-Number(a.auto_score??a.confidence??0));
-  const selectedReview=status.reviews.find(r=>r.fund_id===expanded);
-  useEffect(()=>{
-    if(!expanded)return;
-    const previous=document.body.style.overflow;
-    document.body.style.overflow="hidden";
-    const closeOnEscape=(event:KeyboardEvent)=>{
-      if(event.key==="Escape")setExpanded(null);
-    };
-    document.addEventListener("keydown",closeOnEscape);
-    return ()=>{
-      document.body.style.overflow=previous;
-      document.removeEventListener("keydown",closeOnEscape);
-    };
-  },[expanded]);
   const advanceReview=()=>{
     const currentIndex=filtered.findIndex(r=>r.fund_id===expanded);
     setExpanded(filtered[currentIndex>=0?currentIndex+1:0]?.fund_id??null);
@@ -185,7 +171,25 @@ export default function FundPerformanceReview(){
             <td>{status.reviews.filter(r=>r.provider===name&&r.status==="suggested").length}</td>
             <td>{status.reviews.filter(r=>r.provider===name&&r.status==="manually_confirmed").length}</td>
             <td>{status.reviews.filter(r=>r.provider===name&&["needs_review","unmatched","manual_rejected"].includes(r.status)).length}</td>
-          </tr>)}</tbody>
+          </tr>
+        {expanded===r.fund_id&&<tr className="reconciliation-accordion-row" id={"fund-review-"+r.fund_id}>
+          <td colSpan={7} className="reconciliation-accordion-cell">
+            <div className="reconciliation-accordion-content">
+              <div className="reconciliation-accordion-title">
+                <div>
+                  <span className="eyebrow">FUND RECONCILIATION</span>
+                  <h3>Review match · {r.approved_name}</h3>
+                  <p className="muted">{r.provider} · Compare the printed PDF title against the workbook series.</p>
+                </div>
+                <button type="button" className="btn quiet"
+                  onClick={()=>setExpanded(null)}>Close review</button>
+              </div>
+              <FundManualReview key={r.fund_id} fundId={r.fund_id}
+                onSaved={refresh} onNext={advanceReview}/>
+            </div>
+          </td>
+        </tr>}
+        </Fragment>)}</tbody>
       </table>
     </div>}
 
@@ -210,7 +214,7 @@ export default function FundPerformanceReview(){
       <p className="fineprint">Showing {filtered.length} of {status.reviews.length} approved funds. PDF identity and workbook-series approval are separate. Scores are heuristic similarity measures (0–100), not measured accuracy. PDF and workbook scores are shown separately. Even manual identity confirmation does not approve returns for client use.</p>
       <div className="table-scroll"><table className="data-table">
         <thead><tr><th>APPROVED FUND</th><th>PROVIDER</th><th>AUTO SCORE</th><th>PDF / WORKBOOK</th><th>CURRENT MATCH</th><th>REVIEW STATUS</th><th></th></tr></thead>
-        <tbody>{filtered.map(r=><tr key={r.fund_id}>
+        <tbody>{filtered.map(r=><Fragment key={r.fund_id}><tr>
           <td><b>{r.approved_name}</b><small>{r.selected_source_name||"No source series selected"}</small></td>
           <td>{r.provider}</td>
           <td><strong>{Math.round(Number(r.auto_score??r.confidence??0)*100)}/100</strong></td>
@@ -220,29 +224,16 @@ export default function FundPerformanceReview(){
             r.status==="manual_rejected"?"Rejected by adviser":
             r.status==="auto_approved"?"Automatically approved":r.evidence?.factsheetIdentityApproved?"PDF approved · series review":r.status==="suggested"?"Possible match":
             r.status==="needs_review"?"Needs checking":"Unmatched"}</span></td>
-          <td><button type="button" className="btn quiet" onClick={()=>setExpanded(expanded===r.fund_id?null:r.fund_id)}>
+          <td><button type="button" className="btn quiet"
+            aria-expanded={expanded===r.fund_id}
+            aria-controls={"fund-review-"+r.fund_id}
+            onClick={()=>setExpanded(expanded===r.fund_id?null:r.fund_id)}>
             {expanded===r.fund_id?"Close":"Review match"}
           </button></td>
         </tr>)}</tbody>
       </table></div>
     </>:<div className="notice neutral" style={{marginTop:16}}>
       <ShieldAlert size={17}/> Source documents are stored privately. The full reconciliation has not yet been run against these uploads.
-    </div>}
-    {expanded&&<div className="modal-overlay" role="presentation" onMouseDown={event=>{
-      if(event.target===event.currentTarget)setExpanded(null);
-    }}>
-      <div className="fund-modal reconciliation-review-modal" role="dialog" aria-modal="true"
-        aria-label={"Review fund match: "+(selectedReview?.approved_name??"Selected fund")}
-        onMouseDown={event=>event.stopPropagation()}>
-        <button className="modal-close" type="button" aria-label="Close fund review"
-          onClick={()=>setExpanded(null)}><X size={19}/></button>
-        <div className="reconciliation-review-heading">
-          <span className="eyebrow">FUND RECONCILIATION</span>
-          <h2>Review match</h2>
-          <p className="muted">{selectedReview?.approved_name??"Selected fund"} · {selectedReview?.provider}</p>
-        </div>
-        <FundManualReview key={expanded} fundId={expanded} onSaved={refresh} onNext={advanceReview}/>
-      </div>
     </div>}
     <p className="fineprint" style={{marginTop:12}}>No monthly price history is requested or inferred. Factsheet charts are accessible as their original PDF pages, not reconstructed numerical time series.</p>
   </section>;
