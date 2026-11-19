@@ -14,6 +14,7 @@ type Review = {
     objective?:string|null; strategy?:string|null; amcPct?:number|null; civPct?:number|null;
     riskRating?:number|null; chartReferences?:{page:number;label:string}[];
     extractionWarnings?:string[];
+    performance?:{status:string;asOf:string|null;returns:Returns;feeBasis:string}|null;
   }|null;
   evidence?:{
     candidatePerformanceRows?:{name:string;row:number;returns:Returns}[];
@@ -28,11 +29,15 @@ type Status={
   reviews:Review[];error?:string;
 };
 type Phase="workbook"|"factsheets"|"reconcile";
+type PdfProgress={total:number;processed:number;extracted:number;failed:number;
+  unavailable:number;libraryFunds:number;hasMore?:boolean;justProcessed?:number;message?:string;error?:string};
 const empty:Status={initialized:false,approvedUniverse:115,totalFactsheets:0,processedFactsheets:0,workbookRows:0,reviews:[]};
 
 export default function FundPerformanceReview(){
   const [status,setStatus]=useState<Status>(empty);
   const [busy,setBusy]=useState(false),[step,setStep]=useState("");
+  const [pdfBusy,setPdfBusy]=useState(false),[pdfStep,setPdfStep]=useState("");
+  const [pdfStatus,setPdfStatus]=useState<PdfProgress|null>(null);
   const [error,setError]=useState(""),[message,setMessage]=useState("");
   const [query,setQuery]=useState("");
   const [provider,setProvider]=useState("All providers");
@@ -52,6 +57,55 @@ export default function FundPerformanceReview(){
     void refresh().catch(e=>{if(alive.current)setError(e instanceof Error?e.message:"Unable to load progress.")});
     return ()=>{alive.current=false};
   },[refresh]);
+
+  const refreshPdf=useCallback(async()=>{
+    const response=await fetch("/api/fund-performance/pdf",{credentials:"same-origin",cache:"no-store"});
+    const data=await response.json() as PdfProgress;
+    if(!response.ok)throw new Error(data.error||"Could not read official PDF import progress.");
+    if(alive.current)setPdfStatus(data);
+    return data;
+  },[]);
+  useEffect(()=>{void refreshPdf().catch(()=>{})},[refreshPdf]);
+
+  async function pdfAction(phase:"extract"|"publish"):Promise<PdfProgress>{
+    const response=await fetch("/api/fund-performance/pdf",{
+      method:"POST",credentials:"same-origin",cache:"no-store",
+      headers:{"Content-Type":"application/json"},body:JSON.stringify({phase})
+    });
+    const data=await response.json() as PdfProgress;
+    if(!response.ok)throw new Error(data.error||"Official PDF source processing failed.");
+    return data;
+  }
+  async function importPdfPerformance(){
+    if(pdfBusy||busy)return;
+    setPdfBusy(true);setError("");setMessage("");
+    try{
+      let latest:PdfProgress|null=null;
+      let done=false;
+      for(let i=0;i<150;i++){
+        const data=await pdfAction("extract");
+        latest=data;
+        if(alive.current){
+          setPdfStatus(data);
+          setPdfStep("Reading return tables: "+data.processed+" of "+data.total+" PDFs");
+        }
+        if(!data.hasMore){done=true;break}
+        if(data.justProcessed===0)throw new Error("The PDF source scan did not advance.");
+      }
+      if(!done)throw new Error("Batch limit reached. Run the import again to resume.");
+      setPdfStep("Publishing official PDF figures for matched fund identities");
+      const result=await pdfAction("publish");
+      await Promise.all([refresh(),refreshPdf()]);
+      if(alive.current)setMessage("PDF import completed: "+result.extracted+" of "+
+        result.total+" factsheets contain extractable performance tables; "+
+        result.libraryFunds+" approved fund identities now use original PDF returns. "+
+        "Unreadable and missing periods remain unavailable. No workbook returns were used.");
+    }catch(e){
+      if(alive.current)setError(e instanceof Error?e.message:"PDF performance import failed.");
+    }finally{
+      if(alive.current){setPdfBusy(false);setPdfStep("")}
+    }
+  }
 
   async function invoke(phase:Phase){
     const response=await fetch("/api/fund-reconciliation",{
@@ -141,15 +195,33 @@ export default function FundPerformanceReview(){
     <p className="muted">Clear, uniquely corroborated PDF-title and workbook-series identities are approved automatically. Only uncertain or conflicting matches need manual approval or rejection; you can also override any automatic approval. Only names inside the PDFs are used to establish fund identity; filenames are not used for matching.</p>
 
     <div className="button-row">
-      <button className="btn primary" type="button" onClick={()=>void run()} disabled={busy||status.totalFactsheets===0}>
-        {busy?<LoaderCircle className="pdf-spin" size={17}/>:<Database size={17}/>}
-        {busy?"Reconciling documents…":loaded?"Resume / rescan documents":"Start full reconciliation"}
+      <button className="btn primary" type="button"
+        disabled={busy||pdfBusy||status.totalFactsheets===0}
+        onClick={()=>void importPdfPerformance()}>
+        {pdfBusy?<LoaderCircle className="pdf-spin" size={17}/>:<Database size={17}/>}
+        {pdfBusy?"Extracting PDF return tables…":"Import performance from all original PDFs"}
       </button>
-      <button className="btn quiet" type="button" disabled={busy} onClick={()=>void refresh()}><RefreshCw size={15}/> Refresh results</button>
-      <button className="btn quiet" type="button" disabled={busy||!status.reviews.length}
+      <button className="btn quiet" type="button" onClick={()=>void run()}
+        disabled={busy||pdfBusy||status.totalFactsheets===0}>
+        {busy?<LoaderCircle className="pdf-spin" size={17}/>:<RefreshCw size={16}/>}
+        {busy?"Checking identities…":"Recheck fund identity suggestions"}
+      </button>
+      <button className="btn quiet" type="button" disabled={busy||pdfBusy}
+        onClick={()=>void Promise.all([refresh(),refreshPdf()])}><RefreshCw size={15}/> Refresh results</button>
+      <button className="btn quiet" type="button" disabled={busy||pdfBusy||!status.reviews.length}
         onClick={downloadExceptions}><ArrowDownToLine size={15}/> Download exception report</button>
     </div>
-    {busy&&<div className="notice neutral" role="status"><LoaderCircle className="pdf-spin" size={16}/>{step}. Keep this tab open until the reconciliation finishes.</div>}
+    {pdfBusy&&<div className="notice neutral" role="status">
+      <LoaderCircle className="pdf-spin" size={16}/>{pdfStep}. Keep this tab open while the PDFs are processed.
+    </div>}
+    {busy&&<div className="notice neutral" role="status">
+      <LoaderCircle className="pdf-spin" size={16}/>{step}.
+    </div>}
+    {pdfStatus&&<div className="notice neutral" role="status">
+      Original PDF performance: {pdfStatus.extracted} tables extracted from {pdfStatus.processed} of {pdfStatus.total} documents.
+      {" "}{pdfStatus.libraryFunds} approved fund identities currently display original PDF returns.
+      {pdfStatus.failed>0?" "+pdfStatus.failed+" documents require extraction review.":""}
+    </div>}
     {error&&<div role="alert" className="notice error"><ShieldAlert size={17}/>{error}</div>}
     {message&&<div role="status" className="notice success"><CheckCircle2 size={17}/>{message}</div>}
 
@@ -193,15 +265,17 @@ export default function FundPerformanceReview(){
           <option value="unmatched">Unmatched</option>
         </select></label>
       </div>
-      <p className="fineprint">Showing {filtered.length} of {status.reviews.length} approved funds. PDF identity and workbook-series approval are separate. Scores are heuristic similarity measures (0–100), not measured accuracy. PDF and workbook scores are shown separately. Even manual identity confirmation does not approve returns for client use.</p>
+      <p className="fineprint">Showing {filtered.length} of {status.reviews.length} approved funds. Performance figures are taken from original provider PDFs, not workbook rows. Identity scores are heuristic similarity measures (0–100), not measured accuracy. PDF and workbook scores are shown separately. Even manual identity confirmation does not approve returns for client use.</p>
       <div className="table-scroll"><table className="data-table">
-        <thead><tr><th>APPROVED FUND</th><th>PROVIDER</th><th>AUTO SCORE</th><th>PDF / WORKBOOK</th><th>CURRENT MATCH</th><th>REVIEW STATUS</th><th></th></tr></thead>
+        <thead><tr><th>APPROVED FUND</th><th>PROVIDER</th><th>AUTO SCORE</th><th>PDF / WORKBOOK</th><th>PDF FACTSHEET</th><th>REVIEW STATUS</th><th></th></tr></thead>
         <tbody>{filtered.map(r=><Fragment key={r.fund_id}><tr>
           <td><b>{r.approved_name}</b><small>{r.selected_source_name||"No source series selected"}</small></td>
           <td>{r.provider}</td>
           <td><strong>{Math.round(Number(r.auto_score??r.confidence??0)*100)}/100</strong></td>
           <td>{Math.round(Number(r.evidence?.matchScores?.factsheet??0)*100)}/100 · {Math.round(Number(r.evidence?.matchScores?.workbook??0)*100)}/100</td>
-          <td>{r.selected_source_name||"No series selected"}</td>
+          <td>{r.extracted_factsheet?.title??"No verified PDF"}
+            {r.extracted_factsheet?.performance?.asOf?
+              <small>As of {r.extracted_factsheet.performance.asOf}</small>:null}</td>
           <td><span className="soft-pill">{r.status==="manually_confirmed"?"Confirmed by adviser":
             r.status==="manual_rejected"?"Rejected by adviser":
             r.status==="auto_approved"?"Automatically approved":r.evidence?.factsheetIdentityApproved?"PDF approved · series review":r.status==="suggested"?"Possible match":
