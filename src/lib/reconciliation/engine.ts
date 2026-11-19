@@ -32,20 +32,33 @@ const aliases:[RegExp,string][]=[
   [/\baviva\b/g,""], [/\bfund\b/g,""], [/\blife\b/g,""],
 ];
 export function normalName(name:string):string{
-  let result=name.toLowerCase().replace(/&/g," and ").replace(/[^a-z0-9]+/g," ").replace(/\s+/g," ").trim();
+  let result=name.toLowerCase()
+    .replace(/(\d)star\b/g,"$1 star")
+    // New Ireland's "(6)" factsheet notation is the S6/Series 6 notation
+    // used in its performance workbook. Preserve the class explicitly.
+    .replace(/\(\s*([1-9]\d?)\s*\)/g," series $1 ")
+    .replace(/\bs([1-9]\d?)\b/g," series $1 ")
+    .replace(/&/g," and ")
+    .replace(/[^a-z0-9]+/g," ")
+    .replace(/\s+/g," ").trim();
   for(const [pattern,replace] of aliases)result=result.replace(pattern,replace);
-  return result.replace(/\s+/g," ").trim();
+  return result.replace(/\b(series\s+\d{1,2})\s+\1\b/g,"$1")
+    .replace(/\s+/g," ").trim();
 }
 export function classSignals(name:string):Set<string>{
-  const s=" "+normalName(name)+" ";
+  const normalized=" "+normalName(name)+" ";
   const result=new Set<string>();
-  for(const match of s.matchAll(/\bseries\s+([a-z0-9]+)\b/g))result.add("series:"+match[1]);
-  for(const match of s.matchAll(/\b(s[0-9]{1,2})\b/g))result.add("series:"+match[1].slice(1));
-  for(const match of name.matchAll(/\(([1-9][0-9]?)\)/g))result.add("series:"+match[1]);
-  if(/\bpension\b/.test(s))result.add("basis:pension");
-  if(/\bgrowth\b/.test(s) && /\b(group|pension|zurich)\b/i.test(name))result.add("basis:growth");
-  if(/\b(group)\b/.test(s))result.add("basis:group");
+  for(const match of normalized.matchAll(/\bseries\s+([a-z0-9]+)\b/g))result.add("series:"+match[1]);
+  const raw=name.toLowerCase();
+  if(/\b(pn|pension)\b/.test(raw))result.add("basis:pension");
+  if(/\bgr\b/.test(raw))result.add("basis:growth");
+  if(/\bgroup\b/.test(raw))result.add("basis:group");
   return result;
+}
+/** The published share class must be supported by the named PDF or shortlist. */
+function signalsSupported(approved:string,pdfTitle:string,source:string):boolean{
+  const named=new Set([...classSignals(approved),...classSignals(pdfTitle)]);
+  return [...classSignals(source)].every(signal=>named.has(signal));
 }
 function tokens(name:string):Set<string>{return new Set(normalName(name).split(" ").filter(t=>t.length>1));}
 function bigrams(name:string):Set<string>{
@@ -94,43 +107,62 @@ function rank<T>(items:T[],getName:(v:T)=>string,target:string){
 export function reconcileOne(fund:ApprovedFund,rows:WorkbookEntry[],factsheets:FactSheetData[]):Review{
   const providerRows=rows.filter(r=>r.provider===fund.provider);
   const providerFacts=factsheets.filter(f=>f.providerHint===fund.provider);
-  const fr=rank(providerFacts,f=>f.title??f.filename,fund.name);
-  const topFact=fr[0];
-  const factClear=!!topFact && topFact.score>=.74 && 
-    (fr.length===1 || topFact.score-fr[1].score>=.10) &&
-    !!topFact.item.title && topFact.item.extractionWarnings.every(w=>!w.includes("contradiction"));
-  const perfTarget=factClear?topFact.item.title!:fund.name;
-  const ranked=rank(providerRows,r=>r.sourceName,perfTarget);
-  // The factsheet title can contain a provider wrapper; re-rank against the
-  // exact Omega label if it produces no clear winner.
-  const shortlistRank=rank(providerRows,r=>r.sourceName,fund.name);
-  const candidates=ranked.length&&ranked[0].score>=.7?ranked:shortlistRank;
-  const best=candidates[0],runner=candidates[1];
-  const rowClear=!!best && best.score>=.80 && 
-    (!runner || best.score-runner.score>=.11) &&
+
+  const rankedFacts=rank(providerFacts,f=>f.title??f.filename,fund.name);
+  const topFact=rankedFacts[0];
+  const exactFact=Boolean(topFact?.item.title &&
+    normalName(topFact.item.title)===normalName(fund.name));
+  const exactFactCount=rankedFacts.filter(x=>x.item.title &&
+    normalName(x.item.title)===normalName(fund.name)).length;
+  const factUnique=exactFact ? exactFactCount===1 :
+    rankedFacts.length===1 || (topFact && rankedFacts[1] && topFact.score-rankedFacts[1].score>=.10);
+  const factClear=Boolean(topFact && topFact.score>=.74 && factUnique &&
+    topFact.item.title && !topFact.item.extractionWarnings.some(w=>w.toLowerCase().includes("contradiction")));
+
+  const target=factClear ? topFact.item.title! : fund.name;
+  const candidates=rank(providerRows,r=>r.sourceName,target);
+  const best=candidates[0];
+  const exactRow=Boolean(best&&normalName(target)===normalName(best.item.sourceName));
+  const duplicateExactRows=exactRow?
+    candidates.filter(c=>normalName(c.item.sourceName)===normalName(target)).length:0;
+  const runner=candidates[1];
+  const rowUnique=exactRow ? duplicateExactRows===1 :
+    candidates.length===1 || Boolean(best&&runner&&best.score-runner.score>=.11);
+  const classConsistent=Boolean(best &&
     isClassConsistent(fund.name,best.item.sourceName) &&
-    (!factClear||isClassConsistent(topFact.item.title!,best.item.sourceName));
-  const evidenceExact=Boolean(factClear&&rowClear &&
+    (!factClear||isClassConsistent(topFact.item.title!,best.item.sourceName)));
+  const classDocumented=Boolean(best&&factClear&&
+    signalsSupported(fund.name,topFact.item.title!,best.item.sourceName));
+  const rowClear=Boolean(best && best.score>=.80 && rowUnique && classConsistent);
+  const titleAgreement=Boolean(factClear && best &&
     normalName(topFact.item.title!)===normalName(best.item.sourceName));
-  // Both independently sourced identities must corroborate each other.
-  // If the workbook does not specify an as-of date/return basis,
-  // "auto_matched" means identity only; it NEVER approves investment returns.
-  const auto=Boolean(evidenceExact && best && topFact && best.score>=.84 && topFact.score>=.74);
+  // Only corroborated series identities auto-match; reporting dates, return
+  // basis and charges still need separate verification before client use.
+  const auto=Boolean(titleAgreement && rowClear && classDocumented &&
+    best!.score>=.84 && topFact!.score>=.74);
+
   const status:Review["status"]=auto?"auto_matched":
     (topFact||best)?"needs_review":"unmatched";
   const reason=auto?
-    "Factsheet title and workbook series agree exactly; identity matched. Return basis and as-of date still need approval.":
-    !topFact?"No securely identified provider factsheet for this shortlisted fund.":
-    !factClear?"Factsheet title ambiguous or requires manual identity review.":
-    !best?"No plausible published-performance row found in workbook.":
-    !rowClear?"Potential multiple share classes or close performance rows; do not guess.":
-    "Factsheet and workbook names differ or return-basis evidence remains incomplete.";
+    "Unique PDF title and workbook series agree, with documented class. Identity matched; published return basis and as-of date remain unapproved.":
+    !topFact?"No matching factsheet title was found in the uploaded documents.":
+    !factClear?"Factsheet identity is ambiguous, has a conflicting filename, or requires manual verification.":
+    !best?"No plausible reported-performance row was found.":
+    !classConsistent?"Published series/share class conflicts with the factsheet or shortlist.":
+    !classDocumented?"Workbook identifies a share class not established by the factsheet or shortlist.":
+    !rowUnique?"More than one plausible performance series remains; no automatic assignment.":
+    "Document and workbook titles differ or require additional corroboration.";
+
   return {
     fundId:fund.id,provider:fund.provider,name:fund.name,status,
     score:Math.round(1000*Math.min(best?.score??0,topFact?.score??0))/1000,
-    reason,workbookRow:best?.item??null,
+    reason,
+    // Tentative candidate only. Never treat it as an approved source record.
+    workbookRow:best&&best.score>=.60?best.item:null,
     factsheet:topFact?.item??null,
-    alternativeRows:(candidates.slice(0,5).map(v=>v.item)),
-    alternativeFactsheets:fr.slice(0,5).map(v=>({importId:v.item.importId,title:v.item.title,filename:v.item.filename})),
+    alternativeRows:candidates.slice(0,5).map(v=>v.item),
+    alternativeFactsheets:rankedFacts.slice(0,5).map(v=>({
+      importId:v.item.importId,title:v.item.title,filename:v.item.filename
+    })),
   };
 }
