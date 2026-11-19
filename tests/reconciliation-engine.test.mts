@@ -137,3 +137,23 @@ test("Shared PDF cannot auto-approve multiple distinct shortlisted funds",async(
  [row("New Ireland","New Ireland Alternative Energy S6")],[x]);
  assert.equal(downgradeDuplicateApprovals([a,b]).filter(r=>r.factsheetIdentityApproved).length,0);
 });
+
+test("Aviva white-label PDF uses printed fund title and MoneyMate template, not filename",()=>{
+  const source=parseFactsheetText({
+    importId:"aviva-white-label",
+    filename:"incorrect-upload-name.pdf",
+    pages:["| Retirement | Investments | Insurance |\nFund Factsheet\nCantor Fitzgerald Multi-Asset 70 Fund Series C 16 Nov 2026\nMoneyMate ID 25006053\nCIV Charge 0.18%\nAMC 0.50%"]
+  });
+  assert.equal(source.providerHint,"Aviva");
+  assert.equal(source.title,"Cantor Fitzgerald Multi-Asset 70 Fund Series C");
+  assert.equal(source.moneyMateId,"25006053");
+});
+test("Aviva without literal Fund Factsheet heading still recovers printed series title",()=>{
+  const source=parseFactsheetText({
+    importId:"aviva-aims",
+    filename:"random-name.pdf",
+    pages:["| Retirement | Investments | Insurance |\nAIMS Target Return Fund (Ireland) Series B 31 August 2026\nMoneyMate ID 25004802\nCIV Charge 0.11%\nAMC 1.10%"]
+  });
+  assert.equal(source.title,"AIMS Target Return Fund (Ireland) Series B");
+  assert.equal(source.providerHint,"Aviva");
+});
