@@ -20,7 +20,8 @@
     "lucide-react": "^0.468.0",
     "pg": "^8.13.0",
     "@react-pdf/renderer": "^4.9.0",
-    "zod": "^3.25.76"
+    "zod": "^3.25.76",
+    "exceljs": "^4.4.0"
   },
   "devDependencies": {
     "@types/node": "^22.13.0",
