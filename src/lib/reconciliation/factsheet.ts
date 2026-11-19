@@ -126,6 +126,7 @@ export async function extractFundFactsheet(params:{importId:string;filename:stri
     const pages=Array.isArray(extracted.text)?extracted.text:[extracted.text];
     return parseFactsheetText({importId:params.importId,filename:params.filename,pages});
   }finally{
-    await doc.destroy();
+    const disposable=doc as unknown as { destroy?:()=>Promise<void> };
+    if(typeof disposable.destroy==="function")await disposable.destroy();
   }
 }
