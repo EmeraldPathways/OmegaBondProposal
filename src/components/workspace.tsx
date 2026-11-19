@@ -70,7 +70,7 @@ export default function Workspace() {
  const [pendingFactsheet,setPendingFactsheet]=useState<{name:string;size:number}|null>(null);
  const uploadRef=useRef<HTMLInputElement|null>(null);
  const factsheetRef=useRef<HTMLInputElement|null>(null);
- const [chartWindow,setChartWindow]=useState(5);
+ const [chartWindow,setChartWindow]=useState<3|5|10>(5);
  const [issued,setIssued]=useState(false);
  const lastAsOf=funds[0]?.prices.at(-1)?.date??"—";
  const series=useMemo(()=>portfolios.map(p=>portfolioSeries(p,funds,investment)),[portfolios,funds,investment]);
