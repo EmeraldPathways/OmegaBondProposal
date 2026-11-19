@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { CheckCircle2, Database, RefreshCw, Search, ShieldAlert } from "lucide-react";
 
 type Candidate = {
@@ -109,7 +109,7 @@ export default function FundPerformanceReview() {
       </label>
       <div className="table-scroll"><table className="data-table">
         <thead><tr><th>APPROVED FUND</th><th>PROVIDER</th><th>SOURCE MATCH</th><th>REVIEW</th></tr></thead>
-        <tbody>{filtered.map(review=><>
+        <tbody>{filtered.map(review=><Fragment key={review.fund_id}>
           <tr key={review.fund_id}>
             <td><b>{review.display_name}</b></td>
             <td>{review.provider_name}</td>
@@ -136,7 +136,7 @@ export default function FundPerformanceReview() {
               </div>
             </td>
           </tr>}
-        </>)}</tbody>
+        </Fragment>)}</tbody>
       </table></div>
       <p className="fineprint">Candidate percentages are transcribed directly from the uploaded source workbook. These are name similarity suggestions, not validated share-class matches or approved performance figures. The as-of date and return basis still need verification.</p>
     </>}
