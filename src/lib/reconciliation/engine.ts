@@ -14,7 +14,7 @@ export type FactSheetData = {
 };
 export type Review = {
   fundId:string; provider:string; name:string; status:"auto_approved"|"suggested"|"needs_review"|"unmatched";
-  score:number; factsheetScore:number; workbookScore:number; reason:string; workbookRow:WorkbookEntry|null; factsheet:FactSheetData|null;
+  score:number; factsheetScore:number; workbookScore:number; factsheetIdentityApproved:boolean; seriesIdentityApproved:boolean; reason:string; workbookRow:WorkbookEntry|null; factsheet:FactSheetData|null;
   alternativeRows:(WorkbookEntry & {score:number})[];
   alternativeFactsheets:{importId:string;title:string|null;filename:string;score:number}[];
 };
@@ -149,6 +149,7 @@ export function reconcileOne(fund:ApprovedFund,rows:WorkbookEntry[],factsheets:F
   // fund and share class. An exact PDF↔workbook series is strong evidence even
   // when the shortlist uses an abbreviated display name.
   const exactSourceAgreement=!!best && normalName(factTitle)===normalName(best.item.sourceName);
+  const factsheetIdentityApproved=Boolean(topFact && uniqueFact && topFact.score>=.65);
   const solid=!!summary && summary.classConsistent && uniqueFact && uniqueRow &&
     summary.factsheetScore>=.54 && summary.workbookScore>=.60 &&
     summary.score>=.63 && (exactSourceAgreement ||
@@ -159,6 +160,8 @@ export function reconcileOne(fund:ApprovedFund,rows:WorkbookEntry[],factsheets:F
     suggested?"suggested":topFact||best?"needs_review":"unmatched";
   const reason=solid?
     "Automatically approved identity: distinct printed PDF fund title corroborates the unique workbook series, with no identified share-class conflict. You can override it. Return basis remains unapproved.":
+    factsheetIdentityApproved && !solid?
+    "Official PDF fund identity automatically approved. Workbook series/share class still needs review.":
     suggested?
     "Plausible PDF-title and workbook-series match; check exact share class before confirming.":
     topFact&&!best?"A PDF title was found but there is no comparable workbook performance row.":
@@ -181,6 +184,7 @@ export function reconcileOne(fund:ApprovedFund,rows:WorkbookEntry[],factsheets:F
     score:summary?.score??Math.round(Math.min(topFact?.score??0,best?.score??0)*1000)/1000,
     factsheetScore:summary?.factsheetScore??topFact?.score??0,
     workbookScore:summary?.workbookScore??best?.score??0,
+    factsheetIdentityApproved,seriesIdentityApproved:solid,
     reason,
     workbookRow:best && best.score>=.29?best.item:null,
     factsheet:topFact?.item??null,
@@ -198,9 +202,8 @@ export function downgradeDuplicateApprovals(reviews:Review[],reserved:{
     const ids=map.get(key)??new Set<string>();ids.add(id);map.set(key,ids);
   };
   for(const review of reviews){
-    if(review.status!=="auto_approved")continue;
-    if(review.factsheet)add(countPdf,review.factsheet.importId,review.fundId);
-    if(review.workbookRow)add(countRows,review.provider+"|"+review.workbookRow.rowNumber,review.fundId);
+    if(review.factsheetIdentityApproved&&review.factsheet)add(countPdf,review.factsheet.importId,review.fundId);
+    if(review.status==="auto_approved"&&review.workbookRow)add(countRows,review.provider+"|"+review.workbookRow.rowNumber,review.fundId);
   }
   for(const item of reserved){
     if(item.factsheetImportId)add(countPdf,item.factsheetImportId,item.fundId);
@@ -216,10 +219,12 @@ export function downgradeDuplicateApprovals(reviews:Review[],reserved:{
     }
   }
   return reviews.map(r=>{
-    if(r.status!=="auto_approved")return r;
     const pdfConflict=!!r.factsheet && (countPdf.get(r.factsheet.importId)?.size??0)>1;
     const rowConflict=!!r.workbookRow && (countRows.get(r.provider+"|"+r.workbookRow.rowNumber)?.size??0)>1;
-    return pdfConflict||rowConflict?{...r,status:"suggested" as const,
-      reason:"Automatic approval withheld: another fund claims this PDF or performance series. Manual identity review is required."}:r;
+    if(!pdfConflict&&!rowConflict)return r;
+    return {...r,factsheetIdentityApproved:pdfConflict?false:r.factsheetIdentityApproved,
+      seriesIdentityApproved:false,
+      status:r.status==="auto_approved"?"suggested" as const:r.status,
+      reason:"Automatic approval withheld: another shortlisted fund shares this PDF or workbook series."};
   });
 }

@@ -156,6 +156,8 @@ async function main(){
       candidatePerformanceRows:r.alternativeRows.map(row=>({name:row.sourceName,row:row.rowNumber,returns:row.returns,score:row.score})),
       candidateFactsheets:r.alternativeFactsheets,
       matchScores:{factsheet:r.factsheetScore,workbook:r.workbookScore,combined:r.score},
+      factsheetIdentityApproved:r.factsheetIdentityApproved,
+      seriesIdentityApproved:r.seriesIdentityApproved,
       identityOnly:true,performanceSourceBasis:"not_confirmed",workbookAsOf:"not_confirmed",
       manualConflict:duplicates.has(r.fundId)
     }

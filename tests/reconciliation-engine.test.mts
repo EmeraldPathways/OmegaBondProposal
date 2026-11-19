@@ -119,3 +119,21 @@ test("Identity conflicts remain in manual queue",async()=>{
   const results=downgradeDuplicateApprovals([reconcileOne(fundA,entries,docs),reconcileOne(fundB,entries,docs)]);
   assert.equal(results.filter(r=>r.status==="auto_approved").length,0);
 });
+
+test("Factsheet identity can be automatically approved without guessing a missing share class",()=>{
+ const fund=approved("New Ireland","Goodbody Global Leaders");
+ const result=reconcileOne(fund,[row("New Ireland","Goodbody Global Leaders S6")],
+ [pdf("New Ireland","Goodbody Global Leaders")]);
+ assert.equal(result.factsheetIdentityApproved,true);
+ assert.equal(result.seriesIdentityApproved,false);
+ assert.notEqual(result.status,"auto_approved");
+});
+test("Shared PDF cannot auto-approve multiple distinct shortlisted funds",async()=>{
+ const {downgradeDuplicateApprovals}=await import("../src/lib/reconciliation/engine.ts");
+ const x=pdf("New Ireland","Alternative Energy (6)");
+ const a=reconcileOne({id:"a",provider:"New Ireland",name:"Alternative Energy Fund"},
+ [row("New Ireland","New Ireland Alternative Energy S6")],[x]);
+ const b=reconcileOne({id:"b",provider:"New Ireland",name:"KBI Alternative Energy Fund"},
+ [row("New Ireland","New Ireland Alternative Energy S6")],[x]);
+ assert.equal(downgradeDuplicateApprovals([a,b]).filter(r=>r.factsheetIdentityApproved).length,0);
+});
