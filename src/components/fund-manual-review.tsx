@@ -2,9 +2,10 @@
 
 import {useEffect,useMemo,useState} from "react";
 import {ArrowUpRight,CheckCircle2,RefreshCw,ShieldAlert} from "lucide-react";
-import {matchScore} from "@/lib/reconciliation/engine";
+import {matchScore,similarity} from "@/lib/reconciliation/engine";
 
-type PdfChoice={id:string;title:string;filename:string;moneyMateId:string|null;score:number};
+type PdfChoice={id:string;title:string;filename:string;moneyMateId:string|null;score:number;
+  performance?:{status:string;asOf:string|null;feeBasis:string;returns:Record<string,number|null>;notes:string[]}|null;};
 type RowChoice={importId:string;row:number;name:string;score:number;returns:Record<string,number|null>};
 type Manual={decision:"confirmed"|"rejected";factsheet_import_id:string|null;performance_import_id:string|null;
   performance_row:number|null;score_at_review:number|null;note:string;reviewed_at:string};
@@ -41,7 +42,7 @@ export default function FundManualReview({fundId,onSaved,onNext}:{fundId:string;
       r.importId===data.manual?.performance_import_id&&r.row===data.manual?.performance_row):
       data.rows.find(r=>r.importId===data.automatic.performanceImportId&&
         r.row===data.automatic.performanceRow);
-    setWorkbookKey(selectedRow?rowKey(selectedRow):data.rows[0]?rowKey(data.rows[0]):"");
+    setWorkbookKey(selectedRow?rowKey(selectedRow):"");
     setNote(data.manual?.note??"");
     setAcknowledged(false);
     setLoading(false);
@@ -63,7 +64,7 @@ export default function FundManualReview({fundId,onSaved,onNext}:{fundId:string;
           r.importId===data.manual?.performance_import_id&&r.row===data.manual?.performance_row):
           data.rows.find(r=>r.importId===data.automatic.performanceImportId&&
             r.row===data.automatic.performanceRow);
-        setWorkbookKey(selectedRow?rowKey(selectedRow):data.rows[0]?rowKey(data.rows[0]):"");
+        setWorkbookKey(selectedRow?rowKey(selectedRow):"");
         setNote(data.manual?.note??"");
       }catch(e){
         if(active)setError(e instanceof Error?e.message:"Could not load review choices.");
@@ -74,11 +75,14 @@ export default function FundManualReview({fundId,onSaved,onNext}:{fundId:string;
 
   const selectedPdf=useMemo(()=>choices?.pdfs.find(p=>p.id===pdfId),[choices,pdfId]);
   const selectedRow=useMemo(()=>choices?.rows.find(r=>rowKey(r)===workbookKey),[choices,workbookKey]);
-  const score=choices&&selectedPdf&&selectedRow?
-    matchScore(choices.fund.name,selectedPdf.title,selectedRow.name):null;
+  const score=choices&&selectedPdf?
+    selectedRow?matchScore(choices.fund.name,selectedPdf.title,selectedRow.name):
+      {score:similarity(choices.fund.name,selectedPdf.title),
+        factsheetScore:similarity(choices.fund.name,selectedPdf.title),
+        workbookScore:0,classConsistent:true}:null;
   const lowScore=!!score && (score.score<.6 || !score.classConsistent);
   async function submit(decision:"confirmed"|"rejected"|"reset"){
-    if(decision==="confirmed"&&(!selectedPdf||!selectedRow||!acknowledged))return;
+    if(decision==="confirmed"&&(!selectedPdf||!acknowledged))return;
     if(decision==="confirmed"&&lowScore&&note.trim().length<8){
       setError("Please explain the manual override when the score is low or the series/class differs.");
       return;
@@ -89,7 +93,7 @@ export default function FundManualReview({fundId,onSaved,onNext}:{fundId:string;
     }
     const body=decision==="confirmed"?{
       decision,factsheetImportId:selectedPdf!.id,
-      performanceImportId:selectedRow!.importId,performanceRow:selectedRow!.row,note:note.trim()
+      performanceImportId:selectedRow?.importId??null,performanceRow:selectedRow?.row??null,note:note.trim()
     }:decision==="rejected"?{decision,note:note.trim()}:{decision};
     setBusy(true);setError("");setMessage("");
     try{
@@ -115,7 +119,7 @@ export default function FundManualReview({fundId,onSaved,onNext}:{fundId:string;
     <h3 style={{marginTop:8}}>{choices.fund.name}</h3>
     <p className="muted">{choices.fund.provider} · {choices.manual?.decision==="confirmed"?"Identity confirmed on "+new Date(choices.manual.reviewed_at).toLocaleDateString("en-IE"):
       choices.manual?.decision==="rejected"?"Automatic selection rejected":"Not manually reviewed"}</p>
-    <p className="fineprint">Select the exact fund name printed inside its PDF and the corresponding workbook series. Uploaded filenames are shown only to help you locate the original file.</p>
+    <p className="fineprint">Select the exact fund name printed inside its PDF. Published performance comes from the PDF; workbook series comparison is optional.</p>
 
     <div className="two-col" style={{gap:16,marginTop:14}}>
       <div>
@@ -133,10 +137,10 @@ export default function FundManualReview({fundId,onSaved,onNext}:{fundId:string;
         </>}
       </div>
       <div>
-        <label className="form-label" htmlFor="series-choice">Published performance series</label>
+        <label className="form-label" htmlFor="series-choice">Workbook series (optional)</label>
         <select id="series-choice" className="form-input" style={{width:"100%"}} value={workbookKey}
           onChange={e=>{setWorkbookKey(e.target.value);setAcknowledged(false)}}>
-          <option value="">Choose workbook row…</option>
+          <option value="">No workbook comparison required</option>
           {choices.rows.map(r=><option key={rowKey(r)} value={rowKey(r)}>{r.name} · row {r.row} · {r.score}/100</option>)}
         </select>
         {selectedRow&&<p className="fineprint">Workbook name similarity: <strong>{selectedRow.score}/100</strong> · Source row {selectedRow.row}</p>}
@@ -147,17 +151,21 @@ export default function FundManualReview({fundId,onSaved,onNext}:{fundId:string;
       <ShieldAlert size={17}/><span>
         <strong>Combined matching score: {Math.round(score.score*100)}/100</strong> ·
         PDF title {Math.round(score.factsheetScore*100)}/100 ·
-        Workbook title {Math.round(score.workbookScore*100)}/100.
+        {selectedRow?"Workbook title "+Math.round(score.workbookScore*100)+"/100.":"No workbook required."}
         {score.classConsistent?" No explicit series conflict detected.":" Share-class or pension/growth designation needs your attention."}
         {" "}These are heuristic similarity scores, not measured accuracy probabilities.
       </span>
     </div>}
-    {selectedRow&&<div className="table-scroll" style={{marginTop:16}}>
+    {selectedPdf?.performance?.status==="extracted"?<div className="table-scroll" style={{marginTop:16}}>
+      <p><strong>Performance published in the original PDF</strong> · as of {selectedPdf.performance.asOf??"unknown"}
+        · {selectedPdf.performance.feeBasis.replaceAll("_"," ")}</p>
       <table className="data-table">
         <thead><tr>{labels.map(([key,label])=><th key={key}>{label}</th>)}</tr></thead>
-        <tbody><tr>{labels.map(([key])=><td key={key}>{pct(selectedRow.returns?.[key])}</td>)}</tr></tbody>
+        <tbody><tr>{labels.map(([key])=><td key={key}>{pct(selectedPdf.performance?.returns?.[key])}</td>)}</tr></tbody>
       </table>
-      <p className="fineprint">These published workbook figures are not approved for client proposals. Missing returns remain N/A.</p>
+      <p className="fineprint">Three-, five- and ten-year returns are annualised where provided. Missing values remain N/A. No Excel performance figures are substituted.</p>
+    </div>:<div className="notice neutral" style={{marginTop:16}}>
+      <ShieldAlert size={15}/> No reliable numeric return table was extracted from this PDF. You may confirm its fund identity, but performance will remain unavailable.
     </div>}
 
     <label className="form-label" htmlFor="review-note" style={{marginTop:16}}>Review note / source evidence</label>
@@ -166,11 +174,11 @@ export default function FundManualReview({fundId,onSaved,onNext}:{fundId:string;
       value={note} onChange={e=>setNote(e.target.value)}/>
     <label style={{display:"flex",gap:9,alignItems:"flex-start",fontSize:12,margin:"12px 0"}}>
       <input type="checkbox" checked={acknowledged} onChange={e=>setAcknowledged(e.target.checked)}/>
-      I have checked the fund title inside the PDF and the workbook share class. I understand this confirms identity only, not return figures.
+      I have checked the fund name printed inside the PDF. Performance figures come from that PDF only and do not include client-specific fee adjustments.
     </label>
     <div className="button-row">
-      <button className="btn primary" type="button" disabled={busy||!selectedPdf||!selectedRow||!acknowledged}
-        onClick={()=>void submit("confirmed")}><CheckCircle2 size={16}/> Approve selected identity match</button>
+      <button className="btn primary" type="button" disabled={busy||!selectedPdf||!acknowledged}
+        onClick={()=>void submit("confirmed")}><CheckCircle2 size={16}/> Approve PDF fund identity</button>
       <button className="btn quiet" type="button" disabled={busy} onClick={()=>void submit("rejected")}>
         <ShieldAlert size={15}/> Reject suggested match
       </button>
