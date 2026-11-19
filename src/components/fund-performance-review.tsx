@@ -21,6 +21,7 @@ type Review = {
     candidateFactsheets?:{importId:string;title:string|null;filename:string;score?:number}[];
     matchScores?:{factsheet:number;workbook:number;combined:number};
     factsheetIdentityApproved?:boolean;seriesIdentityApproved?:boolean;
+    displayedReturnsSource?:string|null;
   };
   factsheet_import_id:string|null; reason:string; returns_approved:boolean;
 };
