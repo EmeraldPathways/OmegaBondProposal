@@ -57,9 +57,12 @@ function set(
 function calendarReturns(lines:string[],marker:RegExp,years=5):Record<string,number|null>{
   const index=lines.findIndex(x=>marker.test(x));
   if(index<0)return {};
-  const headings=(lines[index+1]??"").match(/\b20\d{2}\b/g)?.slice(0,years)??[];
+  const headingsLine=/^Calendar Year\s+20\d{2}/i.test(lines[index])?
+    lines[index]:lines[index+1]??"";
+  const headings=headingsLine.match(/\b20\d{2}\b/g)?.slice(0,years)??[];
   if(!headings.length)return {};
-  const vals=nextValues(lines,index+1,headings.length,true);
+  const rowIndex=headingsLine===lines[index]?index:index+1;
+  const vals=nextValues(lines,rowIndex,headings.length,true);
   return vals?Object.fromEntries(headings.map((year,i)=>[year,vals[i]])):{};
 }
 const headerTitle=(header:string)=>header.split(/\s+[–—-]\s+/).slice(1).join(" – ").trim()||null;
