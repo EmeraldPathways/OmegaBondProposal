@@ -4,12 +4,13 @@ import { readFileSync } from "node:fs";
 
 const read = p => readFileSync(new URL("../" + p, import.meta.url), "utf8");
 
-test("proposal viewer exports the same server-generated PDF that it previews",()=>{
+test("server-generated PDF viewer is preserved for verified client proposals",()=>{
   const workspace = read("src/components/workspace.tsx");
   const viewer = read("src/components/proposal-pdf-viewer.tsx");
   const endpoint = read("src/app/api/proposal/pdf/route.ts");
   assert.doesNotMatch(workspace, /window\.print\s*\(/);
-  assert.match(workspace, /<ProposalPdfViewer/);
+  assert.doesNotMatch(workspace, /<ProposalPdfViewer/);
+  assert.match(workspace, /PDF template has not been removed/);
   assert.match(viewer, /URL\.createObjectURL\(blob\)/);
   assert.match(viewer, /anchor\.href = url/);
   assert.match(viewer, /<iframe/);
