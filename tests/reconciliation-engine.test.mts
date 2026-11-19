@@ -133,7 +133,7 @@ test("Shared PDF cannot auto-approve multiple distinct shortlisted funds",async(
  const x=pdf("New Ireland","Alternative Energy (6)");
  const a=reconcileOne({id:"a",provider:"New Ireland",name:"Alternative Energy Fund"},
  [row("New Ireland","New Ireland Alternative Energy S6")],[x]);
- const b=reconcileOne({id:"b",provider:"New Ireland",name:"KBI Alternative Energy Fund"},
+ const b=reconcileOne({id:"b",provider:"New Ireland",name:"Alternative Energy Fund"},
  [row("New Ireland","New Ireland Alternative Energy S6")],[x]);
  assert.equal(downgradeDuplicateApprovals([a,b]).filter(r=>r.factsheetIdentityApproved).length,0);
 });
