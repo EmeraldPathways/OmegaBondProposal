@@ -14,8 +14,8 @@ const input=z.discriminatedUnion("decision",[
   z.object({
     decision:z.literal("confirmed"),
     factsheetImportId:z.string().regex(uuid),
-    performanceImportId:z.string().regex(uuid),
-    performanceRow:z.number().int().positive().max(10000),
+    performanceImportId:z.string().regex(uuid).nullable().optional(),
+    performanceRow:z.number().int().positive().max(10000).nullable().optional(),
     note:z.string().trim().max(800).default("")
   }),
   z.object({decision:z.literal("rejected"),note:z.string().trim().min(3).max(800)}),
@@ -66,6 +66,7 @@ export async function GET(_request:Request,{params}:{params:Promise<{fundId:stri
       return {
         id:String(item.import_id),title:String(data.title),filename:String(data.filename),
         moneyMateId:data.moneyMateId??null,
+        performance:data.performance??null,
         score:Math.round(similarity(fund.name,String(data.title))*100)
       };
     }).sort((a,b)=>b.score-a.score || a.title.localeCompare(b.title));
@@ -120,21 +121,26 @@ export async function POST(request:Request,{params}:{params:Promise<{fundId:stri
         [fundId,ADMIN_EMAIL,data.note]);
       return NextResponse.json({decision:"rejected",returnsApproved:false},{headers:noStore});
     }
+    const hasWorkbook=Boolean(data.performanceImportId&&data.performanceRow!=null);
+    if(Boolean(data.performanceImportId)!==Boolean(data.performanceRow!=null))
+      return NextResponse.json({error:"Choose both a workbook and row, or neither."},
+        {status:400,headers:noStore});
     const [factRows,perfRows]=await Promise.all([
       sql.query("SELECT data FROM fund_source_factsheets "+
         "WHERE import_id=$1::uuid AND status='parsed' AND data->>'providerHint'=$2 "+
         "AND nullif(data->>'title','') IS NOT NULL LIMIT 1",
         [data.factsheetImportId,fund.provider]),
-      sql.query("SELECT source_name,reported_returns FROM fund_source_performance "+
+      hasWorkbook?sql.query("SELECT source_name,reported_returns FROM fund_source_performance "+
         "WHERE import_id=$1::uuid AND row_number=$2 AND provider=$3 LIMIT 1",
-        [data.performanceImportId,data.performanceRow,fund.provider])
+        [data.performanceImportId,data.performanceRow,fund.provider]):Promise.resolve([])
     ]);
-    if(!factRows.length||!perfRows.length)
-      return NextResponse.json({error:"The selected PDF or workbook row is not a valid source for this provider."},
+    if(!factRows.length || (hasWorkbook&&!perfRows.length))
+      return NextResponse.json({error:"The selected PDF or optional workbook reference is unavailable."},
         {status:422,headers:noStore});
     const title=(factRows[0].data as FactSheetData).title!;
-    const workbookName=String(perfRows[0].source_name);
-    const scores=matchScore(fund.name,title,workbookName);
+    const workbookName=hasWorkbook?String(perfRows[0].source_name):null;
+    const scores=workbookName?matchScore(fund.name,title,workbookName):
+      {score:similarity(fund.name,title),classConsistent:true};
     if((scores.score<0.60 || !scores.classConsistent) && data.note.trim().length<8)
       return NextResponse.json({
         error:"Explain the discrepancy in your review note before confirming a low-score or share-class-conflicting match."
@@ -142,10 +148,10 @@ export async function POST(request:Request,{params}:{params:Promise<{fundId:stri
 
     // A reviewer may override heuristic similarity; preserve scores and their
     // explicit decision. Prevent accidental assignments to two distinct funds.
-    const sameSeries=await sql.query(
+    const sameSeries=hasWorkbook?await sql.query(
       "SELECT fund_id FROM fund_identity_reviews WHERE fund_id<>$1 AND decision='confirmed' "+
       "AND performance_import_id=$2::uuid AND performance_row=$3 LIMIT 1",
-      [fundId,data.performanceImportId,data.performanceRow]);
+      [fundId,data.performanceImportId,data.performanceRow]):[];
     if(sameSeries.length)return NextResponse.json({
       error:"This published performance series is already confirmed for another shortlisted fund. Resolve that assignment first."
     },{status:409,headers:noStore});
@@ -170,12 +176,12 @@ export async function POST(request:Request,{params}:{params:Promise<{fundId:stri
       "performance_row=EXCLUDED.performance_row,"+
       "score_at_review=EXCLUDED.score_at_review,"+
       "reviewer_email=EXCLUDED.reviewer_email,note=EXCLUDED.note,reviewed_at=now()",
-      [fundId,data.factsheetImportId,data.performanceImportId,data.performanceRow,
+      [fundId,data.factsheetImportId,data.performanceImportId??null,data.performanceRow??null,
         scores.score,ADMIN_EMAIL,data.note]);
     return NextResponse.json({
       decision:"confirmed",matchScore:Math.round(scores.score*100),
       returnsApproved:false,
-      message:"Identity confirmation saved. Return dates and calculation basis still require separate approval."
+      message:"Official PDF fund identity confirmed. Any published PDF returns are used as the primary source; client-report fee/date validation remains separate."
     },{headers:noStore});
   }catch(error){
     if(error instanceof z.ZodError || error instanceof SyntaxError)
