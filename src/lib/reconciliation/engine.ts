@@ -108,7 +108,10 @@ export function reconcileOne(fund:ApprovedFund,rows:WorkbookEntry[],factsheets:F
   const providerRows=rows.filter(r=>r.provider===fund.provider);
   const providerFacts=factsheets.filter(f=>f.providerHint===fund.provider);
 
-  const rankedFacts=rank(providerFacts,f=>f.title??f.filename,fund.name);
+  // The document's extracted title is authoritative. Never use the uploaded
+  // filename for identity ranking: files can be misnamed.
+  const titledFacts=providerFacts.filter((f):f is FactSheetData & {title:string}=>Boolean(f.title?.trim()));
+  const rankedFacts=rank(titledFacts,f=>f.title,fund.name);
   const topFact=rankedFacts[0];
   const exactFact=Boolean(topFact?.item.title &&
     normalName(topFact.item.title)===normalName(fund.name));
@@ -117,7 +120,7 @@ export function reconcileOne(fund:ApprovedFund,rows:WorkbookEntry[],factsheets:F
   const factUnique=exactFact ? exactFactCount===1 :
     rankedFacts.length===1 || (topFact && rankedFacts[1] && topFact.score-rankedFacts[1].score>=.10);
   const factClear=Boolean(topFact && topFact.score>=.74 && factUnique &&
-    topFact.item.title && !topFact.item.extractionWarnings.some(w=>w.toLowerCase().includes("contradiction")));
+    topFact.item.title);
 
   const target=factClear ? topFact.item.title! : fund.name;
   const candidates=rank(providerRows,r=>r.sourceName,target);
@@ -146,7 +149,7 @@ export function reconcileOne(fund:ApprovedFund,rows:WorkbookEntry[],factsheets:F
   const reason=auto?
     "Unique PDF title and workbook series agree, with documented class. Identity matched; published return basis and as-of date remain unapproved.":
     !topFact?"No matching factsheet title was found in the uploaded documents.":
-    !factClear?"Factsheet identity is ambiguous, has a conflicting filename, or requires manual verification.":
+    !factClear?"Official PDF title is ambiguous or requires manual verification.":
     !best?"No plausible reported-performance row was found.":
     !classConsistent?"Published series/share class conflicts with the factsheet or shortlist.":
     !classDocumented?"Workbook identifies a share class not established by the factsheet or shortlist.":
@@ -161,6 +164,7 @@ export function reconcileOne(fund:ApprovedFund,rows:WorkbookEntry[],factsheets:F
     workbookRow:best&&best.score>=.60?best.item:null,
     factsheet:topFact?.item??null,
     alternativeRows:candidates.slice(0,5).map(v=>v.item),
+    // The filename is provided for archive navigation only, never matching.
     alternativeFactsheets:rankedFacts.slice(0,5).map(v=>({
       importId:v.item.importId,title:v.item.title,filename:v.item.filename
     })),
