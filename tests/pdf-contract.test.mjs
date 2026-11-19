@@ -31,3 +31,10 @@ test("Omega PDF uses the supplied logo and has no page numbering or browser meta
   assert.doesNotMatch(pdf, /pageNumber|totalPages|window\.print|document\.title/);
   assert.match(pdf, /regulated by the Central Bank of Ireland/);
 });
+
+test("Vercel includes PDFKit built-in fonts in the PDF route bundle",()=>{
+  const config = read("next.config.ts");
+  assert.match(config, /outputFileTracingIncludes/);
+  assert.match(config, /\/api\/proposal\/pdf/);
+  assert.match(config, /pdfkit\/js\/standard-fonts/);
+});
