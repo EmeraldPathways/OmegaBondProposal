@@ -1,5 +1,4 @@
 import { extractText, getDocumentProxy } from "unpdf";
-import { similarity } from "./engine";
 import type { FactSheetData } from "./engine";
 
 const DATE = /(?:\b\d{1,2}\s+(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+20\d{2}\b)/i;
@@ -121,15 +120,8 @@ export function parseFactsheetText(params:{
   if(!provider)warnings.push("Provider identity not supported by the document.");
   if(!title)warnings.push("Official fund title not reliably located.");
   if(text.replace(/\s/g,"").length<250)warnings.push("PDF has insufficient extractable text; OCR/manual review may be required.");
-  const fileTitle=filename.replace(/^(.+?)\s*[-_]\s*/,"").replace(/\.pdf$/i,"").trim();
-  // Deliberately do NOT force the filename title to match the PDF:
-  // an actual uploaded Aviva filename differs from the document's identity.
-  if(title && fileTitle.length>7){
-    const a=fileTitle.toLowerCase().replace(/[^a-z0-9]/g,"");
-    const b=title.toLowerCase().replace(/[^a-z0-9]/g,"");
-    if(!a.includes(b)&&!b.includes(a)&&similarity(fileTitle,title)<0.55)
-      warnings.push("Filename and PDF title contradiction: "+fileTitle+" vs "+title);
-  }
+  // The archive filename is never used to determine or validate the fund's
+  // official name. Provider-specific titles come from PDF page content only.
   const firstPage=pages[0]??"";
   return {
     importId,filename,providerHint:provider,title,moneyMateId:first(/MoneyMate\s*ID\s*[:\s]*(\d{5,12})/i,text),
