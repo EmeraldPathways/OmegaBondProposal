@@ -171,25 +171,7 @@ export default function FundPerformanceReview(){
             <td>{status.reviews.filter(r=>r.provider===name&&r.status==="suggested").length}</td>
             <td>{status.reviews.filter(r=>r.provider===name&&r.status==="manually_confirmed").length}</td>
             <td>{status.reviews.filter(r=>r.provider===name&&["needs_review","unmatched","manual_rejected"].includes(r.status)).length}</td>
-          </tr>
-        {expanded===r.fund_id&&<tr className="reconciliation-accordion-row" id={"fund-review-"+r.fund_id}>
-          <td colSpan={7} className="reconciliation-accordion-cell">
-            <div className="reconciliation-accordion-content">
-              <div className="reconciliation-accordion-title">
-                <div>
-                  <span className="eyebrow">FUND RECONCILIATION</span>
-                  <h3>Review match · {r.approved_name}</h3>
-                  <p className="muted">{r.provider} · Compare the printed PDF title against the workbook series.</p>
-                </div>
-                <button type="button" className="btn quiet"
-                  onClick={()=>setExpanded(null)}>Close review</button>
-              </div>
-              <FundManualReview key={r.fund_id} fundId={r.fund_id}
-                onSaved={refresh} onNext={advanceReview}/>
-            </div>
-          </td>
-        </tr>}
-        </Fragment>)}</tbody>
+          </tr>)}</tbody>
       </table>
     </div>}
 
@@ -230,7 +212,25 @@ export default function FundPerformanceReview(){
             onClick={()=>setExpanded(expanded===r.fund_id?null:r.fund_id)}>
             {expanded===r.fund_id?"Close":"Review match"}
           </button></td>
-        </tr>)}</tbody>
+        </tr>
+        {expanded===r.fund_id&&<tr className="reconciliation-accordion-row" id={"fund-review-"+r.fund_id}>
+          <td colSpan={7} className="reconciliation-accordion-cell">
+            <div className="reconciliation-accordion-content">
+              <div className="reconciliation-accordion-title">
+                <div>
+                  <span className="eyebrow">FUND RECONCILIATION</span>
+                  <h3>Review match · {r.approved_name}</h3>
+                  <p className="muted">{r.provider} · Compare the printed PDF title against the workbook series.</p>
+                </div>
+                <button type="button" className="btn quiet"
+                  onClick={()=>setExpanded(null)}>Close review</button>
+              </div>
+              <FundManualReview key={r.fund_id} fundId={r.fund_id}
+                onSaved={refresh} onNext={advanceReview}/>
+            </div>
+          </td>
+        </tr>}
+        </Fragment>)}</tbody>
       </table></div>
     </>:<div className="notice neutral" style={{marginTop:16}}>
       <ShieldAlert size={17}/> Source documents are stored privately. The full reconciliation has not yet been run against these uploads.
