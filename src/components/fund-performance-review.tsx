@@ -90,7 +90,6 @@ export default function FundPerformanceReview(){
       let done=false;
       for(let i=0;i<150;i++){
         const data=await pdfAction("extract");
-        latest=data;
         if(alive.current){
           setPdfStatus(data);
           setPdfStep("Reading return tables: "+data.processed+" of "+data.total+" PDFs");
