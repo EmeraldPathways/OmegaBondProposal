@@ -95,7 +95,7 @@ async function main(){
   const errorGroups:Record<string,number>={};
   for(const file of [...pdfs].reverse()){
     const id=String(file.id),prior=known.get(id);
-    if(prior?.status==="parsed"&&prior.data){
+    if(process.env.OMEGA_REPARSE_FACTSHEETS!=="1"&&prior?.status==="parsed"&&prior.data){
       parsed.push(prior.data as FactSheetData);reused++;continue;
     }
     let data:FactSheetData|null=null,error:string|null=null;
