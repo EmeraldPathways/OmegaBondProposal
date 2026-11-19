@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {normalName,reconcileOne,similarity,classSignals} from "../src/lib/reconciliation/engine.ts";
+import { parseFactsheetText } from "../src/lib/reconciliation/factsheet.ts";
 import type {WorkbookEntry,FactSheetData} from "../src/lib/reconciliation/engine.ts";
 import type {ApprovedFund} from "../src/lib/approved-funds.ts";
 
@@ -90,4 +91,15 @@ test("Duplicate exactly equivalent workbook rows are not auto-matched",()=>{
     [row("Standard Life",name,2),row("Standard Life",name,3)],
     [pdf("Standard Life",name)]);
   assert.equal(x.status,"needs_review");
+});
+
+test("PDF internal title wins over deliberately misleading filename",()=>{
+  const result=parseFactsheetText({
+    importId:"pdf-test",
+    filename:"Aviva - Fixed ESG 80 Ser 1.pdf",
+    pages:["Fund Factsheet\nAviva Fixed ESG 60 Series 1\n09 November 2026\nMoneyMate ID 25001234\nFund Objective\nCapital growth."]
+  });
+  assert.equal(result.title,"Aviva Fixed ESG 60 Series 1");
+  assert.equal(result.moneyMateId,"25001234");
+  assert.ok(!result.extractionWarnings.some(w=>w.toLowerCase().includes("filename")));
 });
