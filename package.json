@@ -28,5 +28,6 @@
     "@types/react-dom": "^19.0.3",
     "@types/pg": "^8.11.0",
     "typescript": "^5.8.0"
-  }
+  },
+  "type": "module"
 }
