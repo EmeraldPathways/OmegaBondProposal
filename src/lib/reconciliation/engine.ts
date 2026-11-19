@@ -103,7 +103,7 @@ function isClassConsistent(a:string,b:string):boolean{
 }
 function rank<T>(items:T[],getName:(v:T)=>string,target:string){
   return items.map(item=>({item,score:similarity(target,getName(item))}))
-    .filter(x=>x.score>=.34).sort((a,b)=>b.score-a.score);
+    .filter(x=>x.score>=.26).sort((a,b)=>b.score-a.score);
 }
 /** Heuristic name/evidence score, not a calibrated probability of correctness. */
 export function matchScore(fundName:string,pdfTitle:string,workbookName:string){
@@ -146,9 +146,9 @@ export function reconcileOne(fund:ApprovedFund,rows:WorkbookEntry[],factsheets:F
 
   const summary=topFact&&best ? matchScore(fund.name,factTitle,best.item.sourceName) : null;
   const solid=!!summary && summary.classConsistent && uniqueFact && uniqueRow &&
-    summary.factsheetScore>=.62 && summary.workbookScore>=.70 && summary.score>=.70;
+    summary.factsheetScore>=.60 && summary.workbookScore>=.66 && summary.score>=.67;
   const suggested=!!summary && summary.classConsistent &&
-    summary.factsheetScore>=.40 && summary.workbookScore>=.45;
+    summary.factsheetScore>=.32 && summary.workbookScore>=.34;
   const status:Review["status"]=solid?"auto_matched":
     suggested?"suggested":topFact||best?"needs_review":"unmatched";
   const reason=solid?
@@ -176,7 +176,7 @@ export function reconcileOne(fund:ApprovedFund,rows:WorkbookEntry[],factsheets:F
     factsheetScore:summary?.factsheetScore??topFact?.score??0,
     workbookScore:summary?.workbookScore??best?.score??0,
     reason,
-    workbookRow:best && best.score>=.38?best.item:null,
+    workbookRow:best && best.score>=.29?best.item:null,
     factsheet:topFact?.item??null,
     alternativeRows:rowCandidates,alternativeFactsheets:pdfCandidates
   };
