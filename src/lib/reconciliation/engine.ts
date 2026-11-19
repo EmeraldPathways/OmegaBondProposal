@@ -55,7 +55,7 @@ function bigrams(name:string):Set<string>{
 export function similarity(approvedName:string,sourceName:string):number{
   const a=normalName(approvedName),b=normalName(sourceName);
   if(!a||!b)return 0;
-  const numsA=a.match(/\d+/g)??[],numsB=b.match(/\d+/g)??[];
+  const numsA:string[]=a.match(/\d+/g)??[],numsB:string[]=b.match(/\d+/g)??[];
   // An ESG 80 factsheet must never be offered for ESG 60; the same applies
   // to Prisma levels and numbered Goodbody series.
   if(numsA.length&&numsB.length &&
