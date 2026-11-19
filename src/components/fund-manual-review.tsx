@@ -170,7 +170,7 @@ export default function FundManualReview({fundId,onSaved}:{fundId:string;onSaved
     </label>
     <div className="button-row">
       <button className="btn primary" type="button" disabled={busy||!selectedPdf||!selectedRow||!acknowledged}
-        onClick={()=>void submit("confirmed")}><CheckCircle2 size={16}/> Confirm identity match</button>
+        onClick={()=>void submit("confirmed")}><CheckCircle2 size={16}/> Approve selected identity match</button>
       <button className="btn quiet" type="button" disabled={busy} onClick={()=>void submit("rejected")}>
         <ShieldAlert size={15}/> Reject suggested match
       </button>

@@ -87,7 +87,7 @@ export default function FundPerformanceReview(){
         (result.counts?.auto_approved||0)+" strong identity matches and "+
         (result.counts?.suggested||0)+" additional scored suggestions; "+
         (result.counts?.needs_review||0)+" need further review; "+
-        (result.counts?.unmatched||0)+" unmatched. No unverified return has been approved for client use.");
+        (result.counts?.unmatched||0)+" unmatched. Fund identities may be approved automatically, but no unverified return is approved for client proposals.");
     }catch(e){
       if(alive.current)setError(e instanceof Error?e.message:"Reconciliation failed. You can resume it.");
     }finally{
@@ -150,14 +150,17 @@ export default function FundPerformanceReview(){
     <div className="stats-grid" style={{marginTop:18}}>
       <div className="stat"><span>Factsheets processed</span><strong>{status.processedFactsheets} / {status.totalFactsheets}</strong></div>
       <div className="stat"><span>Workbook series rows</span><strong>{status.workbookRows}</strong></div>
-      <div className="stat"><span>Auto-approved factsheet identities</span><strong>{status.reviews.filter(r=>r.evidence?.factsheetIdentityApproved).length}</strong></div>
+      <div className="stat"><span>Auto-approved factsheet identities</span><strong>{status.reviews.filter(r=>r.evidence?.factsheetIdentityApproved && !r.manual_decision).length}</strong></div>
       <div className="stat"><span>Fully auto-approved matches</span><strong>{count("auto_approved")}</strong></div>
+      <div className="stat"><span>Needs manual decision</span><strong>{status.reviews.filter(r=>["suggested","needs_review","unmatched","manual_rejected"].includes(r.status)).length}</strong></div>
+      <div className="stat"><span>Manually confirmed</span><strong>{count("manually_confirmed")}</strong></div>
     </div>
     {loaded&&<div className="table-scroll" style={{marginTop:18}}>
       <table className="data-table">
-        <thead><tr><th>PROVIDER</th><th>AUTO-APPROVED</th><th>SUGGESTED</th><th>MANUAL CONFIRMED</th><th>NEEDS REVIEW</th></tr></thead>
+        <thead><tr><th>PROVIDER</th><th>PDF AUTO-APPROVED</th><th>COMPLETE AUTO-APPROVED</th><th>SUGGESTED</th><th>MANUAL CONFIRMED</th><th>NEEDS REVIEW</th></tr></thead>
         <tbody>{["Aviva","Zurich","Standard Life","New Ireland"].map(name=>
           <tr key={name}><td><b>{name}</b></td>
+            <td>{status.reviews.filter(r=>r.provider===name&&r.evidence?.factsheetIdentityApproved&&!r.manual_decision).length}</td>
             <td>{status.reviews.filter(r=>r.provider===name&&r.status==="auto_approved").length}</td>
             <td>{status.reviews.filter(r=>r.provider===name&&r.status==="suggested").length}</td>
             <td>{status.reviews.filter(r=>r.provider===name&&r.status==="manually_confirmed").length}</td>

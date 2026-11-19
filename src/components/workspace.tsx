@@ -198,7 +198,7 @@ export default function Workspace() {
                 <td>{formatReported(published[f.id]?.status==="auto_approved"?published[f.id]?.reported_returns?.threeYear:null)}</td>
                 <td>{formatReported(published[f.id]?.status==="auto_approved"?published[f.id]?.reported_returns?.fiveYear:null)}</td>
                 <td>{formatReported(published[f.id]?.status==="auto_approved"?published[f.id]?.reported_returns?.tenYear:null)}</td>
-                <td><span className="soft-pill">{published[f.id]?.status==="auto_approved"?"Fund & series identity approved":published[f.id]?.evidence?.factsheetIdentityApproved?"Factsheet approved · series review":published[f.id]?.status==="needs_review"?"Review required":published[f.id]?.status==="unmatched"?"Unmatched":"Not reconciled"}</span></td>
+                <td><span className="soft-pill">{published[f.id]?.status==="manually_confirmed"?"Manually approved identity":published[f.id]?.status==="manual_rejected"?"Rejected · review required":published[f.id]?.status==="auto_approved"?"Fund & series identity approved":published[f.id]?.evidence?.factsheetIdentityApproved?"Factsheet approved · series review":published[f.id]?.status==="needs_review"?"Review required":published[f.id]?.status==="unmatched"?"Unmatched":"Not reconciled"}</span></td>
                 <td><button className="icon-action" aria-label={"View " + f.name} onClick={()=>setSelectedFund(f)}><ArrowRight size={17}/></button></td>
               </tr>)}</tbody>
             </table>{filtered.length===0 && <div className="empty">No matching funds found.</div>}</div>
