@@ -81,11 +81,15 @@ export default function FundPerformanceReview(){
     if(pdfBusy||busy)return;
     setPdfBusy(true);setError("");setMessage("");
     try{
-      let latest:PdfProgress|null=null;
+      for(let i=0;i<300;i++){
+        const scan=await invoke("factsheets");
+        if(alive.current)setPdfStep("Reading fund identities: "+scan.processed+" of "+scan.total+" PDFs");
+        if(!scan.hasMore)break;
+        if(i===299)throw new Error("PDF identity batch limit reached; run again to resume.");
+      }
       let done=false;
       for(let i=0;i<150;i++){
         const data=await pdfAction("extract");
-        latest=data;
         if(alive.current){
           setPdfStatus(data);
           setPdfStep("Reading return tables: "+data.processed+" of "+data.total+" PDFs");
@@ -94,6 +98,8 @@ export default function FundPerformanceReview(){
         if(data.justProcessed===0)throw new Error("The PDF source scan did not advance.");
       }
       if(!done)throw new Error("Batch limit reached. Run the import again to resume.");
+      setPdfStep("Matching printed PDF titles to the approved funds");
+      await invoke("reconcile");
       setPdfStep("Publishing official PDF figures for matched fund identities");
       const result=await pdfAction("publish");
       await Promise.all([refresh(),refreshPdf()]);
@@ -121,9 +127,7 @@ export default function FundPerformanceReview(){
     if(running.current)return;
     running.current=true;setBusy(true);setError("");setMessage("");
     try{
-      setStep("Reading the November performance workbook");
-      const book=await invoke("workbook");
-      setStep(String(book.rows)+" source performance rows loaded; extracting provider factsheets");
+      setStep("Reading official provider PDF factsheets");
       let offset=0;
       for(let i=0;i<300;i++){
         const progress=await invoke("factsheets");
@@ -135,9 +139,9 @@ export default function FundPerformanceReview(){
         if(!progress.hasMore)break;
         if(i===299)throw new Error("The document batch limit was reached. Continue to resume.");
       }
-      setStep("Matching provider, fund identity and exact series");
+      setStep("Matching provider and printed PDF fund identities");
       const result=await invoke("reconcile");
-      await refresh();
+      await Promise.all([refresh(),refreshPdf()]);
       if(alive.current)setMessage("Reconciliation complete: "+result.total+" shortlisted funds reviewed. "+
         (result.counts?.auto_approved||0)+" strong identity matches and "+
         (result.counts?.suggested||0)+" additional scored suggestions; "+
@@ -168,17 +172,18 @@ export default function FundPerformanceReview(){
   };
   function downloadExceptions(){
     const exceptions=status.reviews.filter(needsPdfReview);
-    const columns=["Provider","Approved fund","Status","Candidate workbook series","Candidate PDF title","MoneyMate ID","Factsheet date","Automatic score","Current score","Manual decision","Reason","Other workbook candidates"];
+    const columns=["Provider","Approved fund","Status","PDF fund title","MoneyMate ID","Performance date","PDF match score","Manual decision","Reason","Other PDF candidates"];
     const safe=(v:unknown)=>{
       let value=String(v??"").replace(/\r?\n/g," ");
       if(/^[=+@\-\t\r]/.test(value))value="'"+value;
       return '"'+value.replace(/"/g,'""')+'"';
     };
     const rows=exceptions.map(r=>[
-      r.provider,r.approved_name,r.status,r.selected_source_name,
+      r.provider,r.approved_name,r.status,
       r.extracted_factsheet?.title,r.extracted_factsheet?.moneyMateId,
-      r.extracted_factsheet?.asOf,r.auto_score??r.confidence,r.confidence,r.manual_decision??"pending",r.reason,
-      (r.evidence?.candidatePerformanceRows??[]).map(v=>v.name).join(" | ")
+      r.extracted_factsheet?.performance?.asOf,pdfScore(r),
+      r.manual_decision??"pending",r.reason,
+      (r.evidence?.candidateFactsheets??[]).map(v=>v.title??"untitled").join(" | ")
     ]);
     const blob=new Blob(["\uFEFF"+[columns,...rows].map(r=>r.map(safe).join(",")).join("\r\n")],
       {type:"text/csv;charset=utf-8"});
@@ -208,7 +213,7 @@ export default function FundPerformanceReview(){
       <button className="btn quiet" type="button" onClick={()=>void run()}
         disabled={busy||pdfBusy||status.totalFactsheets===0}>
         {busy?<LoaderCircle className="pdf-spin" size={17}/>:<RefreshCw size={16}/>}
-        {busy?"Checking optional references…":"Recheck workbook references (optional)"}
+        {busy?"Checking optional references…":"Recheck PDF identity matches"}
       </button>
       <button className="btn quiet" type="button" disabled={busy||pdfBusy}
         onClick={()=>void Promise.all([refresh(),refreshPdf()])}><RefreshCw size={15}/> Refresh results</button>
@@ -254,7 +259,7 @@ export default function FundPerformanceReview(){
     {loaded?<>
       <div className="filter-row" style={{marginTop:18}}>
         <label className="search-field"><input value={query} onChange={e=>setQuery(e.target.value)}
-          placeholder="Find an approved fund or workbook row…" /></label>
+          placeholder="Find an approved fund or PDF title…" /></label>
         <label className="select-wrap"><select value={provider} onChange={e=>setProvider(e.target.value)}>
           <option>All providers</option>{["Aviva","Zurich","New Ireland","Standard Life"].map(x=><option key={x}>{x}</option>)}
         </select></label>
@@ -269,7 +274,7 @@ export default function FundPerformanceReview(){
           <option value="unmatched">Unmatched</option>
         </select></label>
       </div>
-      <p className="fineprint">Showing {filtered.length} of {status.reviews.length} approved funds. Performance figures are taken from original provider PDFs, not workbook rows. Identity scores are heuristic similarity measures (0–100), not measured accuracy. PDF and workbook scores are shown separately. Even manual identity confirmation does not approve returns for client use.</p>
+      <p className="fineprint">Showing {filtered.length} of {status.reviews.length} approved funds. Performance figures are taken from original provider PDFs, not workbook rows. Identity scores are heuristic similarity measures (0–100), not measured accuracy. Even manual identity confirmation does not approve returns for client use.</p>
       <div className="table-scroll"><table className="data-table">
         <thead><tr><th>APPROVED FUND</th><th>PROVIDER</th><th>PDF MATCH SCORE</th><th>PERFORMANCE DATE</th><th>PDF FACTSHEET</th><th>REVIEW STATUS</th><th></th></tr></thead>
         <tbody>{filtered.map(r=><Fragment key={r.fund_id}><tr>

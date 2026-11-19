@@ -88,7 +88,7 @@ export default function SecureFundUploads() {
       <div>
         <span className="eyebrow">PRIVATE FUND DATABASE</span>
         <h1>Upload fund documents</h1>
-        <p>Upload official factsheets and the Omega 10-year performance workbook. The originals are stored privately and each upload is recorded in Neon.</p>
+        <p>Upload official fund factsheets as the primary source of identities and performance. An Excel workbook may be uploaded for optional cross-checking.</p>
       </div>
       <span className="soft-pill"><FolderLock size={14} /> Private storage</span>
     </div>
@@ -110,7 +110,7 @@ export default function SecureFundUploads() {
       <section className="panel padded">
         <div className="section-icon" style={{ width: "fit-content" }}><FileSpreadsheet size={20} /></div>
         <h2 style={{ marginTop: 18 }}>Fund performance workbook</h2>
-        <p className="muted">Upload the Excel workbook containing fund returns, or a dated historical-price CSV. Workbook summaries are retained as reported; they are not invented monthly prices.</p>
+        <p className="muted">Optional: upload an Excel workbook for manual comparison. Published performance displayed in the fund library comes from official PDF factsheets, never from this workbook.</p>
         <input ref={perfInput} hidden type="file" accept=".xlsx,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
           aria-label="Select fund performance workbook" onChange={e => void uploadFiles(e.currentTarget.files, "performance")} />
         <button type="button" className="dropzone" disabled={busy} onClick={() => perfInput.current?.click()}>
@@ -132,7 +132,7 @@ export default function SecureFundUploads() {
       </div>
       <p className="muted">Original files are stored in private Vercel Blob. Only your signed-in account can download them through this application.</p>
       {loading ? <p className="muted">Loading your documents...</p> : recorded === 0 ? (
-        <div className="notice neutral"><FolderLock size={17} /> No documents have been uploaded yet. Start with your Omega performance workbook and then the matching factsheets.</div>
+        <div className="notice neutral"><FolderLock size={17} /> No documents have been uploaded yet. Start by uploading the official fund factsheets.</div>
       ) : (
         <div className="table-scroll"><table className="data-table">
           <thead><tr><th>DOCUMENT</th><th>TYPE</th><th>UPLOADED</th><th>REVIEW</th><th></th></tr></thead>
@@ -153,7 +153,7 @@ export default function SecureFundUploads() {
 
     <div className="notice neutral" style={{ marginBottom: 22 }}>
       <ShieldAlert size={18} />
-      <span><strong>Source intake only.</strong> Uploaded figures are not automatically approved or used in portfolio comparisons. Fund identity, share class, observation dates, return basis and charges must be validated before they replace demonstration data. No client personal information should be uploaded.</span>
+      <span><strong>Source intake only.</strong> Clear PDF identities are automatically linked to their published return tables; ambiguous matches require manual review. Client-facing comparisons and reports remain gated on reporting-date, return-basis and fee validation. No client personal information should be uploaded.</span>
     </div>
   </>;
 }

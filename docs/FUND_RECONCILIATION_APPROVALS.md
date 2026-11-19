@@ -1,26 +1,17 @@
-# Omega fund matching approval workflow
+# Omega fund source-identity approval workflow
 
-The approved fund universe contains 115 funds. Original uploads are stored privately. Matching uses the **fund name printed inside the PDF**, never the archived filename, and compares that name against the approved shortlist and the published workbook series.
+Official provider PDFs are the **primary** identity and return source for the 115 Omega-approved funds. The exact name printed inside the PDF is authoritative; filenames never determine identity. A performance workbook is optional and is never necessary for PDF reconciliation.
 
-## Approval levels
+## Source workflow
 
-1. **Factsheet identity auto-approved:** The internal PDF title uniquely matches a shortlisted fund. This alone does not approve a return series.
-2. **Complete identity auto-approved:** Both the factsheet and the workbook row are uniquely corroborated, with no known share-class conflict or competing assignment.
-3. **Manual review:** Other cases appear under Fund uploads with the matched PDF and workbook candidates, individual scores and original-document links. The user may manually approve, reject, or substitute the source PDF or workbook row. Manual decisions are saved separately so rescans do not erase them.
+1. **Parse PDFs:** Existing provider-specific parsers extract the printed title, reporting date, published returns, fee basis and available evidence.
+2. **Auto-approve clear identities:** The approved shortlist entry must uniquely and consistently match the internal PDF title, including all explicit share-class, series and pension/growth indicators. Duplicate or ambiguous candidates cannot be approved automatically.
+3. **Stage original PDF returns:** A dated, defensibly extracted return table may be displayed for an approved PDF identity. Missing periods remain N/A.
+4. **Manually resolve exceptions:** Adviser can choose a PDF, approve, reject, or reset a match and enter an evidence note. Previous manual decisions remain independent of rescans.
+5. **Validate before client calculations:** Displaying published figures is distinct from approving portfolio performance for client proposals; mixed dates, annualisation conventions and policy charges are not silently treated as comparable.
 
-The initial filter is **Needs manual review**, and every fund (including automatically approved ones) remains available via **All statuses**. Lower-confidence manual overrides require an explanation.
+Workbook rows can be attached during manual review, but no workbook identity match is needed for the official PDF path. The old workbook series matching engine is retained for historical compatibility and optional reference only.
 
-Scores are heuristic source-matching scores, not statistical probabilities. Neither source-identity approval nor manual confirmation constitutes verification of the performance reporting basis, date, charges or financial suitability. **No returns are approved for client proposals** until those details have been independently validated; no monthly prices are generated.
-
-## Production results — 19 November 2026
-
-- Approved fund universe: 115
-- Original factsheets processed: 105
-- Published workbook series read: 406
-- Automatically approved factsheet identities: 64
-- Automatically approved complete factsheet/workbook identities: 26
-- Complete identities requiring user review: 89
-
-The main unresolved classes include New Ireland S6 versus S12, and Zurich pension versus growth series. These cannot safely be determined just from an underlying fund name.
+Scores are heuristic source-name similarity measures, **not** probability of correctness. No invented historical prices, cumulative-to-annualised conversions or missing returns.
 
 OFM Financial Ltd T/A Omega Financial Management, regulated by the Central Bank of Ireland.

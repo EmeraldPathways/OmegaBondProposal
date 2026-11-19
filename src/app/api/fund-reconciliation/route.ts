@@ -5,7 +5,8 @@ import { auth, ADMIN_EMAIL, isLoginConfigured } from "@/auth";
 import { getNeonSql } from "@/lib/server/neon";
 import { APPROVED_FUNDS } from "@/lib/approved-funds";
 import { extractFundFactsheet } from "@/lib/reconciliation/factsheet";
-import { HORIZONS, reconcileOne, downgradeDuplicateApprovals } from "@/lib/reconciliation/engine";
+import { HORIZONS, downgradeDuplicateApprovals } from "@/lib/reconciliation/engine";
+import { reconcilePdfOnly } from "@/lib/reconciliation/pdf-only";
 import type { WorkbookEntry,FactSheetData,ReportedReturns,Review } from "@/lib/reconciliation/engine";
 
 export const runtime = "nodejs";
@@ -115,14 +116,6 @@ async function factsheets(){
 }
 async function reconcile(){
   const sql=getNeonSql();
-  const book=await latestWorkbook();
-  if(!book)throw new Error("Omega performance workbook unavailable.");
-  const entries=await sql.query("SELECT provider,source_name,row_number,reported_returns FROM fund_source_performance WHERE import_id=$1::uuid",[book.id]);
-  if(!entries.length)throw new Error("Workbook has not been extracted. Run its scan first.");
-  const workbookEntries:WorkbookEntry[]=entries.map(r=>({
-    provider:String(r.provider),sourceName:String(r.source_name),
-    rowNumber:Number(r.row_number),returns:r.reported_returns as ReportedReturns
-  }));
   const facts=await sql.query("SELECT data FROM fund_source_factsheets WHERE status='parsed' AND data IS NOT NULL");
   const extracted=facts.map(row=>row.data as FactSheetData);
   const reviewTable=await sql.query("SELECT to_regclass('public.fund_identity_reviews') IS NOT NULL AS present");
@@ -130,7 +123,7 @@ async function reconcile(){
     ?await sql.query("SELECT fund_id,factsheet_import_id::text,performance_import_id::text,performance_row FROM fund_identity_reviews WHERE decision='confirmed'")
     :[];
   const results=downgradeDuplicateApprovals(
-    APPROVED_FUNDS.map(f=>reconcileOne(f,workbookEntries,extracted)),
+    APPROVED_FUNDS.map(f=>reconcilePdfOnly(f,extracted)),
     confirmed.map(x=>({fundId:String(x.fund_id),factsheetImportId:x.factsheet_import_id?String(x.factsheet_import_id):null,
       performanceImportId:x.performance_import_id?String(x.performance_import_id):null,
       rowNumber:x.performance_row==null?null:Number(x.performance_row)}))
@@ -140,9 +133,9 @@ async function reconcile(){
     const published=pdfPerf?.status==="extracted"&&Boolean(pdfPerf.asOf);
     return {
     fundId:r.fundId,provider:r.provider,name:r.name,status:r.status,score:r.score,
-    performanceImportId:r.workbookRow?book.id:null,
-    sourceRow:r.workbookRow?.rowNumber??null,
-    sourceName:r.workbookRow?.sourceName??null,
+    performanceImportId:null,
+    sourceRow:null,
+    sourceName:null,
     returnData:published?pdfPerf!.returns:null,
     factsheetId:r.factsheet?.importId??null,
     extracted:r.factsheet??null,
@@ -154,14 +147,14 @@ async function reconcile(){
         source:"official_factsheet_pdf",asOf:pdfPerf.asOf,
         feeBasis:pdfPerf.feeBasis,page:pdfPerf.page
       }:null,
-      candidatePerformanceRows:r.alternativeRows.map(row=>({name:row.sourceName,row:row.rowNumber,returns:row.returns,score:row.score})),
+      candidatePerformanceRows:[], // Optional workbook comparison remains accessible in manual review.
       candidateFactsheets:r.alternativeFactsheets,
-      matchScores:{factsheet:r.factsheetScore,workbook:r.workbookScore,combined:r.score},
+      matchScores:{factsheet:r.factsheetScore,workbook:0,combined:r.score},
       factsheetIdentityApproved:r.factsheetIdentityApproved,
       seriesIdentityApproved:r.seriesIdentityApproved,
-      identityOnly:true,
-      performanceSourceBasis:"not_confirmed",
-      workbookAsOf:"not_confirmed"
+      identityOnly:!r.factsheetIdentityApproved,
+      performanceSourceBasis:published?pdfPerf!.feeBasis:"not_confirmed",
+      workbookAsOf:null
     }
   }}));
   await sql.query("INSERT INTO fund_reconciliations (fund_id,provider,approved_name,status,confidence,performance_import_id,factsheet_import_id,selected_workbook_row,selected_source_name,reported_returns,extracted_factsheet,evidence,reason,returns_approved) SELECT x.\"fundId\",x.provider,x.name,x.status,x.score,(x.\"performanceImportId\")::uuid,(x.\"factsheetId\")::uuid,x.\"sourceRow\",x.\"sourceName\",x.\"returnData\",x.extracted,x.evidence,x.reason,false FROM jsonb_to_recordset($1::jsonb) AS x(\"fundId\" text,provider text,name text,status text,score numeric,\"performanceImportId\" text,\"factsheetId\" text,\"sourceRow\" integer,\"sourceName\" text,\"returnData\" jsonb,extracted jsonb,evidence jsonb,reason text) ON CONFLICT (fund_id) DO UPDATE SET provider=EXCLUDED.provider,approved_name=EXCLUDED.approved_name,status=EXCLUDED.status,confidence=EXCLUDED.confidence,performance_import_id=EXCLUDED.performance_import_id,factsheet_import_id=EXCLUDED.factsheet_import_id,selected_workbook_row=EXCLUDED.selected_workbook_row,selected_source_name=EXCLUDED.selected_source_name,reported_returns=EXCLUDED.reported_returns,extracted_factsheet=EXCLUDED.extracted_factsheet,evidence=EXCLUDED.evidence,reason=EXCLUDED.reason,returns_approved=false,updated_at=now()",[payload]);
@@ -178,12 +171,12 @@ export async function GET(){
       "to_regclass('public.fund_identity_reviews') AS manual");
     const tables=status[0];
     const files=await sql.query("SELECT COUNT(*)::int AS count FROM imports WHERE storage_key LIKE 'funds/factsheets/%'");
-    if(!tables?.reconciliations || !tables?.factsheets || !tables?.performance)
+    if(!tables?.reconciliations || !tables?.factsheets)
       return NextResponse.json({initialized:false,approvedUniverse:115,totalFactsheets:Number(files[0].count),processedFactsheets:0,workbookRows:0,reviews:[]},{headers});
     const [details,processed,performance,manualReviews]=await Promise.all([
       sql.query("SELECT fund_id,provider,approved_name,status,confidence,selected_source_name,reported_returns,extracted_factsheet,evidence,reason,returns_approved,factsheet_import_id::text FROM fund_reconciliations ORDER BY provider,approved_name"),
       sql.query("SELECT COUNT(*)::int AS count FROM fund_source_factsheets"),
-      sql.query("SELECT COUNT(*)::int AS count FROM fund_source_performance"),
+      tables.performance?sql.query("SELECT COUNT(*)::int AS count FROM fund_source_performance"):Promise.resolve([{count:0}]),
       tables.manual?sql.query(
         "SELECT m.fund_id,m.decision,m.note AS manual_note,m.reviewed_at::text AS reviewed_at,"+
         "m.score_at_review::float AS reviewed_score,m.factsheet_import_id::text AS manual_factsheet_id,"+
