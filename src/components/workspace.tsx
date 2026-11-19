@@ -193,16 +193,16 @@ export default function Workspace() {
               <thead><tr><th>FUND</th><th>PROVIDER</th><th>1 YEAR*</th><th>3 YEARS*</th><th>5 YEARS*</th><th>10 YEARS*</th><th>MATCH STATUS</th><th></th></tr></thead>
               <tbody>{filtered.map(f=><tr key={f.id}>
                 <td><b>{f.name}</b></td><td>{f.provider}</td>
-                <td>{formatReported(published[f.id]?.reported_returns?.oneYear)}</td>
-                <td>{formatReported(published[f.id]?.reported_returns?.threeYear)}</td>
-                <td>{formatReported(published[f.id]?.reported_returns?.fiveYear)}</td>
-                <td>{formatReported(published[f.id]?.reported_returns?.tenYear)}</td>
-                <td><span className="soft-pill">{published[f.id]?.status==="auto_matched"?"Strong identity match":published[f.id]?.status==="needs_review"?"Review required":published[f.id]?.status==="unmatched"?"Unmatched":"Not reconciled"}</span></td>
+                <td>{formatReported(published[f.id]?.status==="auto_matched"?published[f.id]?.reported_returns?.oneYear:null)}</td>
+                <td>{formatReported(published[f.id]?.status==="auto_matched"?published[f.id]?.reported_returns?.threeYear:null)}</td>
+                <td>{formatReported(published[f.id]?.status==="auto_matched"?published[f.id]?.reported_returns?.fiveYear:null)}</td>
+                <td>{formatReported(published[f.id]?.status==="auto_matched"?published[f.id]?.reported_returns?.tenYear:null)}</td>
+                <td><span className="soft-pill">{published[f.id]?.status==="auto_matched"?"Identity matched · returns pending":published[f.id]?.status==="needs_review"?"Review required":published[f.id]?.status==="unmatched"?"Unmatched":"Not reconciled"}</span></td>
                 <td><button className="icon-action" aria-label={"View " + f.name} onClick={()=>setSelectedFund(f)}><ArrowRight size={17}/></button></td>
               </tr>)}</tbody>
             </table>{filtered.length===0 && <div className="empty">No matching funds found.</div>}</div>
           </div>
-          <p className="fineprint">{filtered.length} of 115 approved funds displayed. Unselected funds in the source workbook are intentionally excluded. * Reported percentages are unapproved source figures, not verified returns for client use; their reporting basis still requires confirmation.</p>
+          <p className="fineprint">{filtered.length} of 115 approved funds displayed. Unselected funds in the source workbook are intentionally excluded. * Percentages are shown only for uniquely matched fund identities; all reported returns remain unapproved for client use; their reporting basis still requires confirmation.</p>
         </>}
 
         {view === "imports" && <SecureFundUploads/>}
@@ -339,7 +339,7 @@ export default function Workspace() {
             <Stat label="10-year reported" value={formatReported(published[selectedFund.id].reported_returns?.tenYear)} />
           </div>
           {published[selectedFund.id].extracted_factsheet && <>
-            <h3>Official factsheet extraction</h3>
+            <h3>Candidate factsheet extraction — not approved</h3>
             <p><strong>Fund title:</strong> {published[selectedFund.id].extracted_factsheet?.title??"Not extracted"}</p>
             <p><strong>MoneyMate ID:</strong> {published[selectedFund.id].extracted_factsheet?.moneyMateId??"N/A"} · <strong>Factsheet date:</strong> {published[selectedFund.id].extracted_factsheet?.asOf??"N/A"}</p>
             <p><strong>AMC:</strong> {formatReported(published[selectedFund.id].extracted_factsheet?.amcPct)} · <strong>CIV charge:</strong> {formatReported(published[selectedFund.id].extracted_factsheet?.civPct)}</p>
