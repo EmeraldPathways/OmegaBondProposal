@@ -6,7 +6,7 @@ import { getNeonSql } from "@/lib/server/neon";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   if (!isLoginConfigured() || (await auth())?.user?.email?.toLowerCase() !== ADMIN_EMAIL) {
     return NextResponse.json({ error: "Unauthorised" }, { status: 401 });
   }
@@ -22,10 +22,11 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     const result = await get(String(records[0].storage_key), { access: "private" });
     if (!result || result.statusCode !== 200) return new Response("Not found", { status: 404 });
     const filename = String(records[0].filename).replace(/["\\\r\n]/g, "_").slice(0, 180);
+    const inlinePdf = new URL(request.url).searchParams.get("view") === "1" && filename.toLowerCase().endsWith(".pdf");
     return new Response(result.stream, {
       headers: {
         "Content-Type": result.blob.contentType || "application/octet-stream",
-        "Content-Disposition": `attachment; filename="${filename}"`,
+        "Content-Disposition": `${inlinePdf ? "inline" : "attachment"}; filename="${filename}"`,
         "Cache-Control": "private, no-store",
         "X-Content-Type-Options": "nosniff",
       },
