@@ -95,13 +95,19 @@ export default function FundPerformanceReview(){
       if(alive.current){setBusy(false);setStep("")}
     }
   }
+  const rank:Record<string,number>={suggested:0,needs_review:1,manual_rejected:2,unmatched:3,auto_approved:4,manually_confirmed:5};
   const filtered=status.reviews.filter(r=>
     (provider==="All providers"||r.provider===provider)&&
     (statusFilter==="All statuses"||statusFilter==="Needs manual review"&&
       ["suggested","needs_review","unmatched","manual_rejected"].includes(r.status)||
       r.status===statusFilter)&&
     (r.approved_name+" "+r.provider+" "+(r.selected_source_name||"")).toLowerCase().includes(query.toLowerCase())
-  );
+  ).sort((a,b)=>(rank[a.status]??9)-(rank[b.status]??9)||
+    Number(b.auto_score??b.confidence??0)-Number(a.auto_score??a.confidence??0));
+  const advanceReview=()=>{
+    const currentIndex=filtered.findIndex(r=>r.fund_id===expanded);
+    setExpanded(filtered[currentIndex>=0?currentIndex+1:0]?.fund_id??null);
+  };
   function downloadExceptions(){
     const exceptions=status.reviews.filter(r=>!["auto_approved","manually_confirmed"].includes(r.status));
     const columns=["Provider","Approved fund","Status","Candidate workbook series","Candidate PDF title","MoneyMate ID","Factsheet date","Automatic score","Current score","Manual decision","Reason","Other workbook candidates"];
@@ -205,7 +211,7 @@ export default function FundPerformanceReview(){
           </button></td>
         </tr>)}</tbody>
       </table></div>
-      {expanded&&<FundManualReview key={expanded} fundId={expanded} onSaved={refresh}/>}
+      {expanded&&<FundManualReview key={expanded} fundId={expanded} onSaved={refresh} onNext={advanceReview}/>}
     </>:<div className="notice neutral" style={{marginTop:16}}>
       <ShieldAlert size={17}/> Source documents are stored privately. The full reconciliation has not yet been run against these uploads.
     </div>}

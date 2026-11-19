@@ -17,7 +17,7 @@ const labels:[string,string][]=[["ytd","YTD"],["oneMonth","1m"],["threeMonth","3
 const pct=(n:number|null|undefined)=>n==null?"N/A":(n>0?"+":"")+n.toFixed(2)+"%";
 const rowKey=(r:{importId:string;row:number})=>r.importId+":"+r.row;
 
-export default function FundManualReview({fundId,onSaved}:{fundId:string;onSaved:()=>Promise<unknown>}){
+export default function FundManualReview({fundId,onSaved,onNext}:{fundId:string;onSaved:()=>Promise<unknown>;onNext?:()=>void}){
   const [choices,setChoices]=useState<Choices|null>(null);
   const [pdfId,setPdfId]=useState("");
   const [workbookKey,setWorkbookKey]=useState("");
@@ -177,6 +177,8 @@ export default function FundManualReview({fundId,onSaved}:{fundId:string;onSaved
       <button className="btn quiet" type="button" disabled={busy||!choices.manual} onClick={()=>void submit("reset")}>
         <RefreshCw size={15}/> Reset decision
       </button>
+      {onNext&&<button className="btn quiet" type="button" disabled={busy}
+        onClick={onNext}>Next fund requiring review</button>}
     </div>
     {error&&<div role="alert" className="notice error">{error}</div>}
     {message&&<div role="status" className="notice success">{message}</div>}
