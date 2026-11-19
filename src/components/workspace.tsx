@@ -32,7 +32,8 @@ const INITIAL_PORTFOLIOS: Portfolio[] = [
 type ReconciledFund = {
   fund_id:string; status:string; confidence:number;selected_source_name:string|null;
   reported_returns:Record<string,number|null>|null;returns_approved:boolean;
-  evidence?:{factsheetIdentityApproved?:boolean;seriesIdentityApproved?:boolean};
+  evidence?:{factsheetIdentityApproved?:boolean;seriesIdentityApproved?:boolean;
+    displayedReturnsSource?:string|null;publishedPerformance?:{asOf?:string|null;feeBasis?:string;asOfPrecision?:string}|null};
   factsheet_import_id:string|null;
   reason:string;
   extracted_factsheet:{
@@ -43,9 +44,20 @@ type ReconciledFund = {
     allocations?:{name:string;percentage:number}[];
     chartReferences?:{page:number;label:string}[];
     extractionWarnings?:string[];
+    performance?:{source:string;status:string;asOf:string|null;
+      feeBasis:string;asOfPrecision:string;
+      returns:Record<string,number|null>;notes:string[]}|null;
   }|null;
 };
 const formatReported=(value:number|null|undefined)=>value==null?"—":(value>0?"+":"")+value.toFixed(2)+"%";
+const pdfReturns = (fund:ReconciledFund|undefined)=>
+  fund?.evidence?.displayedReturnsSource==="official_factsheet_pdf"?
+    fund.reported_returns:null;
+const prettyFeeBasis=(value:string|undefined)=>({
+  gross_of_amc:"Gross of AMC",net_of_amc:"Net of AMC",
+  net_of_ter:"Net of fund TER",before_full_policy_amc:"Before full policy AMC",
+  not_stated:"Not stated"
+}[value??""]??"Not stated");
 const PROVIDERS = Object.keys(APPROVED_FUND_GROUPS);
 const names = new Map(APPROVED_FUNDS.map(f => [f.id, f.name]));
 const isValidWeight = (weight: number) => Number.isFinite(weight) && weight >= 0 && weight <= 100;
@@ -191,19 +203,23 @@ export default function Workspace() {
               </select><ChevronDown size={15}/></label>
             </div>
             <div className="table-scroll"><table className="data-table">
-              <thead><tr><th>FUND</th><th>PROVIDER</th><th>1 YEAR*</th><th>3 YEARS*</th><th>5 YEARS*</th><th>10 YEARS*</th><th>MATCH STATUS</th><th></th></tr></thead>
+              <thead><tr><th>FUND</th><th>PROVIDER</th><th>1 YEAR*</th><th>3 YEARS*</th><th>5 YEARS*</th><th>10 YEARS*</th><th>PERFORMANCE SOURCE</th><th></th></tr></thead>
               <tbody>{filtered.map(f=><tr key={f.id}>
                 <td><b>{f.name}</b></td><td>{f.provider}</td>
-                <td>{formatReported(published[f.id]?.status==="auto_approved"?published[f.id]?.reported_returns?.oneYear:null)}</td>
-                <td>{formatReported(published[f.id]?.status==="auto_approved"?published[f.id]?.reported_returns?.threeYear:null)}</td>
-                <td>{formatReported(published[f.id]?.status==="auto_approved"?published[f.id]?.reported_returns?.fiveYear:null)}</td>
-                <td>{formatReported(published[f.id]?.status==="auto_approved"?published[f.id]?.reported_returns?.tenYear:null)}</td>
-                <td><span className="soft-pill">{published[f.id]?.status==="manually_confirmed"?"Manually approved identity":published[f.id]?.status==="manual_rejected"?"Rejected · review required":published[f.id]?.status==="auto_approved"?"Fund & series identity approved":published[f.id]?.evidence?.factsheetIdentityApproved?"Factsheet approved · series review":published[f.id]?.status==="needs_review"?"Review required":published[f.id]?.status==="unmatched"?"Unmatched":"Not reconciled"}</span></td>
+                <td>{formatReported(pdfReturns(published[f.id])?.oneYear)}</td>
+                <td>{formatReported(pdfReturns(published[f.id])?.threeYear)}</td>
+                <td>{formatReported(pdfReturns(published[f.id])?.fiveYear)}</td>
+                <td>{formatReported(pdfReturns(published[f.id])?.tenYear)}</td>
+                <td><span className="soft-pill">{pdfReturns(published[f.id])?
+  "Original PDF · "+(published[f.id]?.evidence?.publishedPerformance?.asOf??"date unknown"):
+  published[f.id]?.status==="manual_rejected"?"Rejected · review required":
+  published[f.id]?.extracted_factsheet?.performance?.status==="not_published"?"PDF return table unavailable":
+  "PDF verification pending"}</span></td>
                 <td><button className="icon-action" aria-label={"View " + f.name} onClick={()=>setSelectedFund(f)}><ArrowRight size={17}/></button></td>
               </tr>)}</tbody>
             </table>{filtered.length===0 && <div className="empty">No matching funds found.</div>}</div>
           </div>
-          <p className="fineprint">{filtered.length} of 115 approved funds displayed. Unselected funds in the source workbook are intentionally excluded. * Percentages are shown only for uniquely matched fund identities; all reported returns remain unapproved for client use; their reporting basis still requires confirmation.</p>
+          <p className="fineprint">{filtered.length} of 115 approved funds displayed. Unselected funds in the source workbook are intentionally excluded. * Returns come from the original provider PDFs, not the performance workbook. Three-, five- and ten-year figures are annualised when published. Differences in reporting dates and charges must be considered; these figures are not yet approved for client proposals.</p>
         </>}
 
         {view === "imports" && <SecureFundUploads/>}
@@ -331,16 +347,18 @@ export default function Workspace() {
         <span className="eyebrow">OMEGA-APPROVED FUND</span><h2>{selectedFund.name}</h2>
         <p className="muted">{selectedFund.provider}</p>
         {published[selectedFund.id] ? <>
-          <p><strong>Workbook series:</strong> {published[selectedFund.id].selected_source_name??"Not identified"}</p>
+          <p><strong>Performance source:</strong> {pdfReturns(published[selectedFund.id])?"Original provider factsheet":"Pending verified PDF table"}</p>
+          <p><strong>Published as of:</strong> {published[selectedFund.id].extracted_factsheet?.performance?.asOf??"Not available"} ·
+            <strong> Fee treatment:</strong> {prettyFeeBasis(published[selectedFund.id].extracted_factsheet?.performance?.feeBasis)}</p>
           <p><strong>Match:</strong> {published[selectedFund.id].status.replaceAll("_"," ")} — {published[selectedFund.id].reason}</p>
           <div className="mini-stats">
-            <Stat label="1-year reported" value={formatReported(published[selectedFund.id].reported_returns?.oneYear)} />
-            <Stat label="3-year reported" value={formatReported(published[selectedFund.id].reported_returns?.threeYear)} />
-            <Stat label="5-year reported" value={formatReported(published[selectedFund.id].reported_returns?.fiveYear)} />
-            <Stat label="10-year reported" value={formatReported(published[selectedFund.id].reported_returns?.tenYear)} />
+            <Stat label="1-year reported" value={formatReported(pdfReturns(published[selectedFund.id])?.oneYear)} />
+            <Stat label="3-year reported" value={formatReported(pdfReturns(published[selectedFund.id])?.threeYear)} />
+            <Stat label="5-year reported" value={formatReported(pdfReturns(published[selectedFund.id])?.fiveYear)} />
+            <Stat label="10-year reported" value={formatReported(pdfReturns(published[selectedFund.id])?.tenYear)} />
           </div>
           {published[selectedFund.id].extracted_factsheet && <>
-            <h3>Candidate factsheet extraction — not approved</h3>
+            <h3>Original provider factsheet — recorded source</h3>
             <p><strong>Fund title:</strong> {published[selectedFund.id].extracted_factsheet?.title??"Not extracted"}</p>
             <p><strong>MoneyMate ID:</strong> {published[selectedFund.id].extracted_factsheet?.moneyMateId??"N/A"} · <strong>Factsheet date:</strong> {published[selectedFund.id].extracted_factsheet?.asOf??"N/A"}</p>
             <p><strong>AMC:</strong> {formatReported(published[selectedFund.id].extracted_factsheet?.amcPct)} · <strong>CIV charge:</strong> {formatReported(published[selectedFund.id].extracted_factsheet?.civPct)}</p>
