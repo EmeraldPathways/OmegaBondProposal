@@ -1,4 +1,3 @@
-import React from "react";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { z } from "zod";
 import { auth, ADMIN_EMAIL, isLoginConfigured } from "@/auth";
@@ -68,7 +67,7 @@ export async function POST(request: Request) {
 
     // Never misrepresent the prototype's synthetic or session-upload data as verified.
     const report = buildProposalReport(data);
-    const buffer = await renderToBuffer(React.createElement(OmegaProposalPDF, { report }));
+    const buffer = await renderToBuffer(OmegaProposalPDF({ report }));
 
     return new Response(new Uint8Array(buffer), {
       status: 200,
