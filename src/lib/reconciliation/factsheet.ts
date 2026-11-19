@@ -34,14 +34,16 @@ function candidates(text:string,start:RegExp,end:RegExp):{name:string;percentage
 }
 function detectProvider(text:string,filename:string):string|null{
   const intro=text.slice(0,2500).toLowerCase();
-  // The wrapper/provider is not necessarily the underlying investment manager.
+  // Classify the issuing provider from the document's content first.
+  // The upload filename is at most a provider-folder fallback; never use it
+  // to establish the fund identity or selected share class.
+  if(/\bzurich life\b|\bzurich\s+fund\s+factsheet\b/.test(intro))return "Zurich";
+  if(/\bnew ireland assurance\b|\bnew ireland\b/.test(intro))return "New Ireland";
+  if(/\bstandard life\b/.test(intro))return "Standard Life";
+  if(/\baviva\b/.test(intro))return "Aviva";
   const prefix=filename.toLowerCase().split(/\s*[-_]\s*/)[0].trim();
   const known:Record<string,string>={"aviva":"Aviva","zurich":"Zurich","standard life":"Standard Life","new ireland":"New Ireland"};
   if(known[prefix])return known[prefix];
-  if(/\bzurich life\b/.test(intro))return "Zurich";
-  if(/\bnew ireland assurance\b/.test(intro))return "New Ireland";
-  if(/\bstandard life\b/.test(intro))return "Standard Life";
-  if(/\baviva\b/.test(intro))return "Aviva";
   return null;
 }
 function titleAviva(text:string):string|null{
@@ -76,7 +78,8 @@ function titleZurich(text:string):string|null{
     const m=/^(?:The\s+)?(.{3,95}?\bFund)\s+(?:is|invests|aims|has|provides)\b/i.exec(line);
     if(m){
       const name=m[1].replace(/★/g,"Star").replace(/\s+/g," ").trim();
-      if(!/^(The|a|an|our|your|this) Fund$/i.test(name))return name;
+      if(!/^(The|a|an|our|your|this|exactly)\b/i.test(name) &&
+        !/\b(this|the)\s+fund\b/i.test(name))return name;
     }
   }
   // Repeated standalone fund name often appears before graph/table legends.
