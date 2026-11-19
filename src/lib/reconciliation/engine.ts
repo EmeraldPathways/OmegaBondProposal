@@ -1,4 +1,5 @@
 import type { ApprovedFund } from "@/lib/approved-funds";
+import type { PdfPerformance } from "./pdf-performance";
 
 export const HORIZONS = ["ytd","oneMonth","threeMonth","sixMonth","oneYear","threeYear","fiveYear","tenYear","sinceLaunch"] as const;
 export type ReportedReturns = Record<(typeof HORIZONS)[number],number|null>;
@@ -11,6 +12,7 @@ export type FactSheetData = {
   holdings:{name:string;percentage:number}[]; allocations:{name:string;percentage:number}[];
   chartReferences:{page:number;label:string;source:"original_pdf"}[];
   pageCount:number; extractionWarnings:string[]; titleEvidence:string|null;
+  performance?:PdfPerformance|null;
 };
 export type Review = {
   fundId:string; provider:string; name:string; status:"auto_approved"|"suggested"|"needs_review"|"unmatched";
