@@ -41,13 +41,27 @@ function detectProvider(text:string,filename:string):string|null{
   if(/\bnew ireland assurance\b|\bnew ireland\b/.test(intro))return "New Ireland";
   if(/\bstandard life\b/.test(intro))return "Standard Life";
   if(/\baviva\b/.test(intro))return "Aviva";
+  // Some Aviva white-label sheets show only the Aviva-style wrapper and
+  // MoneyMate/AMC/CIV fields, with no issuer name in the extracted header.
+  if(/\bMoneyMate\s+ID\b/i.test(text) &&
+     /\bCIV\s+Charge\b/i.test(text) &&
+     /\bAMC\b/i.test(text) &&
+     /\bRetirement\s*\|\s*Investments\s*\|\s*Insurance\b/i.test(text))
+    return "Aviva";
   const prefix=filename.toLowerCase().split(/\s*[-_]\s*/)[0].trim();
   const known:Record<string,string>={"aviva":"Aviva","zurich":"Zurich","standard life":"Standard Life","new ireland":"New Ireland"};
   if(known[prefix])return known[prefix];
   return null;
 }
 function titleAviva(text:string):string|null{
-  return first(/Fund Factsheet\s*\n\s*([^\n]{5,125})/i,text)?.replace(DATE,"").trim()||null;
+  const labelled=first(/Fund Factsheet\s*\n\s*([^\n]{5,125})/i,text)?.replace(DATE,"").trim();
+  if(labelled)return labelled;
+  // A few source sheets omit "Fund Factsheet" but print a clear fund title
+  // and Series designation immediately below the provider's masthead.
+  const lines=text.split(/\r?\n/).map(x=>x.trim()).filter(Boolean).slice(0,10);
+  const title=lines.find(x=>/\bFund\b/i.test(x) && /\bSeries\s+[A-Za-z0-9]+\b/i.test(x) &&
+    DATE.test(x) && !/\bperformance\b/i.test(x));
+  return title?.replace(DATE,"").replace(/\s+/g," ").trim()||null;
 }
 function titleNewIreland(text:string):string|null{
   const lines=text.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
