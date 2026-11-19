@@ -58,12 +58,24 @@ test("ESG 80 must not be matched to ESG 60 and Series B cannot be replaced with 
   assert.notEqual(series.status,"auto_matched");
 });
 
-test("Contradictory PDF filenames cannot generate automatic matches",()=>{
-  const name="Aviva Fixed ESG 60 Series 1";
+test("PDF official title establishes identity even when the archived filename is wrong",()=>{
+  const title="Aviva Fixed ESG 60 Series 1";
+  const misnamed=pdf("Aviva",title,["Filename and PDF title contradiction"]);
+  misnamed.filename="Aviva - Fix Alloc ESG 80 Ser 1.pdf";
   const result=reconcileOne(approved("Aviva","Aviva Fixed ESG 60 Ser 1"),
-    [row("Aviva",name)],
-    [pdf("Aviva",name,["Filename and PDF title contradiction"])]);
+    [row("Aviva",title)], [misnamed]);
+  assert.equal(result.status,"auto_matched");
+  assert.equal(result.factsheet?.title,title);
+});
+
+test("Filename alone is not evidence, even when it exactly matches the shortlist",()=>{
+  const name="Standard Life Euro Global Liquidity";
+  const untitled=pdf("Standard Life",name);
+  untitled.title=null;
+  const result=reconcileOne(approved("Standard Life",name),
+    [row("Standard Life",name)], [untitled]);
   assert.notEqual(result.status,"auto_matched");
+  assert.equal(result.factsheet,null);
 });
 
 test("No factsheet never auto-verifies a workbook row",()=>{
