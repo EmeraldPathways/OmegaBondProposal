@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+ import { useCallback, useEffect, useRef, useState } from "react";
+import FundPerformanceReview from "@/components/fund-performance-review";
 import {
   ArrowDownToLine, CheckCircle2, FileSpreadsheet, FileText, FolderLock,
   LoaderCircle, RefreshCw, ShieldAlert, UploadCloud
@@ -147,6 +148,8 @@ export default function SecureFundUploads() {
         </table></div>
       )}
     </section>
+
+    <FundPerformanceReview />
 
     <div className="notice neutral" style={{ marginBottom: 22 }}>
       <ShieldAlert size={18} />
