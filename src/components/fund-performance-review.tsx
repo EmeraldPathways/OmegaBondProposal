@@ -143,7 +143,7 @@ export default function FundPerformanceReview(){
           </button></td>
         </tr>)}</tbody>
       </table></div>
-      {expanded&&(()=>{
+      {expanded ? (()=>{
         const r=status.reviews.find(x=>x.fund_id===expanded);
         if(!r)return null;
         const data=r.extracted_factsheet;
@@ -180,7 +180,7 @@ export default function FundPerformanceReview(){
           </div>:null}
           <p className="fineprint">Identity matching is distinct from return approval. Source dates, reporting basis and fee treatment still require evidence before figures can appear in a client proposal.</p>
         </div>;
-      })():null}
+      })() : null}
     </>:<div className="notice neutral" style={{marginTop:16}}>
       <ShieldAlert size={17}/> Source documents are stored privately. The full reconciliation has not yet been run against these uploads.
     </div>}
