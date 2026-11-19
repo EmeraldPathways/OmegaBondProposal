@@ -2,9 +2,10 @@ import {neon} from "@neondatabase/serverless";
 import {get} from "@vercel/blob";
 import {createWorker} from "tesseract.js";
 import {createCanvas,DOMMatrix,ImageData,Path2D} from "@napi-rs/canvas";
-import {getDocument} from "pdfjs-dist/legacy/build/pdf.mjs";
+
 if(process.env.VERCEL_ENV!=="production"){console.log("OMEGA_OCR_TEST_SKIP");process.exit(0);}
 globalThis.DOMMatrix=DOMMatrix;globalThis.ImageData=ImageData;globalThis.Path2D=Path2D;
+const {getDocument}=await import("pdfjs-dist/legacy/build/pdf.mjs");
 const sql=neon(process.env.DATABASE_URL);
 const found=await sql.query("SELECT i.filename,i.storage_key,f.data FROM fund_source_factsheets f JOIN imports i ON i.id=f.import_id WHERE f.status='parsed' AND f.data->>'title' IS NULL AND i.filename ILIKE '%Ethical Managed%' LIMIT 1");
 if(!found.length){console.log("OMEGA_OCR_TEST_NO_DOCUMENT");process.exit(0);}
