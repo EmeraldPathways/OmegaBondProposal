@@ -17,7 +17,8 @@ type Review = {
   }|null;
   evidence?:{
     candidatePerformanceRows?:{name:string;row:number;returns:Returns}[];
-    candidateFactsheets?:{importId:string;title:string|null;filename:string}[];
+    candidateFactsheets?:{importId:string;title:string|null;filename:string;score?:number}[];
+    matchScores?:{factsheet:number;workbook:number;combined:number};
   };
   factsheet_import_id:string|null; reason:string; returns_approved:boolean;
 };
@@ -179,13 +180,14 @@ export default function FundPerformanceReview(){
           <option value="unmatched">Unmatched</option>
         </select></label>
       </div>
-      <p className="fineprint">Showing {filtered.length} of {status.reviews.length} approved funds. Scores are heuristic similarity measures (0–100), not measured accuracy. Even manual identity confirmation does not approve returns for client use.</p>
+      <p className="fineprint">Showing {filtered.length} of {status.reviews.length} approved funds. Scores are heuristic similarity measures (0–100), not measured accuracy. PDF and workbook scores are shown separately. Even manual identity confirmation does not approve returns for client use.</p>
       <div className="table-scroll"><table className="data-table">
-        <thead><tr><th>APPROVED FUND</th><th>PROVIDER</th><th>AUTO SCORE</th><th>CURRENT MATCH</th><th>REVIEW STATUS</th><th></th></tr></thead>
+        <thead><tr><th>APPROVED FUND</th><th>PROVIDER</th><th>AUTO SCORE</th><th>PDF / WORKBOOK</th><th>CURRENT MATCH</th><th>REVIEW STATUS</th><th></th></tr></thead>
         <tbody>{filtered.map(r=><tr key={r.fund_id}>
           <td><b>{r.approved_name}</b><small>{r.selected_source_name||"No source series selected"}</small></td>
           <td>{r.provider}</td>
           <td><strong>{Math.round(Number(r.auto_score??r.confidence??0)*100)}/100</strong></td>
+          <td>{Math.round(Number(r.evidence?.matchScores?.factsheet??0)*100)}/100 · {Math.round(Number(r.evidence?.matchScores?.workbook??0)*100)}/100</td>
           <td>{r.selected_source_name||"No series selected"}</td>
           <td><span className="soft-pill">{r.status==="manually_confirmed"?"Confirmed by adviser":
             r.status==="manual_rejected"?"Rejected by adviser":
