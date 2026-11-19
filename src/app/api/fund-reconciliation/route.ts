@@ -194,14 +194,25 @@ export async function GET(){
       if(!m)return {...record,auto_status:originalStatus,auto_score:originalScore,manual_decision:null};
       const base={...record,auto_status:originalStatus,auto_score:originalScore,
         manual_decision:m.decision,manual_note:m.manual_note,reviewed_at:m.reviewed_at};
-      if(m.decision==="confirmed")
+      if(m.decision==="confirmed"){
+        const doc=m.manual_factsheet as FactSheetData|null;
+        const pdfPerf=doc?.performance;
+        const officialPdf=pdfPerf?.status==="extracted"&&Boolean(pdfPerf.asOf);
+        const originalEvidence=(record.evidence??{}) as Record<string,unknown>;
         return {...base,status:"manually_confirmed",confidence:m.reviewed_score??record.confidence,
-          selected_source_name:m.manual_source_name??null,
-          reported_returns:m.manual_returns??null,
-          extracted_factsheet:m.manual_factsheet??null,
+          selected_source_name:doc?.title??null,
+          reported_returns:officialPdf?pdfPerf!.returns:null,
+          extracted_factsheet:doc??null,
           factsheet_import_id:m.manual_factsheet_id??null,
-          reason:"Manually confirmed identity and selected source documents; reported returns remain unapproved.",
+          evidence:{...originalEvidence,
+            factsheetIdentityApproved:true,
+            displayedReturnsSource:officialPdf?"official_factsheet_pdf":null,
+            workbookReturnsUsed:false,
+            publishedPerformance:pdfPerf?{source:"official_factsheet_pdf",
+              asOf:pdfPerf.asOf,feeBasis:pdfPerf.feeBasis,page:pdfPerf.page}:null},
+          reason:"Manually confirmed PDF fund identity. Returns are taken only from the official PDF, not a workbook.",
           returns_approved:false};
+      }
       return {...base,status:"manual_rejected",reported_returns:null,
         selected_source_name:null,extracted_factsheet:null,factsheet_import_id:null,
         reason:"Automatic proposal rejected during manual identity review; select different sources or reset the review.",
