@@ -5,7 +5,7 @@ import { auth, ADMIN_EMAIL, isLoginConfigured } from "@/auth";
 import { getNeonSql } from "@/lib/server/neon";
 import { APPROVED_FUNDS } from "@/lib/approved-funds";
 import { extractFundFactsheet } from "@/lib/reconciliation/factsheet";
-import { HORIZONS, reconcileOne } from "@/lib/reconciliation/engine";
+import { HORIZONS, reconcileOne, downgradeDuplicateApprovals } from "@/lib/reconciliation/engine";
 import type { WorkbookEntry,FactSheetData,ReportedReturns,Review } from "@/lib/reconciliation/engine";
 
 export const runtime = "nodejs";
@@ -125,7 +125,16 @@ async function reconcile(){
   }));
   const facts=await sql.query("SELECT data FROM fund_source_factsheets WHERE status='parsed' AND data IS NOT NULL");
   const extracted=facts.map(row=>row.data as FactSheetData);
-  const results=APPROVED_FUNDS.map(f=>reconcileOne(f,workbookEntries,extracted));
+  const reviewTable=await sql.query("SELECT to_regclass('public.fund_identity_reviews') IS NOT NULL AS present");
+  const confirmed=reviewTable[0]?.present
+    ?await sql.query("SELECT fund_id,factsheet_import_id::text,performance_import_id::text,performance_row FROM fund_identity_reviews WHERE decision='confirmed'")
+    :[];
+  const results=downgradeDuplicateApprovals(
+    APPROVED_FUNDS.map(f=>reconcileOne(f,workbookEntries,extracted)),
+    confirmed.map(x=>({fundId:String(x.fund_id),factsheetImportId:x.factsheet_import_id?String(x.factsheet_import_id):null,
+      performanceImportId:x.performance_import_id?String(x.performance_import_id):null,
+      rowNumber:x.performance_row==null?null:Number(x.performance_row)}))
+  );
   const payload=JSON.stringify(results.map((r:Review)=>({
     fundId:r.fundId,provider:r.provider,name:r.name,status:r.status,score:r.score,
     performanceImportId:r.workbookRow?book.id:null,

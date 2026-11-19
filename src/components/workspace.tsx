@@ -193,11 +193,11 @@ export default function Workspace() {
               <thead><tr><th>FUND</th><th>PROVIDER</th><th>1 YEAR*</th><th>3 YEARS*</th><th>5 YEARS*</th><th>10 YEARS*</th><th>MATCH STATUS</th><th></th></tr></thead>
               <tbody>{filtered.map(f=><tr key={f.id}>
                 <td><b>{f.name}</b></td><td>{f.provider}</td>
-                <td>{formatReported(published[f.id]?.status==="auto_matched"?published[f.id]?.reported_returns?.oneYear:null)}</td>
-                <td>{formatReported(published[f.id]?.status==="auto_matched"?published[f.id]?.reported_returns?.threeYear:null)}</td>
-                <td>{formatReported(published[f.id]?.status==="auto_matched"?published[f.id]?.reported_returns?.fiveYear:null)}</td>
-                <td>{formatReported(published[f.id]?.status==="auto_matched"?published[f.id]?.reported_returns?.tenYear:null)}</td>
-                <td><span className="soft-pill">{published[f.id]?.status==="auto_matched"?"Identity matched · returns pending":published[f.id]?.status==="needs_review"?"Review required":published[f.id]?.status==="unmatched"?"Unmatched":"Not reconciled"}</span></td>
+                <td>{formatReported(published[f.id]?.status==="auto_approved"?published[f.id]?.reported_returns?.oneYear:null)}</td>
+                <td>{formatReported(published[f.id]?.status==="auto_approved"?published[f.id]?.reported_returns?.threeYear:null)}</td>
+                <td>{formatReported(published[f.id]?.status==="auto_approved"?published[f.id]?.reported_returns?.fiveYear:null)}</td>
+                <td>{formatReported(published[f.id]?.status==="auto_approved"?published[f.id]?.reported_returns?.tenYear:null)}</td>
+                <td><span className="soft-pill">{published[f.id]?.status==="auto_approved"?"Identity auto-approved · returns pending":published[f.id]?.status==="needs_review"?"Review required":published[f.id]?.status==="unmatched"?"Unmatched":"Not reconciled"}</span></td>
                 <td><button className="icon-action" aria-label={"View " + f.name} onClick={()=>setSelectedFund(f)}><ArrowRight size={17}/></button></td>
               </tr>)}</tbody>
             </table>{filtered.length===0 && <div className="empty">No matching funds found.</div>}</div>

@@ -2,7 +2,7 @@ import ExcelJS from "exceljs";
 import { get } from "@vercel/blob";
 import { neon } from "@neondatabase/serverless";
 import { APPROVED_FUNDS } from "../src/lib/approved-funds.ts";
-import { HORIZONS, reconcileOne } from "../src/lib/reconciliation/engine.ts";
+import { HORIZONS, reconcileOne, downgradeDuplicateApprovals } from "../src/lib/reconciliation/engine.ts";
 import { extractFundFactsheet } from "../src/lib/reconciliation/factsheet.ts";
 import type {WorkbookEntry,ReportedReturns,FactSheetData,Review} from "../src/lib/reconciliation/engine.ts";
 
@@ -119,10 +119,19 @@ async function main(){
   }
   report("PDF_COMPLETE",{total:pdfs.length,parsed:parsed.length,reused,failed,errorGroups});
 
-  const reconciled=APPROVED_FUNDS.map(f=>reconcileOne(f,rows,parsed));
+  const tableCheck=await sql.query("SELECT to_regclass('public.fund_identity_reviews') AS t");
+  const savedReviews=tableCheck[0]?.t
+    ?await sql.query("SELECT fund_id,factsheet_import_id::text,performance_import_id::text,performance_row FROM fund_identity_reviews WHERE decision='confirmed'")
+    :[];
+  const reconciled=downgradeDuplicateApprovals(
+    APPROVED_FUNDS.map(f=>reconcileOne(f,rows,parsed)),
+    savedReviews.map(v=>({fundId:String(v.fund_id),factsheetImportId:v.factsheet_import_id?String(v.factsheet_import_id):null,
+      performanceImportId:v.performance_import_id?String(v.performance_import_id):null,
+      rowNumber:v.performance_row==null?null:Number(v.performance_row)}))
+  );
   const byPdf=new Map<string,string[]>(),byRow=new Map<string,string[]>();
   for(const item of reconciled){
-    if(item.status!=="auto_matched"||!item.factsheet||!item.workbookRow)continue;
+    if(item.status!=="auto_approved"||!item.factsheet||!item.workbookRow)continue;
     const pdf=byPdf.get(item.factsheet.importId)??[];pdf.push(item.fundId);byPdf.set(item.factsheet.importId,pdf);
     const key=item.provider+"|"+item.workbookRow.rowNumber;
     const perf=byRow.get(key)??[];perf.push(item.fundId);byRow.set(key,perf);
@@ -159,7 +168,7 @@ async function main(){
   ].join(" ");
   for(let i=0;i<staged.length;i+=20)await sql.query(upsert,[JSON.stringify(staged.slice(i,i+20))]);
 
-  const counts=Object.fromEntries(["auto_matched","suggested","needs_review","unmatched"].map(status=>[status,reconciled.filter(r=>r.status===status).length]));
+  const counts=Object.fromEntries(["auto_approved","suggested","needs_review","unmatched"].map(status=>[status,reconciled.filter(r=>r.status===status).length]));
   report("COMPLETE",{approvedFunds:reconciled.length,workbookRows:rows.length,
     pdfs:pdfs.length,pdfsParsed:parsed.length,withFactsheet:reconciled.filter(r=>!!r.factsheet).length,
     withPerformance:reconciled.filter(r=>!!r.workbookRow).length,duplicates:duplicates.size,

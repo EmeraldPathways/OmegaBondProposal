@@ -22,7 +22,7 @@ test("Exact Standard Life MyFolio titles override near-identical neighbouring le
     const result=reconcileOne(approved("Standard Life",selected),
       names.map((n,i)=>row("Standard Life",n,i+2)),
       names.map(n=>pdf("Standard Life",n)));
-    assert.equal(result.status,"auto_matched",selected+" was incorrectly rejected");
+    assert.equal(result.status,"auto_approved",selected+" was incorrectly rejected");
     assert.equal(result.workbookRow?.sourceName,selected);
   }
 });
@@ -32,11 +32,11 @@ test("New Ireland factsheet (6) matches its workbook S6 series, but not S2",()=>
   const valid=reconcileOne(approved("New Ireland","Alternative Energy Fund"),
     [row("New Ireland","New Ireland Alternative Energy S6")],
     [pdf("New Ireland","Alternative Energy (6)")]);
-  assert.equal(valid.status,"auto_matched");
+  assert.equal(valid.status,"auto_approved");
   const invalid=reconcileOne(approved("New Ireland","Cash"),
     [row("New Ireland","New Ireland Cash S6")],
     [pdf("New Ireland","Cash (Series 2)")]);
-  assert.notEqual(invalid.status,"auto_matched");
+  assert.notEqual(invalid.status,"auto_approved");
 });
 
 test("Zurich growth or pension performance variants need a supporting share-class identifier",()=>{
@@ -52,11 +52,11 @@ test("ESG 80 must not be matched to ESG 60 and Series B cannot be replaced with 
   const mismatch=reconcileOne(approved("Aviva","Aviva Fix Alloc ESG 80 Ser 1"),
     [row("Aviva","Aviva Fixed ESG 80 Series 1")],
     [pdf("Aviva","Aviva Fixed ESG 60 Series 1")]);
-  assert.notEqual(mismatch.status,"auto_matched");
+  assert.notEqual(mismatch.status,"auto_approved");
   const series=reconcileOne(approved("Aviva","Av Multi-Asset ESG Act 3"),
     [row("Aviva","Aviva Multi Asset ESG Active 3 Series 1")],
     [pdf("Aviva","Aviva Multi-Asset ESG Active 3 Series B")]);
-  assert.notEqual(series.status,"auto_matched");
+  assert.notEqual(series.status,"auto_approved");
 });
 
 test("PDF official title establishes identity even when the archived filename is wrong",()=>{
@@ -65,7 +65,7 @@ test("PDF official title establishes identity even when the archived filename is
   misnamed.filename="Aviva - Fix Alloc ESG 80 Ser 1.pdf";
   const result=reconcileOne(approved("Aviva","Aviva Fixed ESG 60 Ser 1"),
     [row("Aviva",title)], [misnamed]);
-  assert.equal(result.status,"auto_matched");
+  assert.equal(result.status,"auto_approved");
   assert.equal(result.factsheet?.title,title);
 });
 
@@ -75,14 +75,14 @@ test("Filename alone is not evidence, even when it exactly matches the shortlist
   untitled.title=null;
   const result=reconcileOne(approved("Standard Life",name),
     [row("Standard Life",name)], [untitled]);
-  assert.notEqual(result.status,"auto_matched");
+  assert.notEqual(result.status,"auto_approved");
   assert.equal(result.factsheet,null);
 });
 
 test("No factsheet never auto-verifies a workbook row",()=>{
   const x=reconcileOne(approved("New Ireland","Ethical Equity"),
     [row("New Ireland","New Ireland Ethical Equity S6")],[]);
-  assert.notEqual(x.status,"auto_matched");
+  assert.notEqual(x.status,"auto_approved");
 });
 
 test("Duplicate exactly equivalent workbook rows are not auto-matched",()=>{
@@ -91,7 +91,7 @@ test("Duplicate exactly equivalent workbook rows are not auto-matched",()=>{
     [row("Standard Life",name,2),row("Standard Life",name,3)],
     [pdf("Standard Life",name)]);
   assert.equal(x.status,"suggested");
-  assert.notEqual(x.status,"auto_matched");
+  assert.notEqual(x.status,"auto_approved");
 });
 
 test("PDF internal title wins over deliberately misleading filename",()=>{
@@ -103,4 +103,19 @@ test("PDF internal title wins over deliberately misleading filename",()=>{
   assert.equal(result.title,"Aviva Fixed ESG 60 Series 1");
   assert.equal(result.moneyMateId,"25001234");
   assert.ok(!result.extractionWarnings.some(w=>w.toLowerCase().includes("filename")));
+});
+
+test("Automatically approves independently corroborated unique internal PDF titles",()=>{
+  const fund=approved("Standard Life","Standard Life Ireland MyFolio Market IV");
+  const result=reconcileOne(fund,[row("Standard Life",fund.name)],[pdf("Standard Life",fund.name)]);
+  assert.equal(result.status,"auto_approved");
+});
+test("Identity conflicts remain in manual queue",async()=>{
+  const {downgradeDuplicateApprovals}=await import("../src/lib/reconciliation/engine.ts");
+  const fundA=approved("New Ireland","PruFund Growth");fundA.id="a";
+  const fundB=approved("New Ireland","PruFund Growth");fundB.id="b";
+  const entries=[row("New Ireland","PruFund Growth")];
+  const docs=[pdf("New Ireland","PruFund Growth")];
+  const results=downgradeDuplicateApprovals([reconcileOne(fundA,entries,docs),reconcileOne(fundB,entries,docs)]);
+  assert.equal(results.filter(r=>r.status==="auto_approved").length,0);
 });

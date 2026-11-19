@@ -13,7 +13,7 @@ export type FactSheetData = {
   pageCount:number; extractionWarnings:string[]; titleEvidence:string|null;
 };
 export type Review = {
-  fundId:string; provider:string; name:string; status:"auto_matched"|"suggested"|"needs_review"|"unmatched";
+  fundId:string; provider:string; name:string; status:"auto_approved"|"suggested"|"needs_review"|"unmatched";
   score:number; factsheetScore:number; workbookScore:number; reason:string; workbookRow:WorkbookEntry|null; factsheet:FactSheetData|null;
   alternativeRows:(WorkbookEntry & {score:number})[];
   alternativeFactsheets:{importId:string;title:string|null;filename:string;score:number}[];
@@ -145,14 +145,20 @@ export function reconcileOne(fund:ApprovedFund,rows:WorkbookEntry[],factsheets:F
     (exactRow || !runner || best.score-runner.score>=.025);
 
   const summary=topFact&&best ? matchScore(fund.name,factTitle,best.item.sourceName) : null;
+  // Two independent internal-source identities must corroborate the same unique
+  // fund and share class. An exact PDF↔workbook series is strong evidence even
+  // when the shortlist uses an abbreviated display name.
+  const exactSourceAgreement=!!best && normalName(factTitle)===normalName(best.item.sourceName);
   const solid=!!summary && summary.classConsistent && uniqueFact && uniqueRow &&
-    summary.factsheetScore>=.60 && summary.workbookScore>=.66 && summary.score>=.67;
+    summary.factsheetScore>=.54 && summary.workbookScore>=.60 &&
+    summary.score>=.63 && (exactSourceAgreement ||
+      (summary.score>=.79 && summary.factsheetScore>=.72 && summary.workbookScore>=.72));
   const suggested=!!summary && summary.classConsistent &&
     summary.factsheetScore>=.32 && summary.workbookScore>=.34;
-  const status:Review["status"]=solid?"auto_matched":
+  const status:Review["status"]=solid?"auto_approved":
     suggested?"suggested":topFact||best?"needs_review":"unmatched";
   const reason=solid?
-    "Automatic high-score identity suggestion: printed PDF title and workbook row agree without known class conflict. Manual review remains available; returns are not approved.":
+    "Automatically approved identity: distinct printed PDF fund title corroborates the unique workbook series, with no identified share-class conflict. You can override it. Return basis remains unapproved.":
     suggested?
     "Plausible PDF-title and workbook-series match; check exact share class before confirming.":
     topFact&&!best?"A PDF title was found but there is no comparable workbook performance row.":
@@ -180,4 +186,40 @@ export function reconcileOne(fund:ApprovedFund,rows:WorkbookEntry[],factsheets:F
     factsheet:topFact?.item??null,
     alternativeRows:rowCandidates,alternativeFactsheets:pdfCandidates
   };
+}
+
+/** Prevent any two approved identities from claiming the same factsheet or workbook series. */
+export function downgradeDuplicateApprovals(reviews:Review[],reserved:{
+  factsheetImportId:string|null;performanceImportId:string|null;rowNumber:number|null;fundId:string
+}[]=[]):Review[]{
+  const countPdf=new Map<string,Set<string>>();
+  const countRows=new Map<string,Set<string>>();
+  const add=(map:Map<string,Set<string>>,key:string,id:string)=>{
+    const ids=map.get(key)??new Set<string>();ids.add(id);map.set(key,ids);
+  };
+  for(const review of reviews){
+    if(review.status!=="auto_approved")continue;
+    if(review.factsheet)add(countPdf,review.factsheet.importId,review.fundId);
+    if(review.workbookRow)add(countRows,review.provider+"|"+review.workbookRow.rowNumber,review.fundId);
+  }
+  for(const item of reserved){
+    if(item.factsheetImportId)add(countPdf,item.factsheetImportId,item.fundId);
+    if(item.performanceImportId&&item.rowNumber!=null){
+      // Manual records reference the same published source workbook.
+      const matched=reviews.find(r=>r.fundId===item.fundId);
+      const provider=matched?.provider;
+      if(provider)add(countRows,provider+"|"+item.rowNumber,item.fundId);
+      else for(const review of reviews){
+        if(review.workbookRow?.rowNumber===item.rowNumber)
+          add(countRows,review.provider+"|"+item.rowNumber,item.fundId);
+      }
+    }
+  }
+  return reviews.map(r=>{
+    if(r.status!=="auto_approved")return r;
+    const pdfConflict=!!r.factsheet && (countPdf.get(r.factsheet.importId)?.size??0)>1;
+    const rowConflict=!!r.workbookRow && (countRows.get(r.provider+"|"+r.workbookRow.rowNumber)?.size??0)>1;
+    return pdfConflict||rowConflict?{...r,status:"suggested" as const,
+      reason:"Automatic approval withheld: another fund claims this PDF or performance series. Manual identity review is required."}:r;
+  });
 }

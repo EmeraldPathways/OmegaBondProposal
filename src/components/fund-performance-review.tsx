@@ -83,8 +83,8 @@ export default function FundPerformanceReview(){
       const result=await invoke("reconcile");
       await refresh();
       if(alive.current)setMessage("Reconciliation complete: "+result.total+" shortlisted funds reviewed. "+
-        (result.counts?.auto_matched||0)+" strong identity matches and "+
-        (result.counts?.suggested||0)+" additional automatic suggestions; "+
+        (result.counts?.auto_approved||0)+" strong identity matches and "+
+        (result.counts?.suggested||0)+" additional scored suggestions; "+
         (result.counts?.needs_review||0)+" need further review; "+
         (result.counts?.unmatched||0)+" unmatched. No unverified return has been approved for client use.");
     }catch(e){
@@ -129,7 +129,7 @@ export default function FundPerformanceReview(){
       <span className="eyebrow">EVIDENCE-BASED DATA RECONCILIATION</span>
       <h2 style={{marginTop:8}}>Factsheets and reported performance</h2>
     </div><span className="soft-pill">Four providers · 115 approved funds</span></div>
-    <p className="muted">Automatic scoring is more permissive and presents likely candidates for review. Every fund can be manually confirmed, rejected or reassigned to a different factsheet and workbook row. Only names inside the PDFs are used to establish fund identity; filenames are not used for matching.</p>
+    <p className="muted">Clear, uniquely corroborated PDF-title and workbook-series identities are approved automatically. Only uncertain or conflicting matches need manual approval or rejection; you can also override any automatic approval. Only names inside the PDFs are used to establish fund identity; filenames are not used for matching.</p>
 
     <div className="button-row">
       <button className="btn primary" type="button" onClick={()=>void run()} disabled={busy||status.totalFactsheets===0}>
@@ -147,15 +147,15 @@ export default function FundPerformanceReview(){
     <div className="stats-grid" style={{marginTop:18}}>
       <div className="stat"><span>Factsheets processed</span><strong>{status.processedFactsheets} / {status.totalFactsheets}</strong></div>
       <div className="stat"><span>Workbook series rows</span><strong>{status.workbookRows}</strong></div>
-      <div className="stat"><span>Automatic strong / suggested</span><strong>{count("auto_matched")} / {count("suggested")}</strong></div>
+      <div className="stat"><span>Auto-approved / suggested</span><strong>{count("auto_approved")} / {count("suggested")}</strong></div>
       <div className="stat"><span>Manually confirmed</span><strong>{count("manually_confirmed")} / 115</strong></div>
     </div>
     {loaded&&<div className="table-scroll" style={{marginTop:18}}>
       <table className="data-table">
-        <thead><tr><th>PROVIDER</th><th>AUTO MATCHED</th><th>SUGGESTED</th><th>MANUAL CONFIRMED</th><th>NEEDS REVIEW</th></tr></thead>
+        <thead><tr><th>PROVIDER</th><th>AUTO-APPROVED</th><th>SUGGESTED</th><th>MANUAL CONFIRMED</th><th>NEEDS REVIEW</th></tr></thead>
         <tbody>{["Aviva","Zurich","Standard Life","New Ireland"].map(name=>
           <tr key={name}><td><b>{name}</b></td>
-            <td>{status.reviews.filter(r=>r.provider===name&&r.status==="auto_matched").length}</td>
+            <td>{status.reviews.filter(r=>r.provider===name&&r.status==="auto_approved").length}</td>
             <td>{status.reviews.filter(r=>r.provider===name&&r.status==="suggested").length}</td>
             <td>{status.reviews.filter(r=>r.provider===name&&r.status==="manually_confirmed").length}</td>
             <td>{status.reviews.filter(r=>r.provider===name&&["needs_review","unmatched","manual_rejected"].includes(r.status)).length}</td>
@@ -172,7 +172,7 @@ export default function FundPerformanceReview(){
         </select></label>
         <label className="select-wrap"><select aria-label="Filter match status" value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}>
           <option>All statuses</option>
-          <option value="auto_matched">Strong automatic matches</option>
+          <option value="auto_approved">Automatically approved</option>
           <option value="suggested">Automatic suggestions</option>
           <option value="manually_confirmed">Manually confirmed</option>
           <option value="manual_rejected">Manually rejected</option>
@@ -191,7 +191,7 @@ export default function FundPerformanceReview(){
           <td>{r.selected_source_name||"No series selected"}</td>
           <td><span className="soft-pill">{r.status==="manually_confirmed"?"Confirmed by adviser":
             r.status==="manual_rejected"?"Rejected by adviser":
-            r.status==="auto_matched"?"Strong suggestion":r.status==="suggested"?"Possible match":
+            r.status==="auto_approved"?"Automatically approved":r.status==="suggested"?"Possible match":
             r.status==="needs_review"?"Needs checking":"Unmatched"}</span></td>
           <td><button type="button" className="btn quiet" onClick={()=>setExpanded(expanded===r.fund_id?null:r.fund_id)}>
             {expanded===r.fund_id?"Close":"Review match"}
