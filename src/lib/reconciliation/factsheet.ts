@@ -1,0 +1,131 @@
+import { extractText, getDocumentProxy } from "unpdf";
+import type { FactSheetData } from "./engine";
+
+const DATE = /(?:\b\d{1,2}\s+(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+20\d{2}\b)/i;
+function first(pattern:RegExp,text:string):string|null {
+  const hit=pattern.exec(text);return hit?.[1]?.replace(/\s+/g," ").trim()||null;
+}
+function number(pattern:RegExp,text:string):number|null {
+  const hit=first(pattern,text);
+  if(!hit)return null;
+  const n=Number(hit.replace(/[%,]/g,""));return Number.isFinite(n)?n:null;
+}
+function section(text:string,start:RegExp,end:RegExp,limit=1400):string|null{
+  const match=start.exec(text);if(!match)return null;
+  const rem=text.slice(match.index+match[0].length);
+  const stop=end.exec(rem);
+  return rem.slice(0,Math.max(0,Math.min(stop?.index??limit,limit)))
+    .replace(/\s+/g," ").trim()||null;
+}
+function candidates(text:string,start:RegExp,end:RegExp):{name:string;percentage:number}[]{
+  const a=start.exec(text);if(!a)return [];
+  const rest=text.slice(a.index+a[0].length);
+  const finish=end.exec(rest);
+  const sample=rest.slice(0,Math.min(finish?.index??3000,3000));
+  const results:{name:string;percentage:number}[]=[];
+  for(const line of sample.split(/\n/g)){
+    const match=/^\s*(?:\d{1,2}\s+)?([A-Za-z][^\d\n]{2,100}?)\s+(\d{1,3}(?:\.\d{1,3})?)\s*%\s*$/.exec(line.trim());
+    if(!match)continue;
+    const value=Number(match[2]);
+    if(value<=100 && !/^(total|source|other\s*return|gross|net)$/i.test(match[1].trim()))
+      results.push({name:match[1].trim(),percentage:value});
+  }
+  return results.slice(0,35);
+}
+function detectProvider(text:string,filename:string):string|null{
+  const intro=text.slice(0,2500).toLowerCase();
+  // The wrapper/provider is not necessarily the underlying investment manager.
+  const prefix=filename.toLowerCase().split(/\s*[-_]\s*/)[0].trim();
+  const known:Record<string,string>={"aviva":"Aviva","zurich":"Zurich","standard life":"Standard Life","new ireland":"New Ireland"};
+  if(known[prefix])return known[prefix];
+  if(/\bzurich life\b/.test(intro))return "Zurich";
+  if(/\bnew ireland assurance\b/.test(intro))return "New Ireland";
+  if(/\bstandard life\b/.test(intro))return "Standard Life";
+  if(/\baviva\b/.test(intro))return "Aviva";
+  return null;
+}
+function titleAviva(text:string):string|null{
+  return first(/Fund Factsheet\s*\n\s*([^\n]{5,125})/i,text)?.replace(DATE,"").trim()||null;
+}
+function titleGeneric(text:string,provider:string|null):string|null{
+  if(provider==="Aviva")return titleAviva(text);
+  const beginning=text.slice(0,2200);
+  const patterns=[
+    /(?:Fund Factsheet|Fund Fact Sheet|Fund Information|Fund Profile|Fund Overview)\s*[\r\n]+\s*([^\r\n]{5,140})/i,
+    /(?:Fund Name|Fund):\s*([^\r\n]{5,140})/i,
+    /(?:Fund Name|Fund)\s*[\r\n]+\s*([^\r\n]{5,140})/i
+  ];
+  for(const pattern of patterns){
+    const name=first(pattern,beginning);
+    if(name && !/^([0-9\-\s]|facts|performance|information)/i.test(name))
+      return name.replace(DATE,"").trim();
+  }
+  // No evidence of an exact title: never infer identity from a filename.
+  return null;
+}
+function chartReferences(pages:string[]):FactSheetData["chartReferences"]{
+  const out:FactSheetData["chartReferences"]=[];
+  const needles=[
+    ["Historical growth chart",/growth of\s*[€£$]|growth of investment|growth chart|fund performance graph|past performance chart/i],
+    ["Asset allocation chart",/asset mix|asset allocation|assets by type/i],
+    ["Geographic allocation chart",/regional allocation|geographic allocation|country exposure/i],
+    ["Sector breakdown chart",/sector breakdown|sector allocation/i]
+  ] as const;
+  for(let i=0;i<pages.length;i++){
+    for(const [label,pattern] of needles)if(pattern.test(pages[i]))out.push({page:i+1,label,source:"original_pdf"});
+  }
+  return out;
+}
+export function parseFactsheetText(params:{
+  importId:string; filename:string; pages:string[];
+}):FactSheetData{
+  const {importId,filename,pages}=params;
+  const text=pages.join("\n");
+  const provider=detectProvider(text,filename);
+  const title=titleGeneric(pages[0]??"",provider);
+  const warnings:string[]=[];
+  if(!provider)warnings.push("Provider identity not supported by the document.");
+  if(!title)warnings.push("Official fund title not reliably located.");
+  if(text.replace(/\s/g,"").length<250)warnings.push("PDF has insufficient extractable text; OCR/manual review may be required.");
+  const fileTitle=filename.replace(/^(.+?)\s*[-_]\s*/,"").replace(/\.pdf$/i,"").trim();
+  // Deliberately do NOT force the filename title to match the PDF:
+  // an actual uploaded Aviva filename differs from the document's identity.
+  if(title && fileTitle.length>7){
+    const a=fileTitle.toLowerCase().replace(/[^a-z0-9]/g,"");
+    const b=title.toLowerCase().replace(/[^a-z0-9]/g,"");
+    if(!a.includes(b)&&!b.includes(a)&&!(a.slice(0,8)&&b.includes(a.slice(0,8))))
+      warnings.push("Filename and PDF title contradiction: "+fileTitle+" vs "+title);
+  }
+  const firstPage=pages[0]??"";
+  return {
+    importId,filename,providerHint:provider,title,moneyMateId:first(/MoneyMate\s*ID\s*[:\s]*(\d{5,12})/i,text),
+    asOf:(firstPage.match(DATE)?.[0])??null,
+    launchDate:first(/Fund Launch Date\s*[:\s]*([A-Za-z]{3,9}\s+20\d{2})/i,text),
+    baseCurrency:first(/Base Currency\s*[:\s]*([A-Z]{3})/i,text),
+    amcPct:number(/\bAMC\s*:?\s*(\d+(?:\.\d+)?)\s*%/i,text),
+    civPct:number(/\bCIV\s+Charge\s*:?\s*(\d+(?:\.\d+)?)\s*%/i,text),
+    // The Aviva 1–7 graphic is a scale, not an identifiable selected rating;
+    // do not derive risk just from the 1 2 3 4 5 6 7 labels.
+    riskRating:number(/\b(?:SRI|SRRI|Risk rating|Risk indicator)\s*[:=]\s*([1-7])\s*(?:\/\s*7)?\b/i,text),
+    objective:section(text,/\bFund Objective\b/i,/\bFund Strategy\b|FUND PERFORMANCE|FUND MANAGER INFORMATION/i),
+    strategy:section(text,/\bFund Strategy\b/i,/FUND PERFORMANCE|FUND MANAGER INFORMATION|Annualised Return/i,1800),
+    holdings:candidates(text,/\bTop 10 Holdings\b/i,/\bRegional Allocation\b|ASSET MIX|SECTOR BREAKDOWN/i),
+    allocations:candidates(text,/\bASSET MIX\b/i,/\bSECTOR BREAKDOWN\b|RISKS\b|CHARGES\b/i),
+    chartReferences:chartReferences(pages),
+    pageCount:pages.length,
+    extractionWarnings:warnings,
+    titleEvidence:title?"PDF page 1: "+title:null,
+  };
+}
+export async function extractFundFactsheet(params:{importId:string;filename:string;data:Uint8Array}):Promise<FactSheetData>{
+  // Parsing is limited to 12 pages; reject encrypted/oversized documents in caller.
+  const doc=await getDocumentProxy(params.data,{maxImageSize:16_777_216});
+  try{
+    if(doc.numPages>12)throw new Error("Factsheet has more than 12 pages and requires manual review.");
+    const extracted=await extractText(doc);
+    const pages=Array.isArray(extracted.text)?extracted.text:[extracted.text];
+    return parseFactsheetText({importId:params.importId,filename:params.filename,pages});
+  }finally{
+    await doc.destroy();
+  }
+}
