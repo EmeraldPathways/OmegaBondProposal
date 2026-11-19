@@ -40,7 +40,8 @@ export function classSignals(name:string):Set<string>{
   const s=" "+normalName(name)+" ";
   const result=new Set<string>();
   for(const match of s.matchAll(/\bseries\s+([a-z0-9]+)\b/g))result.add("series:"+match[1]);
-  for(const match of s.matchAll(/\b(s[0-9]{1,2})\b/g))result.add("class:"+match[1]);
+  for(const match of s.matchAll(/\b(s[0-9]{1,2})\b/g))result.add("series:"+match[1].slice(1));
+  for(const match of name.matchAll(/\(([1-9][0-9]?)\)/g))result.add("series:"+match[1]);
   if(/\bpension\b/.test(s))result.add("basis:pension");
   if(/\bgrowth\b/.test(s) && /\b(group|pension|zurich)\b/i.test(name))result.add("basis:growth");
   if(/\b(group)\b/.test(s))result.add("basis:group");
@@ -54,6 +55,12 @@ function bigrams(name:string):Set<string>{
 export function similarity(approvedName:string,sourceName:string):number{
   const a=normalName(approvedName),b=normalName(sourceName);
   if(!a||!b)return 0;
+  const numsA=a.match(/\d+/g)??[],numsB=b.match(/\d+/g)??[];
+  // An ESG 80 factsheet must never be offered for ESG 60; the same applies
+  // to Prisma levels and numbered Goodbody series.
+  if(numsA.length&&numsB.length &&
+    numsA.some(n=>!numsB.includes(n)) &&
+    numsB.some(n=>!numsA.includes(n)))return 0;
   if(a===b)return 1;
   const x=tokens(approvedName),y=tokens(sourceName);
   const shared=[...x].filter(t=>y.has(t)).length;
@@ -89,7 +96,7 @@ export function reconcileOne(fund:ApprovedFund,rows:WorkbookEntry[],factsheets:F
   const providerFacts=factsheets.filter(f=>f.providerHint===fund.provider);
   const fr=rank(providerFacts,f=>f.title??f.filename,fund.name);
   const topFact=fr[0];
-  const factClear=!!topFact && topFact.score>=.82 && 
+  const factClear=!!topFact && topFact.score>=.74 && 
     (fr.length===1 || topFact.score-fr[1].score>=.10) &&
     !!topFact.item.title && topFact.item.extractionWarnings.every(w=>!w.includes("contradiction"));
   const perfTarget=factClear?topFact.item.title!:fund.name;
@@ -99,7 +106,7 @@ export function reconcileOne(fund:ApprovedFund,rows:WorkbookEntry[],factsheets:F
   const shortlistRank=rank(providerRows,r=>r.sourceName,fund.name);
   const candidates=ranked.length&&ranked[0].score>=.7?ranked:shortlistRank;
   const best=candidates[0],runner=candidates[1];
-  const rowClear=!!best && best.score>=.88 && 
+  const rowClear=!!best && best.score>=.80 && 
     (!runner || best.score-runner.score>=.11) &&
     isClassConsistent(fund.name,best.item.sourceName) &&
     (!factClear||isClassConsistent(topFact.item.title!,best.item.sourceName));
@@ -108,7 +115,7 @@ export function reconcileOne(fund:ApprovedFund,rows:WorkbookEntry[],factsheets:F
   // Both independently sourced identities must corroborate each other.
   // If the workbook does not specify an as-of date/return basis,
   // "auto_matched" means identity only; it NEVER approves investment returns.
-  const auto=Boolean(evidenceExact && best && topFact && best.score>=.92);
+  const auto=Boolean(evidenceExact && best && topFact && best.score>=.84 && topFact.score>=.74);
   const status:Review["status"]=auto?"auto_matched":
     (topFact||best)?"needs_review":"unmatched";
   const reason=auto?
