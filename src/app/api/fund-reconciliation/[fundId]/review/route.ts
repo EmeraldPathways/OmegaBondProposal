@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth, ADMIN_EMAIL, isLoginConfigured } from "@/auth";
 import { getNeonSql } from "@/lib/server/neon";
-import { APPROVED_FUNDS } from "@/lib/approved-funds";
+import { getActiveFunds } from "@/lib/server/active-funds";
 import { similarity, matchScore } from "@/lib/reconciliation/engine";
 import type { FactSheetData, ReportedReturns } from "@/lib/reconciliation/engine";
 
@@ -42,16 +42,16 @@ async function ensureTable(){
 export async function GET(_request:Request,{params}:{params:Promise<{fundId:string}>}){
   if(!await permitted())return NextResponse.json({error:"Unauthorised"},{status:401,headers:noStore});
   const {fundId}=await params;
-  const fund=APPROVED_FUNDS.find(f=>f.id===fundId);
+  const fund=(await getActiveFunds()).find(f=>f.id===fundId);
   if(!fund)return NextResponse.json({error:"Fund not found."},{status:404,headers:noStore});
   try{
     const sql=getNeonSql();
     const [reconciled,source,manualTable]=await Promise.all([
       sql.query("SELECT factsheet_import_id::text,performance_import_id::text,selected_workbook_row FROM fund_reconciliations WHERE fund_id=$1 LIMIT 1",[fundId]),
-      sql.query("SELECT import_id::text FROM fund_source_performance WHERE provider=$1 ORDER BY import_id DESC LIMIT 1",[fund.provider]),
+      sql.query("SELECT p.import_id::text FROM fund_source_performance p JOIN imports i ON i.id=p.import_id WHERE p.provider=$1 ORDER BY i.uploaded_at DESC LIMIT 1",[fund.provider]),
       sql.query("SELECT to_regclass('public.fund_identity_reviews') IS NOT NULL AS exists")
     ]);
-    const selectedImport=String(reconciled[0]?.performance_import_id??source[0]?.import_id??"");
+    const selectedImport=String(source[0]?.import_id??"");
     const [rows,pdfs,manual]=await Promise.all([
       selectedImport?sql.query(
         "SELECT import_id::text,row_number,source_name,reported_returns FROM fund_source_performance WHERE provider=$1 AND import_id=$2::uuid ORDER BY row_number",
@@ -122,20 +122,23 @@ export async function POST(request:Request,{params}:{params:Promise<{fundId:stri
       return NextResponse.json({decision:"rejected",returnsApproved:false},{headers:noStore});
     }
     const hasWorkbook=Boolean(data.performanceImportId&&data.performanceRow!=null);
-    if(Boolean(data.performanceImportId)!==Boolean(data.performanceRow!=null))
-      return NextResponse.json({error:"Choose both a workbook and row, or neither."},
+    if(!hasWorkbook)
+      return NextResponse.json({error:"Select the matching row in the updated workbook."},
         {status:400,headers:noStore});
-    const [factRows,perfRows]=await Promise.all([
+    const [factRows,perfRows,latest]=await Promise.all([
       sql.query("SELECT data FROM fund_source_factsheets "+
         "WHERE import_id=$1::uuid AND status='parsed' AND data->>'providerHint'=$2 "+
         "AND nullif(data->>'title','') IS NOT NULL LIMIT 1",
         [data.factsheetImportId,fund.provider]),
-      hasWorkbook?sql.query("SELECT source_name,reported_returns FROM fund_source_performance "+
+      sql.query("SELECT source_name,reported_returns FROM fund_source_performance "+
         "WHERE import_id=$1::uuid AND row_number=$2 AND provider=$3 LIMIT 1",
-        [data.performanceImportId,data.performanceRow,fund.provider]):Promise.resolve([])
+        [data.performanceImportId,data.performanceRow,fund.provider]),
+      sql.query("SELECT id::text FROM imports WHERE storage_key LIKE 'funds/performance/%' "+
+        "AND filename ILIKE '%.xlsx' ORDER BY uploaded_at DESC,id DESC LIMIT 1")
     ]);
-    if(!factRows.length || (hasWorkbook&&!perfRows.length))
-      return NextResponse.json({error:"The selected PDF or optional workbook reference is unavailable."},
+    if(!factRows.length || !perfRows.length ||
+      !latest.length || String(latest[0].id)!==data.performanceImportId)
+      return NextResponse.json({error:"Choose a current PDF and a row from the latest imported workbook."},
         {status:422,headers:noStore});
     const title=(factRows[0].data as FactSheetData).title!;
     const workbookName=hasWorkbook?String(perfRows[0].source_name):null;
@@ -181,7 +184,7 @@ export async function POST(request:Request,{params}:{params:Promise<{fundId:stri
     return NextResponse.json({
       decision:"confirmed",matchScore:Math.round(scores.score*100),
       returnsApproved:false,
-      message:"Official PDF fund identity confirmed. Any published PDF returns are used as the primary source; client-report fee/date validation remains separate."
+      message:"PDF fund identity and current workbook series confirmed. Returns use the latest uploaded workbook only; client-report validation remains separate."
     },{headers:noStore});
   }catch(error){
     if(error instanceof z.ZodError || error instanceof SyntaxError)
