@@ -82,7 +82,10 @@ export default function FundManualReview({fundId,onSaved,onNext}:{fundId:string;
         workbookScore:0,classConsistent:true}:null;
   const lowScore=!!score && (score.score<.6 || !score.classConsistent);
   async function submit(decision:"confirmed"|"rejected"|"reset"){
-    if(decision==="confirmed"&&(!selectedPdf||!acknowledged))return;
+    if(decision==="confirmed"&&(!selectedPdf||!selectedRow||!acknowledged)){
+      setError("Select a PDF and a current workbook performance row, then confirm the identity.");
+      return;
+    }
     if(decision==="confirmed"&&lowScore&&note.trim().length<8){
       setError("Please explain the manual override when the score is low or the series/class differs.");
       return;
@@ -119,7 +122,7 @@ export default function FundManualReview({fundId,onSaved,onNext}:{fundId:string;
     <h3 style={{marginTop:8}}>{choices.fund.name}</h3>
     <p className="muted">{choices.fund.provider} · {choices.manual?.decision==="confirmed"?"Identity confirmed on "+new Date(choices.manual.reviewed_at).toLocaleDateString("en-IE"):
       choices.manual?.decision==="rejected"?"Automatic selection rejected":"Not manually reviewed"}</p>
-    <p className="fineprint">Select the exact fund name printed inside its PDF. Published performance comes from the PDF; workbook series comparison is optional.</p>
+    <p className="fineprint">Select the exact fund name printed inside its PDF. All performance returns come from the updated workbook. Select the PDF for its fund identity and the exact workbook return row.</p>
 
     <div className="two-col" style={{gap:16,marginTop:14}}>
       <div>
@@ -133,14 +136,14 @@ export default function FundManualReview({fundId,onSaved,onNext}:{fundId:string;
           <p className="fineprint">PDF-title similarity: <strong>{selectedPdf.score}/100</strong> · MoneyMate ID: {selectedPdf.moneyMateId||"Not shown"}</p>
           <p><a href={"/api/fund-uploads/"+selectedPdf.id+"/download?view=1"}
             target="_blank" rel="noopener noreferrer">Open original PDF <ArrowUpRight size={13}/></a></p>
-          <p className="fineprint">Archive filename (not used for matching): {selectedPdf.filename}</p>
+          <p className="fineprint">Uploaded PDF filename (not authoritative evidence): {selectedPdf.filename}</p>
         </>}
       </div>
       <div>
-        <label className="form-label" htmlFor="series-choice">Workbook series (optional)</label>
+        <label className="form-label" htmlFor="series-choice">Updated workbook return series (required)</label>
         <select id="series-choice" className="form-input" style={{width:"100%"}} value={workbookKey}
           onChange={e=>{setWorkbookKey(e.target.value);setAcknowledged(false)}}>
-          <option value="">No workbook comparison required</option>
+          <option value="">Choose a workbook performance row…</option>
           {choices.rows.map(r=><option key={rowKey(r)} value={rowKey(r)}>{r.name} · row {r.row} · {r.score}/100</option>)}
         </select>
         {selectedRow&&<p className="fineprint">Workbook name similarity: <strong>{selectedRow.score}/100</strong> · Source row {selectedRow.row}</p>}
@@ -151,21 +154,21 @@ export default function FundManualReview({fundId,onSaved,onNext}:{fundId:string;
       <ShieldAlert size={17}/><span>
         <strong>Combined matching score: {Math.round(score.score*100)}/100</strong> ·
         PDF title {Math.round(score.factsheetScore*100)}/100 ·
-        {selectedRow?"Workbook title "+Math.round(score.workbookScore*100)+"/100.":"No workbook required."}
+        {selectedRow?"Workbook title "+Math.round(score.workbookScore*100)+"/100.":"Workbook row required."}
         {score.classConsistent?" No explicit series conflict detected.":" Share-class or pension/growth designation needs your attention."}
         {" "}These are heuristic similarity scores, not measured accuracy probabilities.
       </span>
     </div>}
     {selectedPdf?.performance?.status==="extracted"?<div className="table-scroll" style={{marginTop:16}}>
-      <p><strong>Performance published in the original PDF</strong> · as of {selectedPdf.performance.asOf??"unknown"}
+      <p><strong>Reference-only performance in the PDF</strong> · as of {selectedPdf.performance.asOf??"unknown"}
         · {selectedPdf.performance.feeBasis.replaceAll("_"," ")}</p>
       <table className="data-table">
         <thead><tr>{labels.map(([key,label])=><th key={key}>{label}</th>)}</tr></thead>
         <tbody><tr>{labels.map(([key])=><td key={key}>{pct(selectedPdf.performance?.returns?.[key])}</td>)}</tr></tbody>
       </table>
-      <p className="fineprint">Three-, five- and ten-year returns are annualised where provided. Missing values remain N/A. No Excel performance figures are substituted.</p>
+      <p className="fineprint">These older PDF figures are never published. Confirmed, current workbook returns are used instead.</p>
     </div>:<div className="notice neutral" style={{marginTop:16}}>
-      <ShieldAlert size={15}/> No reliable numeric return table was extracted from this PDF. You may confirm its fund identity, but performance will remain unavailable.
+      <ShieldAlert size={15}/> No PDF return table was extracted. This does not prevent use of an independently verified current workbook row.
     </div>}
 
     <label className="form-label" htmlFor="review-note" style={{marginTop:16}}>Review note / source evidence</label>
@@ -174,11 +177,11 @@ export default function FundManualReview({fundId,onSaved,onNext}:{fundId:string;
       value={note} onChange={e=>setNote(e.target.value)}/>
     <label style={{display:"flex",gap:9,alignItems:"flex-start",fontSize:12,margin:"12px 0"}}>
       <input type="checkbox" checked={acknowledged} onChange={e=>setAcknowledged(e.target.checked)}/>
-      I have checked the fund name printed inside the PDF. Performance figures come from that PDF only and do not include client-specific fee adjustments.
+      I have checked the fund name printed inside the PDF. Performance figures come from the latest uploaded workbook, not this PDF, and require separate fee/date validation.
     </label>
     <div className="button-row">
-      <button className="btn primary" type="button" disabled={busy||!selectedPdf||!acknowledged}
-        onClick={()=>void submit("confirmed")}><CheckCircle2 size={16}/> Approve PDF fund identity</button>
+      <button className="btn primary" type="button" disabled={busy||!selectedPdf||!selectedRow||!acknowledged}
+        onClick={()=>void submit("confirmed")}><CheckCircle2 size={16}/> Approve PDF + workbook match</button>
       <button className="btn quiet" type="button" disabled={busy} onClick={()=>void submit("rejected")}>
         <ShieldAlert size={15}/> Reject suggested match
       </button>

@@ -28,7 +28,7 @@ async function progress(){
       "FROM fund_source_factsheets WHERE status='parsed'"
     ].join(" ")),
     sql.query([
-      "SELECT COUNT(*) FILTER(WHERE evidence->>'displayedReturnsSource'='official_factsheet_pdf')::int AS published",
+      "SELECT COUNT(*) FILTER(WHERE evidence->>'displayedReturnsSource'='uploaded_workbook')::int AS published",
       "FROM fund_reconciliations"
     ].join(" "))
   ]);
@@ -51,7 +51,7 @@ export async function POST(request:Request){
   let phase:string;
   try{const data=await request.json();phase=String(data?.phase??"")}
   catch{return NextResponse.json({error:"Invalid request."},{status:400,headers})}
-  if(!["extract","publish"].includes(phase))
+  if(phase!=="extract")
     return NextResponse.json({error:"Invalid phase."},{status:400,headers});
   try{
     const sql=getNeonSql();
@@ -95,47 +95,10 @@ export async function POST(request:Request){
       return NextResponse.json({...current,phase,justProcessed:processed,
         hasMore:current.processed<current.total},{headers});
     }
-    const current=await progress();
-    if(current.processed<current.total)
-      return NextResponse.json({error:"Not all source PDFs have been processed."},{status:409,headers});
-    // Reset workbook-based figures. Only approved factsheet identities with
-    // directly extracted and dated PDF tables may receive published returns.
-    await sql.query([
-      "UPDATE fund_reconciliations r SET",
-      "reported_returns=NULL,returns_approved=false,",
-      "evidence=COALESCE(r.evidence,'{}'::jsonb) ||",
-      "jsonb_build_object('displayedReturnsSource',null,'workbookReturnsUsed',false),",
-      "updated_at=now()"
-    ].join(" "));
-    await sql.query([
-      "UPDATE fund_reconciliations r SET",
-      "extracted_factsheet=f.data,",
-      "reported_returns=CASE WHEN",
-      "COALESCE((r.evidence->>'factsheetIdentityApproved')::boolean,false)",
-      "AND f.data->'performance'->>'status'='extracted'",
-      "AND NULLIF(f.data->'performance'->>'asOf','') IS NOT NULL",
-      "THEN f.data->'performance'->'returns' ELSE NULL END,",
-      "evidence=COALESCE(r.evidence,'{}'::jsonb) || jsonb_build_object(",
-      "'workbookReturnsUsed',false,",
-      "'displayedReturnsSource',CASE WHEN",
-      "COALESCE((r.evidence->>'factsheetIdentityApproved')::boolean,false)",
-      "AND f.data->'performance'->>'status'='extracted'",
-      "AND NULLIF(f.data->'performance'->>'asOf','') IS NOT NULL",
-      "THEN 'official_factsheet_pdf' ELSE null END,",
-      "'publishedPerformance',jsonb_build_object(",
-      "'source','official_factsheet_pdf',",
-      "'importId',f.import_id::text,",
-      "'status',f.data->'performance'->>'status',",
-      "'asOf',f.data->'performance'->>'asOf',",
-      "'feeBasis',f.data->'performance'->>'feeBasis',",
-      "'page',f.data->'performance'->'page',",
-      "'returnKinds',f.data->'performance'->'returnKinds')),",
-      "returns_approved=false,updated_at=now()",
-      "FROM fund_source_factsheets f",
-      "WHERE r.factsheet_import_id=f.import_id"
-    ].join(" "));
-    return NextResponse.json({...await progress(),phase,
-      message:"Original PDF performance staged. No workbook returns or synthetic prices were used."},{headers});
+    // The PDF archive may be exported for reference but can never publish old
+    // PDF returns over the corrected performance workbook.
+    return NextResponse.json({error:"PDF returns cannot replace workbook returns."},
+      {status:409,headers});
   }catch(error){
     console.error("Official PDF performance stage failed",error instanceof Error?error.name:"Unknown");
     return NextResponse.json({error:"Unable to process original PDF performance. Inspect source documents and retry."},{status:500,headers});

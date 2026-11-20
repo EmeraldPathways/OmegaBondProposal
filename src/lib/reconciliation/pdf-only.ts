@@ -15,7 +15,16 @@ import {
 export function reconcilePdfOnly(fund: ApprovedFund, factsheets: FactSheetData[]): Review {
   const ranked = factsheets
     .filter(f => f.providerHint === fund.provider && Boolean(f.title?.trim()))
-    .map(f => ({ document: f, score: similarity(fund.name, f.title!) }))
+    .map(f => {
+      const printedScore=similarity(fund.name,f.title!);
+      const cleanFilename=f.filename.replace(/\\.pdf$/i,"").replace(/^(Aviva|Zurich|New Ireland|Standard Life)\\s*[-_:]\\s*/i,"");
+      const filenameExact=normalName(fund.name)===normalName(cleanFilename);
+      // Filename is a candidate aid, never sufficient evidence:
+      // require a compatible independent fund name extracted from inside the PDF.
+      const filenameSupported=filenameExact&&printedScore>=0.55;
+      return {document:f,printedScore,filenameSupported,
+        score:filenameSupported?Math.max(printedScore,0.91):printedScore};
+    })
     .filter(x => x.score >= 0.26)
     .sort((a, b) => b.score - a.score);
 
@@ -38,19 +47,16 @@ export function reconcilePdfOnly(fund: ApprovedFund, factsheets: FactSheetData[]
 
   // Avoid auto-approval on merely plausible names or competing share classes.
   const identityApproved = Boolean(best && classConsistent && distinct &&
-    best.score >= 0.72 && (exact || best.score >= 0.80));
-  const performance = best?.document.performance;
-  const hasPublishedReturns = performance?.status === "extracted" &&
-    Boolean(performance.asOf);
+    best.printedScore>=0.55 && (exact || best.printedScore>=0.80 || best.filenameSupported) &&
+    best.score>=0.72);
 
   const status: Review["status"] = identityApproved ? "auto_approved" :
     best && best.score >= 0.45 ? "suggested" :
     best ? "needs_review" : "unmatched";
 
   const reason = identityApproved
-    ? hasPublishedReturns
-      ? "Unique printed PDF fund identity automatically approved. Dated performance is extracted directly from this official factsheet; client-specific fee validation remains separate."
-      : "Unique printed PDF fund identity automatically approved. Numeric performance is unavailable or requires source review."
+    ? "Unique PDF fund identity corroborates the workbook name; renamed filename is not sole evidence. "+
+      "The current workbook supplies returns; old PDF returns are reference-only."
     : !best
       ? "No plausible internally printed PDF title was found. Upload or review the fund factsheet."
       : !classConsistent
