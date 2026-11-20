@@ -20,6 +20,7 @@ const MAX_SIZE = 3_500_000;
 export default function SecureFundUploads() {
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [busy, setBusy] = useState(false);
+  const [resetSequence, setResetSequence] = useState(0);
   const [loading, setLoading] = useState(true);
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
@@ -79,6 +80,40 @@ export default function SecureFundUploads() {
     await refresh();
   }
 
+  async function resetAllSources(){
+    if(busy)return;
+    const typed=window.prompt("This permanently deletes all previous fund PDFs and workbooks from private storage, clears active source matches, and resets current review decisions. Prior review notes are kept only as audit history. Type RESET to continue:");
+    if(typed!=="RESET")return;
+    setBusy(true);setError("");setNote("");
+    try{
+      let complete=false;
+      let deleted=0;
+      for(let i=0;i<200;i++){
+        const response=await fetch("/api/fund-uploads/reset",{
+          method:"POST",credentials:"same-origin",cache:"no-store",
+          headers:{"Content-Type":"application/json"},
+          body:JSON.stringify(i===0?
+            {phase:"start",confirm:"DELETE_OLD_FUND_SOURCES"}:{phase:"continue"})
+        });
+        const result=await response.json() as {error?:string;pending?:number;removed?:number;hasMore?:boolean};
+        if(!response.ok)throw new Error(result.error||"Could not clear the old uploads.");
+        deleted+=Number(result.removed??0);
+        if(!result.hasMore){complete=true;break}
+        if(Number(result.removed??0)===0)
+          throw new Error("Some private files could not be removed. Retry the cleanup before uploading new sources.");
+      }
+      if(!complete)throw new Error("Deletion batch limit reached. Continue the cleanup before uploading fresh sources.");
+      setResetSequence(n=>n+1);
+      setNote("Clean reset complete: "+deleted+
+        " previous private source files removed. Upload the corrected XLSX workbook first, then the replacement PDFs.");
+    }catch(error){
+      setError(error instanceof Error?error.message:"Clean source reset failed.");
+    }finally{
+      setBusy(false);
+      await refresh();
+    }
+  }
+
   const recorded = documents.length;
   const factsheets = documents.filter(d => d.kind === "factsheet").length;
   const performance = recorded - factsheets;
@@ -88,7 +123,7 @@ export default function SecureFundUploads() {
       <div>
         <span className="eyebrow">PRIVATE FUND DATABASE</span>
         <h1>Upload fund documents</h1>
-        <p>Upload official fund factsheets as the primary source of identities and performance. An Excel workbook may be uploaded for optional cross-checking.</p>
+        <p>Start fresh with the corrected XLSX workbook defining the 115 fund names and percentage returns, then upload the new PDF factsheets for automatic identity matching.</p>
       </div>
       <span className="soft-pill"><FolderLock size={14} /> Private storage</span>
     </div>
@@ -96,7 +131,7 @@ export default function SecureFundUploads() {
       <section className="panel padded">
         <div className="section-icon" style={{ width: "fit-content" }}><FileText size={20} /></div>
         <h2 style={{ marginTop: 18 }}>Fund factsheets</h2>
-        <p className="muted">Choose one or more official fund factsheets. Keep each fund and unit-class version as a separate PDF.</p>
+        <p className="muted">Upload your newly renamed PDFs after the workbook. Each document should represent the correct fund/share class; matching is verified against its printed title.</p>
         <input ref={pdfInput} hidden multiple type="file" accept=".pdf,application/pdf"
           aria-label="Select PDF fund factsheets" onChange={e => void uploadFiles(e.currentTarget.files, "factsheet")} />
         <button type="button" className="dropzone" disabled={busy} onClick={() => pdfInput.current?.click()}>
@@ -109,8 +144,8 @@ export default function SecureFundUploads() {
 
       <section className="panel padded">
         <div className="section-icon" style={{ width: "fit-content" }}><FileSpreadsheet size={20} /></div>
-        <h2 style={{ marginTop: 18 }}>Fund performance workbook</h2>
-        <p className="muted">Optional: upload an Excel workbook for manual comparison. Published performance displayed in the fund library comes from official PDF factsheets, never from this workbook.</p>
+        <h2 style={{ marginTop: 18 }}>Updated performance workbook — upload first</h2>
+        <p className="muted">Required first: upload the corrected 115-fund XLSX workbook. Its FUNDS tab defines all fund names; its provider tabs contain every displayed performance return. Old PDF returns are not used.</p>
         <input ref={perfInput} hidden type="file" accept=".xlsx,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
           aria-label="Select fund performance workbook" onChange={e => void uploadFiles(e.currentTarget.files, "performance")} />
         <button type="button" className="dropzone" disabled={busy} onClick={() => perfInput.current?.click()}>
@@ -128,9 +163,14 @@ export default function SecureFundUploads() {
     <section className="panel padded">
       <div className="panel-heading">
         <div><span className="eyebrow">SOURCE DOCUMENT ARCHIVE</span><h2 style={{ marginTop: 8 }}>Uploaded documents</h2></div>
-        <button className="btn quiet" type="button" onClick={() => void refresh()} disabled={loading || busy}><RefreshCw size={15} /> Refresh</button>
+        <div className="button-row">
+          <button className="btn quiet" type="button" onClick={() => void refresh()} disabled={loading || busy}><RefreshCw size={15} /> Refresh</button>
+          <button className="btn quiet" type="button" onClick={()=>void resetAllSources()} disabled={loading||busy}>
+            <ShieldAlert size={15}/> Clear old PDFs + workbook
+          </button>
+        </div>
       </div>
-      <p className="muted">Original files are stored in private Vercel Blob. Only your signed-in account can download them through this application.</p>
+      <p className="muted">These documents are stored privately in Vercel Blob. Use Clear old PDFs + workbook once before the fresh upload. The reset deletes the old sources; prior manual decisions remain only as inactive audit history.</p>
       {loading ? <p className="muted">Loading your documents...</p> : recorded === 0 ? (
         <div className="notice neutral"><FolderLock size={17} /> No documents have been uploaded yet. Start by uploading the official fund factsheets.</div>
       ) : (
@@ -149,11 +189,11 @@ export default function SecureFundUploads() {
       )}
     </section>
 
-    <FundPerformanceReview />
+    <FundPerformanceReview key={resetSequence} />
 
     <div className="notice neutral" style={{ marginBottom: 22 }}>
       <ShieldAlert size={18} />
-      <span><strong>Source intake only.</strong> Clear PDF identities are automatically linked to their published return tables; ambiguous matches require manual review. Client-facing comparisons and reports remain gated on reporting-date, return-basis and fee validation. No client personal information should be uploaded.</span>
+      <span><strong>Source intake only.</strong> New PDFs are automatically matched to the latest workbook fund names. Returns are sourced exclusively from that workbook. Mismatches remain in manual review; client-facing reports remain gated on reporting-date, share-class and fee validation. No client personal information should be uploaded.</span>
     </div>
   </>;
 }
