@@ -99,7 +99,7 @@ export async function POST(request:Request,{params}:{params:Promise<{fundId:stri
   if(!origin || origin!==new URL(request.url).origin)
     return NextResponse.json({error:"Invalid request origin."},{status:403,headers:noStore});
   const {fundId}=await params;
-  const fund=APPROVED_FUNDS.find(f=>f.id===fundId);
+  const fund=(await getActiveFunds()).find(f=>f.id===fundId);
   if(!fund)return NextResponse.json({error:"Fund not found."},{status:404,headers:noStore});
   try{
     const raw=await request.text();
