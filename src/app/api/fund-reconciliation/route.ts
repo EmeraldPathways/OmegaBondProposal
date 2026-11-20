@@ -4,6 +4,9 @@ import { NextResponse } from "next/server";
 import { auth, ADMIN_EMAIL, isLoginConfigured } from "@/auth";
 import { getNeonSql } from "@/lib/server/neon";
 import { APPROVED_FUNDS } from "@/lib/approved-funds";
+import { getActiveFunds,ensureActiveFundNamesTable } from "@/lib/server/active-funds";
+import { workbookFundNames,workbookReturnRows,matchWorkbookReturn } from "@/lib/reconciliation/workbook-source";
+import { similarity } from "@/lib/reconciliation/engine";
 import { extractFundFactsheet } from "@/lib/reconciliation/factsheet";
 import { HORIZONS, downgradeDuplicateApprovals } from "@/lib/reconciliation/engine";
 import { reconcilePdfOnly } from "@/lib/reconciliation/pdf-only";
@@ -13,52 +16,9 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 const headers={"Cache-Control":"private, no-store","X-Content-Type-Options":"nosniff"};
-const sheets:Record<string,string>={"Aviva":"AVIVA","Zurich":"ZURICH","New Ireland":"New Ireland","Standard Life":"STANDARD"};
-
 async function authorised(){
   if(!isLoginConfigured())return false;
   return (await auth())?.user?.email?.toLowerCase()===ADMIN_EMAIL;
-}
-function text(cell:ExcelJS.Cell){
-  if(typeof cell.value==="number")return String(cell.value);
-  if(typeof cell.value==="string")return cell.value.trim();
-  return cell.text.trim();
-}
-function pct(cell:ExcelJS.Cell):number|null{
-  const raw=cell.value;
-  if(typeof raw==="number")return Number.isFinite(raw)?raw:null;
-  const s=text(cell).replace(/[%€,]/g,"").trim();
-  if(!s||s==="-"||s==="—"||s.toLowerCase()==="n/a")return null;
-  const n=Number(s);
-  return Number.isFinite(n)?n:null;
-}
-function workbookRows(workbook:ExcelJS.Workbook):WorkbookEntry[]{
-  const list=workbook.getWorksheet("FUNDS");
-  if(!list)throw new Error("Uploaded workbook has no FUNDS sheet.");
-  const approved=new Set(APPROVED_FUNDS.map(f=>f.provider+"|"+f.name));
-  const seen=new Set<string>();
-  for(let i=2;i<=list.rowCount;i++){
-    const row=list.getRow(i),provider=text(row.getCell(1)),name=text(row.getCell(2));
-    if(provider&&name)seen.add(provider+"|"+name);
-  }
-  if(seen.size!==115||[...approved].some(name=>!seen.has(name)))
-    throw new Error("Uploaded FUNDS sheet does not match the approved Omega 115-fund shortlist.");
-  const rows:WorkbookEntry[]=[];
-  for(const [provider,sheetName] of Object.entries(sheets)){
-    const sheet=workbook.getWorksheet(sheetName);
-    if(!sheet)throw new Error("Missing provider sheet: "+sheetName);
-    const header=sheet.getRow(1);
-    if(text(header.getCell(1)).toLowerCase()!=="name"||text(header.getCell(9)).toLowerCase()!=="10yrs")
-      throw new Error("Invalid historical-period heading in "+sheetName);
-    for(let rowNumber=2;rowNumber<=sheet.rowCount;rowNumber++){
-      const row=sheet.getRow(rowNumber),sourceName=text(row.getCell(1));
-      if(!sourceName)continue;
-      const returns={} as ReportedReturns;
-      for(let j=0;j<HORIZONS.length;j++)returns[HORIZONS[j]]=pct(row.getCell(j+2));
-      rows.push({provider,sourceName,rowNumber,returns});
-    }
-  }
-  return rows;
 }
 async function schema(){
   const sql=getNeonSql();
@@ -75,22 +35,44 @@ async function privateBytes(path:string){
 }
 async function latestWorkbook(){
   const sql=getNeonSql();
-  const r=await sql.query("SELECT id::text,filename,storage_key FROM imports WHERE storage_key LIKE 'funds/performance/%' AND filename ILIKE '%Omega%Fund%Performance%' AND filename ILIKE '%.xlsx' ORDER BY uploaded_at DESC LIMIT 1");
-  return r[0] as {id:string;filename:string;storage_key:string}|undefined;
+  const rows=await sql.query([
+    "SELECT id::text,filename,storage_key FROM imports",
+    "WHERE storage_key LIKE 'funds/performance/%' AND filename ILIKE '%.xlsx'",
+    "ORDER BY uploaded_at DESC,id DESC LIMIT 1"
+  ].join(" "));
+  return rows[0] as {id:string;filename:string;storage_key:string}|undefined;
 }
 async function workbook(){
   const stored=await latestWorkbook();
-  if(!stored)throw new Error("Omega performance workbook has not been uploaded.");
-  const sql=getNeonSql();
-  const existing=await sql.query("SELECT COUNT(*)::int AS count FROM fund_source_performance WHERE import_id=$1::uuid",[stored.id]);
-  if(Number(existing[0]?.count)>0)return {phase:"workbook",rows:Number(existing[0].count),alreadyProcessed:true};
+  if(!stored)throw new Error("Upload the corrected 115-fund XLSX workbook first.");
   const bytes=await privateBytes(stored.storage_key);
   const book=new ExcelJS.Workbook();
   await book.xlsx.load(bytes as unknown as Parameters<typeof book.xlsx.load>[0]);
-  const rows=workbookRows(book);
-  const payload=JSON.stringify(rows);
-  await sql.query('INSERT INTO fund_source_performance (import_id,provider,row_number,source_name,reported_returns) SELECT $1::uuid, v.provider, v."rowNumber", v."sourceName", v.returns FROM jsonb_to_recordset($2::jsonb) AS v(provider text,\"rowNumber\" integer,\"sourceName\" text,returns jsonb) ON CONFLICT (import_id,provider,row_number) DO UPDATE SET source_name=EXCLUDED.source_name,reported_returns=EXCLUDED.reported_returns',[stored.id,payload]);
-  return {phase:"workbook",rows:rows.length,sourceFile:stored.filename,alreadyProcessed:false};
+  const names=workbookFundNames(book);
+  const rows=workbookReturnRows(book);
+  await ensureActiveFundNamesTable();
+  const sql=getNeonSql();
+  const namesPayload=JSON.stringify(names.map(f=>({
+    id:f.id,provider:f.provider,name:f.name
+  })));
+  const rowsPayload=JSON.stringify(rows.map(r=>({
+    provider:r.provider,row:r.rowNumber,name:r.sourceName,returns:r.returns
+  })));
+  await sql.query("DELETE FROM fund_active_names");
+  await sql.query([
+    "INSERT INTO fund_active_names(fund_id,provider,name,workbook_import_id)",
+    "SELECT n.id,n.provider,n.name,$1::uuid",
+    "FROM jsonb_to_recordset($2::jsonb) AS n(id text,provider text,name text)"
+  ].join(" "),[stored.id,namesPayload]);
+  await sql.query("DELETE FROM fund_source_performance WHERE import_id=$1::uuid",[stored.id]);
+  await sql.query([
+    "INSERT INTO fund_source_performance(import_id,provider,row_number,source_name,reported_returns)",
+    "SELECT $1::uuid,r.provider,r.row,r.name,r.returns",
+    "FROM jsonb_to_recordset($2::jsonb) AS r(provider text,row integer,name text,returns jsonb)"
+  ].join(" "),[stored.id,rowsPayload]);
+  return {phase:"workbook",funds:names.length,rows:rows.length,
+    sourceFile:stored.filename,sourceImportId:stored.id,
+    message:"The corrected workbook now defines all 115 fund names and performance returns."};
 }
 async function factsheets(){
   const sql=getNeonSql();
@@ -116,50 +98,93 @@ async function factsheets(){
 }
 async function reconcile(){
   const sql=getNeonSql();
-  const facts=await sql.query("SELECT data FROM fund_source_factsheets WHERE status='parsed' AND data IS NOT NULL");
+  const [facts,funds,stored]=await Promise.all([
+    sql.query("SELECT data FROM fund_source_factsheets WHERE status='parsed' AND data IS NOT NULL"),
+    getActiveFunds(),latestWorkbook()
+  ]);
+  if(!stored)throw new Error("Upload the new workbook before matching PDFs.");
+  const current=await sql.query(
+    "SELECT provider,row_number,source_name,reported_returns FROM fund_source_performance WHERE import_id=$1::uuid",
+    [stored.id]
+  );
+  if(!current.length)throw new Error("Import the updated workbook before running automatic matching.");
+  const rows:WorkbookEntry[]=current.map(row=>({
+    provider:String(row.provider),rowNumber:Number(row.row_number),
+    sourceName:String(row.source_name),returns:row.reported_returns as ReportedReturns
+  }));
   const extracted=facts.map(row=>row.data as FactSheetData);
-  const reviewTable=await sql.query("SELECT to_regclass('public.fund_identity_reviews') IS NOT NULL AS present");
-  const confirmed=reviewTable[0]?.present
+  const table=await sql.query("SELECT to_regclass('public.fund_identity_reviews') IS NOT NULL AS present");
+  const confirmed=table[0]?.present
     ?await sql.query("SELECT fund_id,factsheet_import_id::text,performance_import_id::text,performance_row FROM fund_identity_reviews WHERE decision='confirmed'")
     :[];
   const results=downgradeDuplicateApprovals(
-    APPROVED_FUNDS.map(f=>reconcilePdfOnly(f,extracted)),
-    confirmed.map(x=>({fundId:String(x.fund_id),factsheetImportId:x.factsheet_import_id?String(x.factsheet_import_id):null,
+    funds.map(f=>reconcilePdfOnly(f,extracted)),
+    confirmed.map(x=>({fundId:String(x.fund_id),
+      factsheetImportId:x.factsheet_import_id?String(x.factsheet_import_id):null,
       performanceImportId:x.performance_import_id?String(x.performance_import_id):null,
       rowNumber:x.performance_row==null?null:Number(x.performance_row)}))
   );
+  const fundMap=new Map(funds.map(f=>[f.id,f]));
   const payload=JSON.stringify(results.map((r:Review)=>{
-    const pdfPerf=r.factsheetIdentityApproved?r.factsheet?.performance:null;
-    const published=pdfPerf?.status==="extracted"&&Boolean(pdfPerf.asOf);
+    const fund=fundMap.get(r.fundId)!;
+    const exact=matchWorkbookReturn(fund,rows);
+    const approved=Boolean(r.factsheetIdentityApproved&&exact);
+    const candidates=rows.filter(v=>v.provider===r.provider).map(v=>({
+      name:v.sourceName,row:v.rowNumber,returns:v.returns,
+      score:similarity(fund.name,v.sourceName)
+    })).filter(v=>v.score>=0.4).sort((a,b)=>b.score-a.score).slice(0,5);
     return {
-    fundId:r.fundId,provider:r.provider,name:r.name,status:r.status,score:r.score,
-    performanceImportId:null,
-    sourceRow:null,
-    sourceName:null,
-    returnData:published?pdfPerf!.returns:null,
-    factsheetId:r.factsheet?.importId??null,
-    extracted:r.factsheet??null,
-    reason:r.reason,
-    evidence:{
-      displayedReturnsSource:published?"official_factsheet_pdf":null,
-      workbookReturnsUsed:false,
-      publishedPerformance:pdfPerf?{
-        source:"official_factsheet_pdf",asOf:pdfPerf.asOf,
-        feeBasis:pdfPerf.feeBasis,page:pdfPerf.page
-      }:null,
-      candidatePerformanceRows:[], // Optional workbook comparison remains accessible in manual review.
-      candidateFactsheets:r.alternativeFactsheets,
-      matchScores:{factsheet:r.factsheetScore,workbook:0,combined:r.score},
-      factsheetIdentityApproved:r.factsheetIdentityApproved,
-      seriesIdentityApproved:r.seriesIdentityApproved,
-      identityOnly:!r.factsheetIdentityApproved,
-      performanceSourceBasis:published?pdfPerf!.feeBasis:"not_confirmed",
-      workbookAsOf:null
-    }
-  }}));
-  await sql.query("INSERT INTO fund_reconciliations (fund_id,provider,approved_name,status,confidence,performance_import_id,factsheet_import_id,selected_workbook_row,selected_source_name,reported_returns,extracted_factsheet,evidence,reason,returns_approved) SELECT x.\"fundId\",x.provider,x.name,x.status,x.score,(x.\"performanceImportId\")::uuid,(x.\"factsheetId\")::uuid,x.\"sourceRow\",x.\"sourceName\",x.\"returnData\",x.extracted,x.evidence,x.reason,false FROM jsonb_to_recordset($1::jsonb) AS x(\"fundId\" text,provider text,name text,status text,score numeric,\"performanceImportId\" text,\"factsheetId\" text,\"sourceRow\" integer,\"sourceName\" text,\"returnData\" jsonb,extracted jsonb,evidence jsonb,reason text) ON CONFLICT (fund_id) DO UPDATE SET provider=EXCLUDED.provider,approved_name=EXCLUDED.approved_name,status=EXCLUDED.status,confidence=EXCLUDED.confidence,performance_import_id=EXCLUDED.performance_import_id,factsheet_import_id=EXCLUDED.factsheet_import_id,selected_workbook_row=EXCLUDED.selected_workbook_row,selected_source_name=EXCLUDED.selected_source_name,reported_returns=EXCLUDED.reported_returns,extracted_factsheet=EXCLUDED.extracted_factsheet,evidence=EXCLUDED.evidence,reason=EXCLUDED.reason,returns_approved=false,updated_at=now()",[payload]);
-  const counts=results.reduce((acc,r)=>{acc[r.status]=(acc[r.status]||0)+1;return acc;},{} as Record<string,number>);
-  return {phase:"reconcile",total:results.length,counts,returnsApproved:0};
+      fundId:r.fundId,provider:r.provider,name:r.name,
+      status:r.status,score:r.score,
+      performanceImportId:exact?stored.id:null,
+      sourceRow:exact?.rowNumber??null,
+      sourceName:exact?.sourceName??null,
+      returnData:approved?exact!.returns:null,
+      factsheetId:r.factsheet?.importId??null,
+      extracted:r.factsheet??null,
+      reason:approved?
+        "PDF identity matched automatically and exact current-workbook return series linked. Fee/date validation is still required for client use.":
+        exact?
+          r.reason+" Workbook returns remain withheld until PDF identity is confirmed.":
+          r.reason+" No unique exact return series in the updated workbook.",
+      evidence:{
+        displayedReturnsSource:approved?"uploaded_workbook":null,
+        workbookReturnsUsed:approved,
+        publishedPerformance:approved?{
+          source:"uploaded_workbook",importId:stored.id,row:exact!.rowNumber,
+          asOf:null,feeBasis:"not_stated"
+        }:null,
+        candidatePerformanceRows:candidates,
+        candidateFactsheets:r.alternativeFactsheets,
+        matchScores:{factsheet:r.factsheetScore,workbook:exact?1:0,combined:r.score},
+        factsheetIdentityApproved:r.factsheetIdentityApproved,
+        seriesIdentityApproved:approved,
+        identityOnly:!r.factsheetIdentityApproved,
+        performanceSourceBasis:approved?"workbook_returns_fee_basis_not_confirmed":"not_confirmed",
+        workbookAsOf:null
+      }
+    };
+  }));
+  await sql.query([
+    "INSERT INTO fund_reconciliations",
+    "(fund_id,provider,approved_name,status,confidence,performance_import_id,factsheet_import_id,",
+    "selected_workbook_row,selected_source_name,reported_returns,extracted_factsheet,evidence,reason,returns_approved)",
+    "SELECT x.\"fundId\",x.provider,x.name,x.status,x.score,x.\"performanceImportId\"::uuid,",
+    "x.\"factsheetId\"::uuid,x.\"sourceRow\",x.\"sourceName\",x.\"returnData\",x.extracted,x.evidence,x.reason,false",
+    "FROM jsonb_to_recordset($1::jsonb) AS x",
+    "(\"fundId\" text,provider text,name text,status text,score numeric,",
+    "\"performanceImportId\" text,\"factsheetId\" text,\"sourceRow\" integer,\"sourceName\" text,",
+    "\"returnData\" jsonb,extracted jsonb,evidence jsonb,reason text)",
+    "ON CONFLICT(fund_id) DO UPDATE SET provider=EXCLUDED.provider,approved_name=EXCLUDED.approved_name,",
+    "status=EXCLUDED.status,confidence=EXCLUDED.confidence,",
+    "performance_import_id=EXCLUDED.performance_import_id,factsheet_import_id=EXCLUDED.factsheet_import_id,",
+    "selected_workbook_row=EXCLUDED.selected_workbook_row,selected_source_name=EXCLUDED.selected_source_name,",
+    "reported_returns=EXCLUDED.reported_returns,extracted_factsheet=EXCLUDED.extracted_factsheet,",
+    "evidence=EXCLUDED.evidence,reason=EXCLUDED.reason,returns_approved=false,updated_at=now()"
+  ].join(" "),[payload]);
+  const counts=results.reduce((acc,r)=>{acc[r.status]=(acc[r.status]||0)+1;return acc},{} as Record<string,number>);
+  return {phase:"reconcile",total:results.length,counts,returnsApproved:0,
+    workbookFundNames:true,workbookSource:stored.filename};
 }
 export async function GET(){
   if(!await authorised())return NextResponse.json({error:"Unauthorised"},{status:401,headers});
