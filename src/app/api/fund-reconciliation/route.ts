@@ -190,6 +190,7 @@ export async function GET(){
   if(!await authorised())return NextResponse.json({error:"Unauthorised"},{status:401,headers});
   try{
     const sql=getNeonSql();
+    const [active,selectedWorkbook]=await Promise.all([getActiveFunds(),latestWorkbook()]);
     const status=await sql.query("SELECT to_regclass('public.fund_reconciliations') AS reconciliations, "+
       "to_regclass('public.fund_source_factsheets') AS factsheets, "+
       "to_regclass('public.fund_source_performance') AS performance, "+
@@ -197,13 +198,14 @@ export async function GET(){
     const tables=status[0];
     const files=await sql.query("SELECT COUNT(*)::int AS count FROM imports WHERE storage_key LIKE 'funds/factsheets/%'");
     if(!tables?.reconciliations || !tables?.factsheets)
-      return NextResponse.json({initialized:false,approvedUniverse:115,totalFactsheets:Number(files[0].count),processedFactsheets:0,workbookRows:0,reviews:[]},{headers});
+      return NextResponse.json({initialized:false,approvedUniverse:active.length,funds:active,totalFactsheets:Number(files[0].count),processedFactsheets:0,workbookRows:0,reviews:[]},{headers});
     const [details,processed,performance,manualReviews]=await Promise.all([
       sql.query("SELECT fund_id,provider,approved_name,status,confidence,selected_source_name,reported_returns,extracted_factsheet,evidence,reason,returns_approved,factsheet_import_id::text FROM fund_reconciliations ORDER BY provider,approved_name"),
       sql.query("SELECT COUNT(*)::int AS count FROM fund_source_factsheets"),
       tables.performance?sql.query("SELECT COUNT(*)::int AS count FROM fund_source_performance"):Promise.resolve([{count:0}]),
       tables.manual?sql.query(
         "SELECT m.fund_id,m.decision,m.note AS manual_note,m.reviewed_at::text AS reviewed_at,"+
+         "m.performance_import_id::text AS manual_performance_id,m.performance_row AS manual_performance_row,"+
         "m.score_at_review::float AS reviewed_score,m.factsheet_import_id::text AS manual_factsheet_id,"+
         "p.source_name AS manual_source_name,p.reported_returns AS manual_returns,"+
         "f.data AS manual_factsheet "+
@@ -213,7 +215,7 @@ export async function GET(){
       ):Promise.resolve([])
     ]);
     const manualMap=new Map(manualReviews.map(m=>[String(m.fund_id),m]));
-    const approved=new Set(APPROVED_FUNDS.map(f=>f.id));
+    const approved=new Set(active.map(f=>f.id));
     const reviews=details.filter(x=>approved.has(String(x.fund_id))).map(record=>{
       const m=manualMap.get(String(record.fund_id));
       const originalStatus=record.status;
@@ -223,21 +225,25 @@ export async function GET(){
         manual_decision:m.decision,manual_note:m.manual_note,reviewed_at:m.reviewed_at};
       if(m.decision==="confirmed"){
         const doc=m.manual_factsheet as FactSheetData|null;
-        const pdfPerf=doc?.performance;
-        const officialPdf=pdfPerf?.status==="extracted"&&Boolean(pdfPerf.asOf);
+        const validWorkbook=Boolean(selectedWorkbook &&
+          String(m.manual_performance_id??"")===selectedWorkbook.id &&
+          m.manual_returns && m.manual_performance_row!=null);
         const originalEvidence=(record.evidence??{}) as Record<string,unknown>;
         return {...base,status:"manually_confirmed",confidence:m.reviewed_score??record.confidence,
-          selected_source_name:doc?.title??null,
-          reported_returns:officialPdf?pdfPerf!.returns:null,
+          selected_source_name:validWorkbook?(m.manual_source_name??null):null,
+          reported_returns:validWorkbook?(m.manual_returns as ReportedReturns):null,
           extracted_factsheet:doc??null,
           factsheet_import_id:m.manual_factsheet_id??null,
           evidence:{...originalEvidence,
             factsheetIdentityApproved:true,
-            displayedReturnsSource:officialPdf?"official_factsheet_pdf":null,
-            workbookReturnsUsed:false,
-            publishedPerformance:pdfPerf?{source:"official_factsheet_pdf",
-              asOf:pdfPerf.asOf,feeBasis:pdfPerf.feeBasis,page:pdfPerf.page}:null},
-          reason:"Manually confirmed PDF fund identity. Returns are taken only from the official PDF, not a workbook.",
+            displayedReturnsSource:validWorkbook?"uploaded_workbook":null,
+            workbookReturnsUsed:validWorkbook,
+            publishedPerformance:validWorkbook?{source:"uploaded_workbook",
+              importId:selectedWorkbook!.id,row:m.manual_performance_row,
+              asOf:null,feeBasis:"not_stated"}:null},
+          reason:validWorkbook?
+            "Manually confirmed fund identity and current workbook return row. Client fee/date validation remains required.":
+            "Manual PDF identity confirmation retained, but no active workbook performance row is linked. Select a current workbook row.",
           returns_approved:false};
       }
       return {...base,status:"manual_rejected",reported_returns:null,
@@ -245,7 +251,7 @@ export async function GET(){
         reason:"Automatic proposal rejected during manual identity review; select different sources or reset the review.",
         returns_approved:false};
     });
-    return NextResponse.json({initialized:true,approvedUniverse:115,
+    return NextResponse.json({initialized:true,approvedUniverse:active.length,funds:active,
       totalFactsheets:Number(files[0].count),processedFactsheets:Number(processed[0].count),
       workbookRows:Number(performance[0].count),reviews},{headers});
   }catch{
@@ -269,7 +275,7 @@ export async function POST(request:Request){
     const known=err instanceof Error?err.message:"Unknown error";
     console.error("Omega reconciliation phase failed:",known.slice(0,250));
     // Do not return storage path, database details or extracted content in errors.
-    const safe=/^Uploaded workbook|^Omega performance workbook|^Missing provider sheet|^Invalid historical-period|^Workbook has not/.test(known);
+    const safe=/^Updated workbook|^FUNDS|^Duplicate fund|^Missing provider|^Unexpected performance|^Upload the|^Import the/.test(known);
     return NextResponse.json({error:safe?known:"Reconciliation stage failed; please check the source files and retry."},{status:safe?422:500,headers});
   }
 }
