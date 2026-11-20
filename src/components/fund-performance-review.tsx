@@ -114,6 +114,50 @@ export default function FundPerformanceReview(){
     }
   }
 
+  async function exportAllPdfTables(){
+    if(pdfBusy||busy)return;
+    setPdfBusy(true);setError("");setMessage("");
+    try{
+      // Complete server-side extraction against the original privately stored PDFs.
+      // Unreadable documents remain in the export with an explicit review status.
+      for(let i=0;i<300;i++){
+        const scan=await invoke("factsheets");
+        if(alive.current)setPdfStep("Indexing PDF documents: "+scan.processed+" of "+scan.total);
+        if(!scan.hasMore)break;
+        if(i===299)throw new Error("PDF indexing batch limit reached. Retry to resume.");
+      }
+      let ready=false;
+      for(let i=0;i<150;i++){
+        const scan=await pdfAction("extract");
+        if(alive.current)setPdfStep("Extracting official PDF performance: "+scan.processed+" of "+scan.total);
+        if(!scan.hasMore){ready=true;break}
+        if(scan.justProcessed===0)throw new Error("PDF performance extraction did not advance.");
+      }
+      if(!ready)throw new Error("PDF performance extraction batch limit reached. Retry to resume.");
+      if(alive.current)setPdfStep("Creating the two-sheet Excel workbook");
+      const response=await fetch("/api/fund-performance/export",{
+        method:"GET",credentials:"same-origin",cache:"no-store"
+      });
+      if(!response.ok){
+        const payload=await response.json().catch(()=>({error:"The Excel export failed."}));
+        throw new Error(payload.error||"The Excel export failed.");
+      }
+      const blob=await response.blob();
+      const fileUrl=URL.createObjectURL(blob);
+      const link=document.createElement("a");
+      link.href=fileUrl;
+      link.download="Omega-All-PDF-Fund-Performance-"+new Date().toISOString().slice(0,10)+".xlsx";
+      document.body.appendChild(link);link.click();link.remove();
+      setTimeout(()=>URL.revokeObjectURL(fileUrl),1000);
+      await Promise.all([refresh(),refreshPdf()]);
+      if(alive.current)setMessage("Excel export created from the stored official PDFs: one Performance Tables worksheet and one Funds List worksheet. Each uploaded PDF is included; unavailable values are N/A.");
+    }catch(error){
+      if(alive.current)setError(error instanceof Error?error.message:"PDF Excel export failed.");
+    }finally{
+      if(alive.current){setPdfBusy(false);setPdfStep("")}
+    }
+  }
+
   async function invoke(phase:Phase){
     const response=await fetch("/api/fund-reconciliation",{
       method:"POST",credentials:"same-origin",cache:"no-store",
@@ -209,6 +253,11 @@ export default function FundPerformanceReview(){
         onClick={()=>void importPdfPerformance()}>
         {pdfBusy?<LoaderCircle className="pdf-spin" size={17}/>:<Database size={17}/>}
         {pdfBusy?"Extracting PDF return tables…":"Import performance from all original PDFs"}
+      </button>
+      <button className="btn quiet" type="button" onClick={()=>void exportAllPdfTables()}
+        disabled={busy||pdfBusy||status.totalFactsheets===0}>
+        {pdfBusy?<LoaderCircle className="pdf-spin" size={16}/>:<ArrowDownToLine size={16}/>}
+        Export all PDF tables (.xlsx)
       </button>
       <button className="btn quiet" type="button" onClick={()=>void run()}
         disabled={busy||pdfBusy||status.totalFactsheets===0}>
