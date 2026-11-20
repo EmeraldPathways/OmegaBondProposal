@@ -34,5 +34,5 @@ test("visible fund library and portfolio builder use approved fund universe only
 test("published performance is not invented from monthly unit prices",()=>{
   const workspace=text("src/components/workspace.tsx");
   assert.doesNotMatch(workspace,/<LineChart|volatilityPct|synthetic price/);
-  assert.match(workspace,/Workbook\\/PDF match pending/);
+  assert.match(workspace,new RegExp("Workbook/PDF match pending"));
 });
