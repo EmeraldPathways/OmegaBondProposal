@@ -50,8 +50,8 @@ type ReconciledFund = {
   }|null;
 };
 const formatReported=(value:number|null|undefined)=>value==null?"—":(value>0?"+":"")+value.toFixed(2)+"%";
-const pdfReturns = (fund:ReconciledFund|undefined)=>
-  fund?.evidence?.displayedReturnsSource==="official_factsheet_pdf"?
+const workbookReturns = (fund:ReconciledFund|undefined)=>
+  fund?.evidence?.displayedReturnsSource==="uploaded_workbook"?
     fund.reported_returns:null;
 const prettyFeeBasis=(value:string|undefined)=>({
   gross_of_amc:"Gross of AMC",net_of_amc:"Net of AMC",
@@ -59,7 +59,6 @@ const prettyFeeBasis=(value:string|undefined)=>({
   not_stated:"Not stated"
 }[value??""]??"Not stated");
 const PROVIDERS = Object.keys(APPROVED_FUND_GROUPS);
-const names = new Map(APPROVED_FUNDS.map(f => [f.id, f.name]));
 const isValidWeight = (weight: number) => Number.isFinite(weight) && weight >= 0 && weight <= 100;
 
 function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
@@ -73,15 +72,18 @@ function MoneyInput({ value, onChange }: { value: number; onChange: (v: number) 
 
 export default function Workspace() {
   const [view, setView] = useState<View>("overview");
+  const [funds,setFunds]=useState<ApprovedFund[]>(APPROVED_FUNDS);
+  const names=useMemo(()=>new Map(funds.map(f=>[f.id,f.name])),[funds]);
   const [mobile, setMobile] = useState(false);
   const [published,setPublished] = useState<Record<string,ReconciledFund>>({});
   useEffect(()=>{
     if(view!=="funds"&&view!=="builder"&&view!=="overview")return;
     let active=true;
     fetch("/api/fund-reconciliation",{credentials:"same-origin",cache:"no-store"})
-      .then(async response=>{if(!response.ok)return null;return response.json() as Promise<{reviews?:ReconciledFund[]}>})
+      .then(async response=>{if(!response.ok)return null;return response.json() as Promise<{reviews?:ReconciledFund[];funds?:ApprovedFund[]}>})
       .then(data=>{if(active&&data?.reviews){
         setPublished(Object.fromEntries(data.reviews.map(row=>[row.fund_id,row])));
+        if(data.funds?.length===115)setFunds(data.funds);
       }}).catch(()=>{});
     return ()=>{active=false};
   },[view]);
@@ -96,16 +98,16 @@ export default function Workspace() {
   const [adviser, setAdviser] = useState("Omega Financial Management");
   const [objective, setObjective] = useState("Review diversified investment options in line with the client's objectives and risk profile.");
 
-  const filtered = useMemo(() => APPROVED_FUNDS.filter(f =>
+  const filtered = useMemo(() => funds.filter(f =>
     (provider === "All providers" || f.provider === provider) &&
     (f.name + " " + f.provider).toLowerCase().includes(search.trim().toLowerCase())
-  ), [provider, search]);
+  ), [funds, provider, search]);
 
   const current = portfolios[activePortfolio];
   const total = sumWeights(current);
   const allocated = Object.entries(current.weights)
     .filter(([, percentage]) => percentage > 0)
-    .map(([id, percentage]) => ({ fund: APPROVED_FUNDS.find(f => f.id === id), percentage }))
+    .map(([id, percentage]) => ({ fund: funds.find(f => f.id === id), percentage }))
     .filter((v): v is { fund: ApprovedFund; percentage: number } => Boolean(v.fund));
 
   function go(next: View) { setView(next); setMobile(false); }
@@ -117,7 +119,7 @@ export default function Workspace() {
     changePortfolio(activePortfolio, { weights: { ...current.weights, [fundId]: percentage } });
   }
   function addFund() {
-    if (!APPROVED_FUNDS.some(f => f.id === addFundId)) return;
+    if (!funds.some(f => f.id === addFundId)) return;
     changePortfolio(activePortfolio, { weights: { ...current.weights, [addFundId]: current.weights[addFundId] ?? 0 } });
   }
   function removeFund(id: string) {
@@ -137,7 +139,7 @@ export default function Workspace() {
       )}</nav>
       <div className="sidebar-bottom">
         <div className="sidebar-help"><CheckCircle2 size={19}/><b>Approved fund shortlist</b>
-          <p>115 selected funds. Published returns come from their original provider PDFs. Missing periods remain unavailable.</p>
+          <p>115 selected funds. Published returns come from the latest uploaded workbook. Missing periods remain unavailable.</p>
         </div>
         <p className="side-footer">OFM Financial Ltd T/A Omega Financial Management, regulated by the Central Bank of Ireland.</p>
       </div>
@@ -157,7 +159,7 @@ export default function Workspace() {
       </header>
       <main className="content">
         <div className="notice neutral" style={{marginBottom:24}}>
-          <ShieldAlert size={18}/><span><strong>Published-return workflow.</strong> Only the 115 selected funds are available. All source performance, fees and risk details remain unapproved until matched with the correct factsheet/share class. Monthly prices are not required.</span>
+          <ShieldAlert size={18}/><span><strong>Published-return workflow.</strong> Only the 115 selected funds are available. Workbook returns and PDF identities must be matched; all client-report fee/date validations remain separate. Monthly prices are not required.</span>
         </div>
 
         {view === "overview" && <>
@@ -192,7 +194,7 @@ export default function Workspace() {
 
         {view === "funds" && <>
           <div className="page-heading"><div><span className="eyebrow">CONTROLLED FUND LIBRARY</span><h1>Fund library</h1>
-            <p>Exactly 115 Omega-selected funds. The names below are the approved shortlist, not yet verified performance share classes.</p></div>
+            <p>Exactly 115 Omega-selected funds. The corrected workbook controls fund display names and percentage returns; new PDFs are linked as supporting evidence.</p></div>
             <button className="btn primary" onClick={() => go("imports")}><UploadCloud size={16}/> View source documents</button>
           </div>
           <div className="panel">
@@ -206,20 +208,20 @@ export default function Workspace() {
               <thead><tr><th>FUND</th><th>PROVIDER</th><th>1 YEAR*</th><th>3 YEARS*</th><th>5 YEARS*</th><th>10 YEARS*</th><th>PERFORMANCE SOURCE</th><th></th></tr></thead>
               <tbody>{filtered.map(f=><tr key={f.id}>
                 <td><b>{f.name}</b></td><td>{f.provider}</td>
-                <td>{formatReported(pdfReturns(published[f.id])?.oneYear)}</td>
-                <td>{formatReported(pdfReturns(published[f.id])?.threeYear)}</td>
-                <td>{formatReported(pdfReturns(published[f.id])?.fiveYear)}</td>
-                <td>{formatReported(pdfReturns(published[f.id])?.tenYear)}</td>
-                <td><span className="soft-pill">{pdfReturns(published[f.id])?
-  "Original PDF · "+(published[f.id]?.evidence?.publishedPerformance?.asOf??"date unknown"):
+                <td>{formatReported(workbookReturns(published[f.id])?.oneYear)}</td>
+                <td>{formatReported(workbookReturns(published[f.id])?.threeYear)}</td>
+                <td>{formatReported(workbookReturns(published[f.id])?.fiveYear)}</td>
+                <td>{formatReported(workbookReturns(published[f.id])?.tenYear)}</td>
+                <td><span className="soft-pill">{workbookReturns(published[f.id])?
+  "Current workbook · "+(published[f.id]?.evidence?.publishedPerformance?.asOf??"date unknown"):
   published[f.id]?.status==="manual_rejected"?"Rejected · review required":
-  published[f.id]?.extracted_factsheet?.performance?.status==="not_published"?"PDF return table unavailable":
-  "PDF verification pending"}</span></td>
+  published[f.id]?.extracted_factsheet?.performance?.status==="not_published"?"Workbook return series unavailable":
+  "Workbook/PDF match pending"}</span></td>
                 <td><button className="icon-action" aria-label={"View " + f.name} onClick={()=>setSelectedFund(f)}><ArrowRight size={17}/></button></td>
               </tr>)}</tbody>
             </table>{filtered.length===0 && <div className="empty">No matching funds found.</div>}</div>
           </div>
-          <p className="fineprint">{filtered.length} of 115 approved funds displayed. Unselected funds in the source workbook are intentionally excluded. * Returns come from the original provider PDFs, not the performance workbook. Three-, five- and ten-year figures are annualised when published. Differences in reporting dates and charges must be considered; these figures are not yet approved for client proposals.</p>
+          <p className="fineprint">{filtered.length} of 115 approved funds displayed. Unselected funds in the source workbook are intentionally excluded. * Returns come only from the newly uploaded performance workbook, not from older PDFs. Three-, five- and ten-year figures are annualised when published. Differences in reporting dates and charges must be considered; these figures are not yet approved for client proposals.</p>
         </>}
 
         {view === "imports" && <SecureFundUploads/>}
@@ -249,14 +251,14 @@ export default function Workspace() {
               <div className="button-row">
                 <select className="form-input" style={{flex:1,minWidth:200}} id="addfund" value={addFundId} onChange={e=>setAddFundId(e.target.value)}>
                   {PROVIDERS.map(p=><optgroup key={p} label={p}>
-                    {APPROVED_FUNDS.filter(f=>f.provider===p).map(f=><option key={f.id} value={f.id}>{f.name}</option>)}
+                    {funds.filter(f=>f.provider===p).map(f=><option key={f.id} value={f.id}>{f.name}</option>)}
                   </optgroup>)}
                 </select>
                 <button className="btn primary" type="button" onClick={addFund}><Plus size={15}/> Add</button>
               </div>
               {Object.keys(current.weights).length===0 && <div className="notice neutral">Select funds from the approved list to begin.</div>}
               {Object.entries(current.weights).map(([id,percentage])=>{
-                const fund=APPROVED_FUNDS.find(f=>f.id===id);
+                const fund=funds.find(f=>f.id===id);
                 if(!fund)return null;
                 return <div className="allocation-row" key={id}>
                   <div><strong>{fund.name}</strong><small>{fund.provider}</small></div>
@@ -347,15 +349,15 @@ export default function Workspace() {
         <span className="eyebrow">OMEGA-APPROVED FUND</span><h2>{selectedFund.name}</h2>
         <p className="muted">{selectedFund.provider}</p>
         {published[selectedFund.id] ? <>
-          <p><strong>Performance source:</strong> {pdfReturns(published[selectedFund.id])?"Original provider factsheet":"Pending verified PDF table"}</p>
-          <p><strong>Published as of:</strong> {published[selectedFund.id].extracted_factsheet?.performance?.asOf??"Not available"} ·
-            <strong> Fee treatment:</strong> {prettyFeeBasis(published[selectedFund.id].extracted_factsheet?.performance?.feeBasis)}</p>
+          <p><strong>Performance source:</strong> {workbookReturns(published[selectedFund.id])?"Current uploaded workbook":"Pending workbook/PDF match"}</p>
+          <p><strong>Workbook returns as of:</strong> {published[selectedFund.id].evidence?.publishedPerformance?.asOf??"Date not provided"} ·
+            <strong> Fee treatment:</strong> {prettyFeeBasis(published[selectedFund.id].evidence?.publishedPerformance?.feeBasis)}</p>
           <p><strong>Match:</strong> {published[selectedFund.id].status.replaceAll("_"," ")} — {published[selectedFund.id].reason}</p>
           <div className="mini-stats">
-            <Stat label="1-year reported" value={formatReported(pdfReturns(published[selectedFund.id])?.oneYear)} />
-            <Stat label="3-year reported" value={formatReported(pdfReturns(published[selectedFund.id])?.threeYear)} />
-            <Stat label="5-year reported" value={formatReported(pdfReturns(published[selectedFund.id])?.fiveYear)} />
-            <Stat label="10-year reported" value={formatReported(pdfReturns(published[selectedFund.id])?.tenYear)} />
+            <Stat label="1-year reported" value={formatReported(workbookReturns(published[selectedFund.id])?.oneYear)} />
+            <Stat label="3-year reported" value={formatReported(workbookReturns(published[selectedFund.id])?.threeYear)} />
+            <Stat label="5-year reported" value={formatReported(workbookReturns(published[selectedFund.id])?.fiveYear)} />
+            <Stat label="10-year reported" value={formatReported(workbookReturns(published[selectedFund.id])?.tenYear)} />
           </div>
           {published[selectedFund.id].extracted_factsheet && <>
             <h3>Original provider factsheet — recorded source</h3>
@@ -365,7 +367,7 @@ export default function Workspace() {
             {published[selectedFund.id].extracted_factsheet?.objective && <p><strong>Objective:</strong> {published[selectedFund.id].extracted_factsheet!.objective}</p>}
             {published[selectedFund.id].factsheet_import_id && <a target="_blank" rel="noopener noreferrer" href={"/api/fund-uploads/"+published[selectedFund.id].factsheet_import_id+"/download?view=1"}>View original factsheet and charts</a>}
           </>}
-        </>:<div className="notice neutral"><ShieldAlert size={17}/> No reconciled factsheet and performance series yet. Use Fund uploads to start the process.</div>}
+        </>:<div className="notice neutral"><ShieldAlert size={17}/> No matched current workbook return row and new PDF yet. Upload both sources, then run automatic matching.</div>}
         <p className="fineprint">Source figures are not approved for client distribution. Exact share class, as-of date and return basis must be confirmed.</p>
         <button className="btn quiet" onClick={()=>setSelectedFund(null)}>Close details</button>
       </div>
