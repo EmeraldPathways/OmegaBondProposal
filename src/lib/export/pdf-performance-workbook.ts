@@ -1,13 +1,15 @@
 import ExcelJS from "exceljs";
 import type {FactSheetData, ReportedReturns} from "@/lib/reconciliation/engine";
 
+type ExtractedPdfData = FactSheetData & {performanceExtractionError?:string};
+
 export type StoredPdfRecord = {
   importId: string;
   filename: string;
   uploadedAt: string | null;
   status: string | null;
   errorMessage: string | null;
-  data: FactSheetData | null;
+  data: ExtractedPdfData | null;
 };
 
 const periods: {key: keyof ReportedReturns; label: string}[] = [
