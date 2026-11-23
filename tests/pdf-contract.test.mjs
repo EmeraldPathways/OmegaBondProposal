@@ -81,7 +81,7 @@ test("client PDF omits internal upload provenance, validation notices and review
   assert.match(pdf,/f\.factsheet\.objective/);
   assert.match(pdf,/f\.returns\.oneYear/);
   assert.match(pdf,/CompactPortfolioAllocationAndBreakdown/);
-  assert.match(pdf,/Lines join reported lookback-period values/);
+  assert.match(pdf,/Cumulative returns, not annualised/);
   const viewer=read("src/components/proposal-pdf-viewer.tsx");
   assert.match(viewer,/Omega-Investment-Bond-Proposal\.pdf/);
 });
