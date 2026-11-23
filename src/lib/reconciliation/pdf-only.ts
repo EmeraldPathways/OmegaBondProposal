@@ -1,4 +1,5 @@
 import type { ApprovedFund } from "@/lib/approved-funds";
+import {workbookNameKey} from "./workbook-source";
 import {
   classSignals, normalName, similarity,
   type FactSheetData, type Review
@@ -12,26 +13,28 @@ import {
  * performance parser and report validation determine whether returns can be
  * shown and whether they are suitable for client documents.
  */
-export function reconcilePdfOnly(fund: ApprovedFund, factsheets: FactSheetData[]): Review {
+export function reconcilePdfOnly(fund: ApprovedFund, factsheets: FactSheetData[], options?:{requireExactPrintedTitle?:boolean}): Review {
   const ranked = factsheets
     .filter(f => f.providerHint === fund.provider && Boolean(f.title?.trim()))
     .map(f => {
       const printedScore=similarity(fund.name,f.title!);
-      const cleanFilename=f.filename.replace(/\\.pdf$/i,"").replace(/^(Aviva|Zurich|New Ireland|Standard Life)\\s*[-_:]\\s*/i,"");
-      const filenameExact=normalName(fund.name)===normalName(cleanFilename);
-      // Filename is a candidate aid, never sufficient evidence:
-      // require a compatible independent fund name extracted from inside the PDF.
+      const cleanFilename=f.filename.replace(/\.pdf$/i,"")
+        .replace(/^(Aviva|Zurich|New Ireland|Standard Life)\s*[-_:]\s*/i,"");
+      const printedExact=workbookNameKey(fund.name)===workbookNameKey(f.title!);
+      const filenameExact=workbookNameKey(fund.name)===workbookNameKey(cleanFilename);
+      // An exact filename corroborates a printed title; it cannot replace it.
       const filenameSupported=filenameExact&&printedScore>=0.55;
-      return {document:f,printedScore,filenameSupported,
+      return {document:f,printedScore,printedExact,filenameExact,filenameSupported,
         score:filenameSupported?Math.max(printedScore,0.91):printedScore};
     })
     .filter(x => x.score >= 0.26)
-    .sort((a, b) => b.score - a.score);
+    .sort((a,b)=>Number(b.printedExact)-Number(a.printedExact) ||
+      Number(b.filenameExact)-Number(a.filenameExact) || b.score-a.score);
 
   const best = ranked[0];
   const second = ranked[1];
   const title = best?.document.title ?? "";
-  const exact = Boolean(best && normalName(fund.name) === normalName(title));
+  const exact = Boolean(best?.printedExact);
 
   // An explicit series, pension/growth or group designation in the approved
   // shortlist must also appear in the PDF itself. Never silently drop it.
@@ -40,15 +43,16 @@ export function reconcilePdfOnly(fund: ApprovedFund, factsheets: FactSheetData[]
   const classConsistent = [...expected].every(signal => printed.has(signal)) &&
     [...printed].every(signal => expected.has(signal));
   const sameTitleCount = best
-    ? ranked.filter(x => normalName(x.document.title!) === normalName(title)).length
+    ? ranked.filter(x => workbookNameKey(x.document.title!) === workbookNameKey(title)).length
     : 0;
   const distinct = Boolean(best && sameTitleCount === 1 &&
-    (!second || best.score - second.score >= 0.055));
+    (!second || best.score - second.score >= 0.055 ||
+      (best.printedExact && best.filenameExact && !second.printedExact)));
 
   // Avoid auto-approval on merely plausible names or competing share classes.
   const identityApproved = Boolean(best && classConsistent && distinct &&
     best.printedScore>=0.55 && (exact || best.printedScore>=0.80 || best.filenameSupported) &&
-    best.score>=0.72);
+    best.score>=0.72 && (!options?.requireExactPrintedTitle || best.printedExact));
 
   const status: Review["status"] = identityApproved ? "auto_approved" :
     best && best.score >= 0.45 ? "suggested" :
@@ -59,6 +63,8 @@ export function reconcilePdfOnly(fund: ApprovedFund, factsheets: FactSheetData[]
       "The current workbook supplies returns; old PDF returns are reference-only."
     : !best
       ? "No plausible internally printed PDF title was found. Upload or review the fund factsheet."
+      : options?.requireExactPrintedTitle && !best.printedExact
+        ? "Two workbook fund labels share a search alias; their distinct printed titles require manual confirmation."
       : !classConsistent
         ? "The official PDF does not confirm every series or share-class designation of the approved fund; review required."
         : !distinct
