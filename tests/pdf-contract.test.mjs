@@ -23,7 +23,7 @@ test("proposal PDF is authenticated and privately generated",()=>{
   assert.match(endpoint,/Content-Type":"application\/pdf"/);
   assert.match(endpoint,/private, no-store/);
   assert.match(endpoint,/401/);
-  assert.match(endpoint,/same-origin/);
+  assert.match(endpoint,/request\.headers\.get\("origin"\)/);
 });
 test("new A4 Omega PDF displays original fund returns and linked PDF metadata with no invented historical chart",()=>{
   const pdf=read("src/lib/pdf/workbook-proposal.tsx");
