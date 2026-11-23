@@ -1,7 +1,7 @@
 import type { ApprovedFund } from "@/lib/approved-funds";
 import {workbookNameKey} from "./workbook-source";
 import {
-  classSignals, normalName, similarity,
+  classSignals, similarity,
   type FactSheetData, type Review
 } from "./engine";
 
