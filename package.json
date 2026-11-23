@@ -7,7 +7,7 @@
     "build": "npm test && node scripts/audit-production-sources.mjs && node --import tsx scripts/diagnose-chart-sources.mts && next build && node scripts/verify-pdfkit-trace.mjs",
     "start": "next start",
     "lint": "tsc --noEmit",
-    "test": "node --test tests/*.test.mjs && node --import tsx --test tests/reconciliation-engine.test.mts tests/reconciliation-ocr.test.mts tests/pdf-performance.test.mts tests/pdf-only.test.mts tests/pdf-performance-export.test.mts tests/workbook-primary.test.mts tests/pdf-workbook-render.test.mts tests/historical-growth.test.mts",
+    "test": "node --test tests/*.test.mjs && node --import tsx --test tests/reconciliation-engine.test.mts tests/reconciliation-ocr.test.mts tests/pdf-performance.test.mts tests/pdf-only.test.mts tests/pdf-performance-export.test.mts tests/workbook-primary.test.mts tests/pdf-workbook-render.test.mts tests/historical-growth.test.mts tests/chart-axis-fragments.test.mts",
     "db:migrate": "node scripts/migrate.mjs",
     "audit:db": "node scripts/audit-production-sources.mjs",
     "reconcile:run": "tsx scripts/run-production-reconciliation.mts",
