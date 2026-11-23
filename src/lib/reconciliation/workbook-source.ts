@@ -1,7 +1,7 @@
 import ExcelJS from "exceljs";
 import {createHash} from "node:crypto";
 import type {ApprovedFund} from "@/lib/approved-funds";
-import {HORIZONS,normalName,type WorkbookEntry,type ReportedReturns} from "./engine";
+import {HORIZONS,type WorkbookEntry,type ReportedReturns} from "./engine";
 
 const sheets:Record<string,string>={
   "Aviva":"AVIVA","Zurich":"ZURICH",
@@ -31,9 +31,15 @@ export const CURRENT_FUND_COUNTS:Record<string,number>={
 };
 export const CURRENT_FUND_TOTAL=107;
 
+/** Names are authoritative: do not alias "Tech" to "Technology" or drop "Fund".
+ * Such abbreviations are only safe for proposing PDF candidates, not identity. */
+export function workbookNameKey(name:string):string{
+  return name.normalize("NFKC").toLowerCase().replace(/&/g," and ")
+    .replace(/[^a-z0-9]+/g," ").replace(/\s+/g," ").trim();
+}
 function fundId(provider:string,name:string):string{
   const prefix=provider.toLowerCase().replace(/[^a-z0-9]+/g,"-");
-  const digest=createHash("sha256").update(provider+"|"+normalName(name)).digest("hex").slice(0,16);
+  const digest=createHash("sha256").update(provider+"|"+workbookNameKey(name)).digest("hex").slice(0,16);
   return prefix+"-"+digest;
 }
 
@@ -53,7 +59,7 @@ export function workbookFundNames(book:ExcelJS.Workbook):ApprovedFund[]{
     if(!Object.hasOwn(sheets,provider)||!name||name.length>220)
       throw new Error("FUNDS row "+row+" must contain a valid provider and fund name.");
     counters.set(provider,(counters.get(provider)??0)+1);
-    const identity=provider+"|"+normalName(name);
+    const identity=provider+"|"+workbookNameKey(name);
     if(seen.has(identity))throw new Error("Duplicate fund name in FUNDS: "+name);
     seen.add(identity);
     all.push({id:fundId(provider,name),provider:provider as ApprovedFund["provider"],name});
@@ -93,22 +99,22 @@ export function verifyWorkbookConsistency(funds:ApprovedFund[],rows:WorkbookEntr
     throw new Error("Provider performance sheets must contain exactly "+funds.length+" fund rows.");
   const counts=new Map<string,number>();
   for(const row of rows){
-    const identity=row.provider+"|"+normalName(row.sourceName);
+    const identity=row.provider+"|"+workbookNameKey(row.sourceName);
     counts.set(identity,(counts.get(identity)??0)+1);
   }
   for(const fund of funds){
-    const key=fund.provider+"|"+normalName(fund.name);
+    const key=fund.provider+"|"+workbookNameKey(fund.name);
     if(counts.get(key)!==1)
       throw new Error("Missing or duplicated performance row for "+fund.provider+" / "+fund.name);
   }
-  if([...counts].some(([key,count])=>count!==1||!funds.some(f=>f.provider+"|"+normalName(f.name)===key)))
+  if([...counts].some(([key,count])=>count!==1||!funds.some(f=>f.provider+"|"+workbookNameKey(f.name)===key)))
     throw new Error("Provider sheets include duplicates or fund names not listed in FUNDS.");
 }
 
 /** Unique normalized name AND provider match. Ambiguous or absent workbook rows
  * never receive invented or neighbouring performance values. */
 export function matchWorkbookReturn(fund:ApprovedFund,rows:WorkbookEntry[]):WorkbookEntry|null{
-  const key=normalName(fund.name);
-  const matches=rows.filter(r=>r.provider===fund.provider&&normalName(r.sourceName)===key);
+  const key=workbookNameKey(fund.name);
+  const matches=rows.filter(r=>r.provider===fund.provider&&workbookNameKey(r.sourceName)===key);
   return matches.length===1?matches[0]:null;
 }
