@@ -6,7 +6,7 @@ import { getNeonSql } from "@/lib/server/neon";
 import { APPROVED_FUNDS } from "@/lib/approved-funds";
 import { getActiveFunds,ensureActiveFundNamesTable } from "@/lib/server/active-funds";
 import { workbookFundNames,workbookReturnRows,verifyWorkbookConsistency,matchWorkbookReturn } from "@/lib/reconciliation/workbook-source";
-import { similarity } from "@/lib/reconciliation/engine";
+import { similarity,normalName } from "@/lib/reconciliation/engine";
 import { extractFundFactsheet } from "@/lib/reconciliation/factsheet";
 import { HORIZONS, downgradeDuplicateApprovals } from "@/lib/reconciliation/engine";
 import { reconcilePdfOnly } from "@/lib/reconciliation/pdf-only";
@@ -119,7 +119,10 @@ async function reconcile(){
     ?await sql.query("SELECT fund_id,factsheet_import_id::text,performance_import_id::text,performance_row FROM fund_identity_reviews WHERE decision='confirmed'")
     :[];
   const results=downgradeDuplicateApprovals(
-    funds.map(f=>reconcilePdfOnly(f,extracted)),
+    funds.map(f=>reconcilePdfOnly(f,extracted,{
+      requireExactPrintedTitle:funds.some(other=>other.id!==f.id &&
+        other.provider===f.provider && normalName(other.name)===normalName(f.name))
+    })),
     confirmed.map(x=>({fundId:String(x.fund_id),
       factsheetImportId:x.factsheet_import_id?String(x.factsheet_import_id):null,
       performanceImportId:x.performance_import_id?String(x.performance_import_id):null,
