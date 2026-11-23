@@ -5,7 +5,7 @@ import { auth, ADMIN_EMAIL, isLoginConfigured } from "@/auth";
 import { getNeonSql } from "@/lib/server/neon";
 import { APPROVED_FUNDS } from "@/lib/approved-funds";
 import { getActiveFunds,ensureActiveFundNamesTable } from "@/lib/server/active-funds";
-import { workbookFundNames,workbookReturnRows,matchWorkbookReturn } from "@/lib/reconciliation/workbook-source";
+import { workbookFundNames,workbookReturnRows,verifyWorkbookConsistency,matchWorkbookReturn } from "@/lib/reconciliation/workbook-source";
 import { similarity } from "@/lib/reconciliation/engine";
 import { extractFundFactsheet } from "@/lib/reconciliation/factsheet";
 import { HORIZONS, downgradeDuplicateApprovals } from "@/lib/reconciliation/engine";
@@ -44,25 +44,26 @@ async function latestWorkbook(){
 }
 async function workbook(){
   const stored=await latestWorkbook();
-  if(!stored)throw new Error("Upload the corrected 115-fund XLSX workbook first.");
+  if(!stored)throw new Error("Upload the corrected 107-fund XLSX workbook first.");
   const bytes=await privateBytes(stored.storage_key);
   const book=new ExcelJS.Workbook();
   await book.xlsx.load(bytes as unknown as Parameters<typeof book.xlsx.load>[0]);
   const names=workbookFundNames(book);
   const rows=workbookReturnRows(book);
+  verifyWorkbookConsistency(names,rows);
   await ensureActiveFundNamesTable();
   const sql=getNeonSql();
-  const namesPayload=JSON.stringify(names.map(f=>({
-    id:f.id,provider:f.provider,name:f.name
+  const namesPayload=JSON.stringify(names.map((f,index)=>({
+    id:f.id,provider:f.provider,name:f.name,sortOrder:index+1
   })));
   const rowsPayload=JSON.stringify(rows.map(r=>({
     provider:r.provider,row:r.rowNumber,name:r.sourceName,returns:r.returns
   })));
   await sql.query("DELETE FROM fund_active_names");
   await sql.query([
-    "INSERT INTO fund_active_names(fund_id,provider,name,workbook_import_id)",
-    "SELECT n.id,n.provider,n.name,$1::uuid",
-    "FROM jsonb_to_recordset($2::jsonb) AS n(id text,provider text,name text)"
+    "INSERT INTO fund_active_names(fund_id,provider,name,workbook_import_id,sort_order)",
+    "SELECT n.id,n.provider,n.name,$1::uuid,n.\"sortOrder\"",
+    "FROM jsonb_to_recordset($2::jsonb) AS n(id text,provider text,name text,\"sortOrder\" integer)"
   ].join(" "),[stored.id,namesPayload]);
   await sql.query("DELETE FROM fund_source_performance WHERE import_id=$1::uuid",[stored.id]);
   await sql.query([
@@ -72,7 +73,7 @@ async function workbook(){
   ].join(" "),[stored.id,rowsPayload]);
   return {phase:"workbook",funds:names.length,rows:rows.length,
     sourceFile:stored.filename,sourceImportId:stored.id,
-    message:"The corrected workbook now defines all 115 fund names and performance returns."};
+    message:"The corrected workbook now defines all 107 fund names and performance returns."};
 }
 async function factsheets(){
   const sql=getNeonSql();
@@ -152,6 +153,7 @@ async function reconcile(){
         workbookReturnsUsed:approved,
         publishedPerformance:approved?{
           source:"uploaded_workbook",importId:stored.id,row:exact!.rowNumber,
+          returnConvention:"cumulative",
           asOf:null,feeBasis:"not_stated"
         }:null,
         candidatePerformanceRows:candidates,
@@ -160,7 +162,7 @@ async function reconcile(){
         factsheetIdentityApproved:r.factsheetIdentityApproved,
         seriesIdentityApproved:approved,
         identityOnly:!r.factsheetIdentityApproved,
-        performanceSourceBasis:approved?"workbook_returns_fee_basis_not_confirmed":"not_confirmed",
+        performanceSourceBasis:approved?"workbook_returns_cumulative_fee_basis_not_confirmed":"not_confirmed",
         workbookAsOf:null
       }
     };
@@ -239,7 +241,7 @@ export async function GET(){
             displayedReturnsSource:validWorkbook?"uploaded_workbook":null,
             workbookReturnsUsed:validWorkbook,
             publishedPerformance:validWorkbook?{source:"uploaded_workbook",
-              importId:selectedWorkbook!.id,row:m.manual_performance_row,
+              returnConvention:"cumulative",importId:selectedWorkbook!.id,row:m.manual_performance_row,
               asOf:null,feeBasis:"not_stated"}:null},
           reason:validWorkbook?
             "Manually confirmed fund identity and current workbook return row. Client fee/date validation remains required.":
@@ -275,7 +277,7 @@ export async function POST(request:Request){
     const known=err instanceof Error?err.message:"Unknown error";
     console.error("Omega reconciliation phase failed:",known.slice(0,250));
     // Do not return storage path, database details or extracted content in errors.
-    const safe=/^Updated workbook|^FUNDS|^Duplicate fund|^Missing provider|^Unexpected performance|^Upload the|^Import the/.test(known);
+    const safe=/^Updated workbook|^FUNDS|^Duplicate fund|^Missing provider|^Unexpected performance|^Upload the|^Import the|^Provider performance|^Provider sheets|^Missing or duplicated/.test(known);
     return NextResponse.json({error:safe?known:"Reconciliation stage failed; please check the source files and retry."},{status:safe?422:500,headers});
   }
 }
