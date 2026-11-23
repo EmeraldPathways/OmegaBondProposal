@@ -160,7 +160,26 @@ test("Never auto-approve only the other alias-equivalent PDF",()=>{
 });
 
 test("All 107 uniquely named PDFs link automatically using the workbook, not their printed titles",()=>{
-  const book=fixture(),funds=workbookFundNames(book),rows=workbookReturnRows(book);
+  const book=fixture();
+  // The user's actual November workbook prefixes provider names in every Fund
+  // Name cell. The legacy shortlist fixture does not, and has repeated generic
+  // labels (e.g. Cash) across providers.
+  const counts=new Map<string,number>();
+  const sheetNames:Record<string,string>={
+    Aviva:"AVIVA",Zurich:"ZURICH",
+    "New Ireland":"New Ireland","Standard Life":"STANDARD"
+  };
+  const master=book.getWorksheet("FUNDS")!;
+  for(let row=2;row<=master.rowCount;row++){
+    const provider=String(master.getRow(row).getCell(1).value);
+    const name=String(master.getRow(row).getCell(2).value);
+    const slot=(counts.get(provider)??0)+1;
+    counts.set(provider,slot);
+    const qualified=name.startsWith(provider+" ")?name:provider+" "+name;
+    master.getRow(row).getCell(2).value=qualified;
+    book.getWorksheet(sheetNames[provider])!.getRow(slot+1).getCell(1).value=qualified;
+  }
+  const funds=workbookFundNames(book),rows=workbookReturnRows(book);
   verifyWorkbookConsistency(funds,rows);
   const pdfs=funds.map((f,i)=>({
     importId:"pdf-"+i,filename:f.name+".pdf",
