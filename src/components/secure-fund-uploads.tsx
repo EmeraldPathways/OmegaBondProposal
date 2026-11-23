@@ -123,7 +123,7 @@ export default function SecureFundUploads() {
       <div>
         <span className="eyebrow">PRIVATE FUND DATABASE</span>
         <h1>Upload fund documents</h1>
-        <p>Start fresh with the corrected XLSX workbook defining the 115 fund names and percentage returns, then upload the new PDF factsheets for automatic identity matching.</p>
+        <p>Start fresh with the corrected XLSX workbook defining the 107 fund names and percentage returns, then upload the new PDF factsheets for automatic identity matching.</p>
       </div>
       <span className="soft-pill"><FolderLock size={14} /> Private storage</span>
     </div>
@@ -145,7 +145,7 @@ export default function SecureFundUploads() {
       <section className="panel padded">
         <div className="section-icon" style={{ width: "fit-content" }}><FileSpreadsheet size={20} /></div>
         <h2 style={{ marginTop: 18 }}>Updated performance workbook — upload first</h2>
-        <p className="muted">Required first: upload the corrected 115-fund XLSX workbook. Its FUNDS tab defines all fund names; its provider tabs contain every displayed performance return. Old PDF returns are not used.</p>
+        <p className="muted">Required first: upload the corrected 107-fund XLSX workbook. Its FUNDS tab defines all fund names; its provider tabs contain every displayed performance return. Old PDF returns are not used.</p>
         <input ref={perfInput} hidden type="file" accept=".xlsx,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
           aria-label="Select fund performance workbook" onChange={e => void uploadFiles(e.currentTarget.files, "performance")} />
         <button type="button" className="dropzone" disabled={busy} onClick={() => perfInput.current?.click()}>
