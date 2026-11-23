@@ -42,7 +42,7 @@ export default function FundPerformanceReview(){
   const [error,setError]=useState(""),[message,setMessage]=useState("");
   const [query,setQuery]=useState("");
   const [provider,setProvider]=useState("All providers");
-  const [statusFilter,setStatusFilter]=useState("Needs manual review");
+  const [statusFilter,setStatusFilter]=useState("All statuses");
   const [expanded,setExpanded]=useState<string|null>(null);
   const running=useRef(false),alive=useRef(true);
 
@@ -181,7 +181,7 @@ export default function FundPerformanceReview(){
         (result.counts?.auto_approved||0)+" exact PDF filename matches and "+
         (result.counts?.suggested||0)+" additional scored suggestions; "+
         (result.counts?.needs_review||0)+" need further review; "+
-        (result.counts?.unmatched||0)+" unmatched. Fund identities may be approved automatically, but no unverified return is approved for client proposals.");
+        (result.counts?.unmatched||0)+" unmatched. PDF filenames are linked automatically; document contents, fee and date validation remain separate before client proposals.");
     }catch(e){
       if(alive.current)setError(e instanceof Error?e.message:"Reconciliation failed. You can resume it.");
     }finally{
@@ -198,7 +198,7 @@ export default function FundPerformanceReview(){
     (provider==="All providers"||r.provider===provider)&&
     (statusFilter==="All statuses"||statusFilter==="Needs manual review"&&needsPdfReview(r)||
       statusFilter==="pdf_approved"&&pdfIdentityApproved(r)||r.status===statusFilter)&&
-    (r.approved_name+" "+r.provider+" "+(r.extracted_factsheet?.title||"")).toLowerCase().includes(query.toLowerCase())
+    (r.approved_name+" "+r.provider+" "+(r.extracted_factsheet?.filename||"")).toLowerCase().includes(query.toLowerCase())
   ).sort((a,b)=>(rank[a.status]??9)-(rank[b.status]??9)||
     Number(b.auto_score??b.confidence??0)-Number(a.auto_score??a.confidence??0));
   const advanceReview=()=>{
@@ -207,7 +207,7 @@ export default function FundPerformanceReview(){
   };
   function downloadExceptions(){
     const exceptions=status.reviews.filter(needsPdfReview);
-    const columns=["Provider","Approved fund","Status","PDF fund title","MoneyMate ID","Performance date","PDF match score","Manual decision","Reason","Other PDF candidates"];
+    const columns=["Provider","Workbook fund","Link status","Matched PDF filename","MoneyMate ID","PDF date","Filename match (0 or 100)","Manual decision","Reason","Other PDF candidates"];
     const safe=(v:unknown)=>{
       let value=String(v??"").replace(/\r?\n/g," ");
       if(/^[=+@\-\t\r]/.test(value))value="'"+value;
@@ -215,10 +215,10 @@ export default function FundPerformanceReview(){
     };
     const rows=exceptions.map(r=>[
       r.provider,r.approved_name,r.status,
-      r.extracted_factsheet?.title,r.extracted_factsheet?.moneyMateId,
+      r.extracted_factsheet?.filename,r.extracted_factsheet?.moneyMateId,
       r.extracted_factsheet?.performance?.asOf,pdfScore(r),
       r.manual_decision??"pending",r.reason,
-      (r.evidence?.candidateFactsheets??[]).map(v=>v.title??"untitled").join(" | ")
+      (r.evidence?.candidateFactsheets??[]).map(v=>v.filename??"unnamed").join(" | ")
     ]);
     const blob=new Blob(["\uFEFF"+[columns,...rows].map(r=>r.map(safe).join(",")).join("\r\n")],
       {type:"text/csv;charset=utf-8"});
@@ -294,7 +294,7 @@ export default function FundPerformanceReview(){
     {loaded?<>
       <div className="filter-row" style={{marginTop:18}}>
         <label className="search-field"><input value={query} onChange={e=>setQuery(e.target.value)}
-          placeholder="Find an approved fund or PDF title…" /></label>
+          placeholder="Find a workbook fund or PDF filename…" /></label>
         <label className="select-wrap"><select value={provider} onChange={e=>setProvider(e.target.value)}>
           <option>All providers</option>{["Aviva","Zurich","New Ireland","Standard Life"].map(x=><option key={x}>{x}</option>)}
         </select></label>
@@ -338,7 +338,7 @@ export default function FundPerformanceReview(){
                 <div>
                   <span className="eyebrow">FUND RECONCILIATION</span>
                   <h3>Review match · {r.approved_name}</h3>
-                  <p className="muted">{r.provider} · Check the printed PDF title and performance. Excel comparison is optional.</p>
+                  <p className="muted">{r.provider} · The workbook name and PDF filename determine the automatic link; PDF contents are not independently verified.</p>
                 </div>
                 <button type="button" className="btn quiet"
                   onClick={()=>setExpanded(null)}>Close review</button>
