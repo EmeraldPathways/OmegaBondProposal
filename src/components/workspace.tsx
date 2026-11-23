@@ -83,7 +83,7 @@ export default function Workspace() {
       .then(async response=>{if(!response.ok)return null;return response.json() as Promise<{reviews?:ReconciledFund[];funds?:ApprovedFund[]}>})
       .then(data=>{if(active&&data?.reviews){
         setPublished(Object.fromEntries(data.reviews.map(row=>[row.fund_id,row])));
-        if(data.funds?.length===115)setFunds(data.funds);
+        if(Array.isArray(data.funds))setFunds(data.funds);
       }}).catch(()=>{});
     return ()=>{active=false};
   },[view]);
@@ -93,6 +93,9 @@ export default function Workspace() {
   const [portfolios, setPortfolios] = useState<Portfolio[]>(INITIAL_PORTFOLIOS);
   const [activePortfolio, setActivePortfolio] = useState(0);
   const [addFundId, setAddFundId] = useState(APPROVED_FUNDS[0].id);
+  useEffect(()=>{
+    if(!funds.some(f=>f.id===addFundId))setAddFundId(funds[0]?.id??"");
+  },[funds,addFundId]);
   const [investment, setInvestment] = useState(490000);
   const [client, setClient] = useState("");
   const [adviser, setAdviser] = useState("Omega Financial Management");
@@ -139,7 +142,7 @@ export default function Workspace() {
       )}</nav>
       <div className="sidebar-bottom">
         <div className="sidebar-help"><CheckCircle2 size={19}/><b>Approved fund shortlist</b>
-          <p>115 selected funds. Published returns come from the latest uploaded workbook. Missing periods remain unavailable.</p>
+          <p>{funds.length} selected funds. Published returns come from the latest uploaded workbook. Missing periods remain unavailable.</p>
         </div>
         <p className="side-footer">OFM Financial Ltd T/A Omega Financial Management, regulated by the Central Bank of Ireland.</p>
       </div>
@@ -159,7 +162,7 @@ export default function Workspace() {
       </header>
       <main className="content">
         <div className="notice neutral" style={{marginBottom:24}}>
-          <ShieldAlert size={18}/><span><strong>Published-return workflow.</strong> Only the 115 selected funds are available. Workbook returns and PDF identities must be matched; all client-report fee/date validations remain separate. Monthly prices are not required.</span>
+          <ShieldAlert size={18}/><span><strong>Published-return workflow.</strong> Only the funds listed in the new workbook are available. Workbook returns and PDF identities must be matched; all client-report fee/date validations remain separate. Monthly prices are not required.</span>
         </div>
 
         {view === "overview" && <>
@@ -174,10 +177,10 @@ export default function Workspace() {
             <div className="hero-art"><span className="orbit orbit-a"/><span className="orbit orbit-b"/><span className="orbit orbit-c"/><span className="hero-initial">Ω</span></div>
           </section>
           <div className="stats-grid">
-            <Stat label="Approved funds" value="115" sub="No other funds will appear"/>
-            <Stat label="Aviva" value="30" sub="Fund shortlist"/>
-            <Stat label="Zurich" value="29" sub="Fund shortlist"/>
-            <Stat label="New Ireland / Standard Life" value="42 / 14" sub="Fund shortlist"/>
+            <Stat label="Approved funds" value={String(funds.length)} sub="From the active workbook"/>
+            <Stat label="Aviva" value={String(funds.filter(f=>f.provider==="Aviva").length)} sub="Fund shortlist"/>
+            <Stat label="Zurich" value={String(funds.filter(f=>f.provider==="Zurich").length)} sub="Fund shortlist"/>
+            <Stat label="New Ireland / Standard Life" value={funds.filter(f=>f.provider==="New Ireland").length+" / "+funds.filter(f=>f.provider==="Standard Life").length} sub="Fund shortlist"/>
           </div>
           <div className="two-col">
             <section className="panel padded"><span className="eyebrow">DATA QUALITY</span><h2>Source verification</h2>
@@ -185,7 +188,7 @@ export default function Workspace() {
               <div className="notice neutral"><FolderOpen size={18}/> Original files remain available in private Vercel Blob. Source matching and approval are the next steps.</div>
             </section>
             <section className="panel action-panel"><span className="eyebrow">QUICK ACCESS</span><h2>Working with your fund list</h2>
-              <button onClick={() => go("funds")}><span className="action-icon"><Database size={19}/></span><span><b>Fund library</b><small>All 115 approved funds</small></span><ArrowRight size={17}/></button>
+              <button onClick={() => go("funds")}><span className="action-icon"><Database size={19}/></span><span><b>Fund library</b><small>All {funds.length} approved funds</small></span><ArrowRight size={17}/></button>
               <button onClick={() => go("builder")}><span className="action-icon"><SlidersHorizontal size={19}/></span><span><b>Portfolio builder</b><small>Draft allocations using approved funds only</small></span><ArrowRight size={17}/></button>
               <button onClick={() => go("imports")}><span className="action-icon"><UploadCloud size={19}/></span><span><b>Source files</b><small>Factsheets and the November performance workbook</small></span><ArrowRight size={17}/></button>
             </section>
@@ -194,7 +197,7 @@ export default function Workspace() {
 
         {view === "funds" && <>
           <div className="page-heading"><div><span className="eyebrow">CONTROLLED FUND LIBRARY</span><h1>Fund library</h1>
-            <p>Exactly 115 Omega-selected funds. The corrected workbook controls fund display names and percentage returns; new PDFs are linked as supporting evidence.</p></div>
+            <p>{funds.length} Omega-selected funds. The corrected workbook controls fund display names and percentage returns; new PDFs are linked as supporting evidence.</p></div>
             <button className="btn primary" onClick={() => go("imports")}><UploadCloud size={16}/> View source documents</button>
           </div>
           <div className="panel">
@@ -221,7 +224,7 @@ export default function Workspace() {
               </tr>)}</tbody>
             </table>{filtered.length===0 && <div className="empty">No matching funds found.</div>}</div>
           </div>
-          <p className="fineprint">{filtered.length} of 115 approved funds displayed. Unselected funds in the source workbook are intentionally excluded. * Returns come only from the newly uploaded performance workbook, not from older PDFs. Three-, five- and ten-year figures are annualised when published. Differences in reporting dates and charges must be considered; these figures are not yet approved for client proposals.</p>
+          <p className="fineprint">{filtered.length} of {funds.length} approved funds displayed. Unselected funds in the source workbook are intentionally excluded. * Returns come only from the newly uploaded performance workbook, not from older PDFs. The workbook does not state whether multi-year figures are cumulative or annualised; validate return conventions before client use. Differences in reporting dates and charges must be considered; these figures are not yet approved for client proposals.</p>
         </>}
 
         {view === "imports" && <SecureFundUploads/>}
