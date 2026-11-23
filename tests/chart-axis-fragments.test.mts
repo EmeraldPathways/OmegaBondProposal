@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {expandAxisAnchors} from "../src/lib/reconciliation/chart-digitize.ts";
+import {expandAxisAnchors,dateAnchorsFromPdfText} from "../src/lib/reconciliation/chart-digitize.ts";
 
 test("disjoint PDF text operators for half-year date ticks are recombined",()=>{
   const samples=[
@@ -26,4 +26,24 @@ test("split euro ticks and date ticks are kept as possible label candidates",()=
   assert.ok(expanded.some(x=>x.label==="€ 10,000"));
   assert.ok(expanded.some(x=>x.label==="2017"));
   assert.ok(expanded.some(x=>x.label==="2019"));
+});
+
+test("a single PDF text item containing all x-axis labels yields separate positioned ticks",()=>{
+  const anchors=dateAnchorsFromPdfText([
+    {label:"Jul '22  Jan '23  Jul '23  Jan '24  Jul '24  Jan '25  Jul '25",
+      x:240,y:510,width:300}
+  ]);
+  assert.equal(anchors.length,7);
+  assert.ok(anchors.every((x,i)=>i===0||anchors[i-1].x<x.x));
+  assert.ok(anchors[0].value<anchors.at(-1)!.value);
+  assert.ok(anchors.at(-1)!.x>470);
+});
+test("a single PDF text item containing year-only labels yields a linear calendar axis",()=>{
+  const anchors=dateAnchorsFromPdfText([
+    {label:"2017 2018 2019 2020 2021 2022 2023 2024 2025 2026",
+      x:239,y:569,width:300}
+  ]);
+  assert.equal(anchors.length,10);
+  assert.equal(new Date(anchors[0].value).getUTCFullYear(),2017);
+  assert.equal(new Date(anchors.at(-1)!.value).getUTCFullYear(),2026);
 });
