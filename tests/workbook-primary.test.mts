@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import ExcelJS from "exceljs";
 import {APPROVED_FUNDS} from "../src/lib/approved-funds.ts";
-import {workbookFundNames,workbookReturnRows,verifyWorkbookConsistency,matchWorkbookReturn} from "../src/lib/reconciliation/workbook-source.ts";
+import {workbookFundNames,workbookReturnRows,verifyWorkbookConsistency,matchWorkbookReturn,workbookNameKey} from "../src/lib/reconciliation/workbook-source.ts";
 import {reconcilePdfOnly} from "../src/lib/reconciliation/pdf-only.ts";
 import type {FactSheetData} from "../src/lib/reconciliation/engine.ts";
 
@@ -99,4 +99,62 @@ test("Names and IDs remain stable when the workbook FUNDS rows are reordered",()
   b.getCell(2).value=valuesA[1];
   const after=workbookFundNames(book);
   assert.deepEqual(new Set(after.map(f=>f.id)),new Set(before.map(f=>f.id)));
+});
+
+test("Distinct New Ireland Tech and Technology funds retain separate workbook rows, IDs and returns",()=>{
+  const book=fixture();
+  const master=book.getWorksheet("FUNDS")!;
+  const provider=book.getWorksheet("New Ireland")!;
+  const names=["New Ireland Tech Indexed","New Ireland Technology Indexed Fund"];
+  const masterRows:number[]=[];
+  for(let row=2;row<=master.rowCount;row++){
+    if(master.getRow(row).getCell(1).value==="New Ireland")masterRows.push(row);
+  }
+  assert.ok(masterRows.length>=2);
+  names.forEach((name,i)=>{
+    master.getRow(masterRows[i]).getCell(2).value=name;
+    provider.getRow(i+2).getCell(1).value=name;
+    provider.getRow(i+2).getCell(7).value=i?80.60:72.53;
+  });
+  const funds=workbookFundNames(book);
+  const rows=workbookReturnRows(book);
+  verifyWorkbookConsistency(funds,rows);
+  assert.notEqual(workbookNameKey(names[0]),workbookNameKey(names[1]));
+  const a=funds.find(f=>f.name===names[0]),b=funds.find(f=>f.name===names[1]);
+  assert.ok(a&&b);
+  assert.notEqual(a.id,b.id);
+  assert.equal(matchWorkbookReturn(a,rows)?.returns.threeYear,72.53);
+  assert.equal(matchWorkbookReturn(b,rows)?.returns.threeYear,80.60);
+});
+test("True duplicate workbook labels still fail validation",()=>{
+  const book=fixture();
+  const master=book.getWorksheet("FUNDS")!;
+  master.getRow(3).getCell(2).value=master.getRow(2).getCell(2).value;
+  assert.throws(()=>workbookFundNames(book),/Duplicate fund name/);
+});
+
+test("Two similarly named New Ireland PDF titles resolve to different funds without swapping their returns",()=>{
+  const tech={id:"tech",provider:"New Ireland" as const,name:"New Ireland Tech Indexed"};
+  const technology={id:"technology",provider:"New Ireland" as const,name:"New Ireland Technology Indexed Fund"};
+  const pdfs=[
+    {importId:"pdf-tech",filename:"New Ireland Tech Indexed.pdf",
+      providerHint:"New Ireland",title:"New Ireland Tech Indexed"},
+    {importId:"pdf-technology",filename:"New Ireland Technology Indexed Fund.pdf",
+      providerHint:"New Ireland",title:"New Ireland Technology Indexed Fund"}
+  ] as FactSheetData[];
+  const a=reconcilePdfOnly(tech,pdfs,{requireExactPrintedTitle:true});
+  const b=reconcilePdfOnly(technology,pdfs,{requireExactPrintedTitle:true});
+  assert.equal(a.factsheetIdentityApproved,true);
+  assert.equal(b.factsheetIdentityApproved,true);
+  assert.equal(a.factsheet?.importId,"pdf-tech");
+  assert.equal(b.factsheet?.importId,"pdf-technology");
+});
+test("Never auto-approve only the other alias-equivalent PDF",()=>{
+  const tech={id:"tech",provider:"New Ireland" as const,name:"New Ireland Tech Indexed"};
+  const unrelated={
+    importId:"pdf-technology",filename:"New Ireland Technology Indexed Fund.pdf",
+    providerHint:"New Ireland",title:"New Ireland Technology Indexed Fund"
+  } as FactSheetData;
+  const match=reconcilePdfOnly(tech,[unrelated],{requireExactPrintedTitle:true});
+  assert.equal(match.factsheetIdentityApproved,false);
 });
