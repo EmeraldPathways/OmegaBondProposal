@@ -1,92 +1,150 @@
-import { renderToBuffer } from "@react-pdf/renderer";
-import { z } from "zod";
-import { auth, ADMIN_EMAIL, isLoginConfigured } from "@/auth";
-import OmegaProposalPDF from "@/lib/pdf/omega-proposal";
-import { buildProposalReport } from "@/lib/pdf/model";
+import {renderToBuffer} from "@react-pdf/renderer";
+import {z} from "zod";
+import {auth,ADMIN_EMAIL,isLoginConfigured} from "@/auth";
+import {getNeonSql} from "@/lib/server/neon";
+import {getActiveFunds} from "@/lib/server/active-funds";
+import {matchWorkbookReturn} from "@/lib/reconciliation/workbook-source";
+import type {WorkbookEntry,ReportedReturns} from "@/lib/reconciliation/engine";
+import WorkbookProposalPDF, {
+  type WorkbookProposalData,type WorkbookProposalFund,type WorkbookReturnPeriods
+} from "@/lib/pdf/workbook-proposal";
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
-export const maxDuration = 30;
+export const runtime="nodejs";
+export const dynamic="force-dynamic";
+export const maxDuration=30;
 
-const price = z.object({
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  price: z.number().finite().positive().max(1e9),
+const noCache={"Cache-Control":"private, no-store","X-Content-Type-Options":"nosniff"};
+const portfolio=z.object({
+  id:z.string().trim().min(1).max(30),
+  title:z.string().trim().min(1).max(80),
+  description:z.string().trim().max(250),
+  weights:z.record(z.number().finite().min(0).max(100))
 });
-const fund = z.object({
-  id: z.string().min(1).max(60),
-  name: z.string().min(1).max(160),
-  provider: z.string().min(1).max(160),
-  code: z.string().max(100),
-  category: z.string().max(100),
-  currency: z.literal("EUR"),
-  risk: z.number().int().min(1).max(7).nullable(),
-  fee: z.number().finite().min(0).max(15).nullable(),
-  prices: z.array(price).min(2).max(350),
-  source: z.enum(["synthetic","session"]),
-  factsheetDate: z.string().max(30).optional(),
-  factsheetName: z.string().max(180).optional(),
+const payload=z.object({
+  client:z.string().trim().max(120).default(""),
+  adviser:z.string().trim().min(1).max(120),
+  objective:z.string().trim().min(1).max(600),
+  investment:z.number().finite().positive().max(1e9),
+  portfolios:z.array(portfolio).min(1).max(3)
 });
-const portfolio = z.object({
-  id: z.string().min(1).max(30),
-  title: z.string().min(1).max(80),
-  description: z.string().max(250),
-  weights: z.record(z.number().finite().min(0).max(100)),
-});
-const payload = z.object({
-  client: z.string().max(120).default(""),
-  adviser: z.string().max(120).default(""),
-  objective: z.string().min(1).max(600),
-  investment: z.number().finite().positive().max(1e9),
-  chartWindow: z.union([z.literal(3),z.literal(5),z.literal(10)]),
-  funds: z.array(fund).min(1).max(18),
-  portfolios: z.array(portfolio).min(2).max(3),
-});
-
-const noCache = { "Cache-Control":"private, no-store", "X-Content-Type-Options":"nosniff" };
-
-export async function POST(request: Request) {
-  if (!isLoginConfigured() || (await auth())?.user?.email?.toLowerCase() !== ADMIN_EMAIL) {
-    return Response.json({ error: "Unauthorised" }, { status: 401, headers: noCache });
+const periods=[
+  "ytd","oneMonth","threeMonth","sixMonth","oneYear",
+  "threeYear","fiveYear","tenYear","sinceLaunch"
+] as const;
+function safeReturns(value:ReportedReturns):WorkbookReturnPeriods{
+  const returns={} as WorkbookReturnPeriods;
+  for(const period of periods){
+    const n=value?.[period];
+    if(n==null){returns[period]=null;continue;}
+    if(typeof n!=="number"||!Number.isFinite(n)||Math.abs(n)>100000)
+      throw new Error("A workbook return value is invalid.");
+    returns[period]=n;
   }
+  return returns;
+}
+function validationError(error:string,status=422){
+  return Response.json({error},{status,headers:noCache});
+}
 
-  const contentLength = Number(request.headers.get("content-length") || 0);
-  if (contentLength > 220000) {
-    return Response.json({ error: "Proposal input exceeds the allowed limit." }, { status: 413, headers: noCache });
+export async function POST(request:Request){
+  if(!isLoginConfigured() ||
+    (await auth())?.user?.email?.toLowerCase()!==ADMIN_EMAIL)
+    return validationError("Unauthorised.",401);
+  if(request.headers.get("origin")!==new URL(request.url).origin)
+    return validationError("Invalid request origin.",403);
+  const length=Number(request.headers.get("content-length")||0);
+  if(length>32000)return validationError("Proposal request is too large.",413);
+  let data:z.infer<typeof payload>;
+  try{
+    const body=await request.text();
+    if(body.length>32000)return validationError("Proposal request is too large.",413);
+    data=payload.parse(JSON.parse(body));
+  }catch{
+    return validationError("Enter valid proposal details and complete allocations.",400);
   }
+  if(new Set(data.portfolios.map(p=>p.id)).size!==data.portfolios.length)
+    return validationError("The selected portfolios must be distinct.");
 
-  try {
-    const body = await request.text();
-    if (body.length > 220000) {
-      return Response.json({ error: "Proposal input exceeds the allowed limit." }, { status: 413, headers: noCache });
-    }
-    const data = payload.parse(JSON.parse(body));
-    const fundIds = new Set(data.funds.map(f=>f.id));
-    if (fundIds.size !== data.funds.length || data.portfolios.some(p=>Object.keys(p.weights).some(id=>!fundIds.has(id)))) {
-      return Response.json({ error: "Portfolio and fund identifiers must match." }, { status: 400, headers: noCache });
-    }
+  const requestedIds=new Set<string>();
+  for(const p of data.portfolios){
+    const allocations=Object.entries(p.weights).filter(([,weight])=>weight>0);
+    const total=allocations.reduce((sum,[,weight])=>sum+weight,0);
+    if(allocations.length<1||allocations.length>30||Math.abs(total-100)>0.005)
+      return validationError("Each selected portfolio must allocate exactly 100% across 1–30 funds.");
+    for(const [id] of allocations)requestedIds.add(id);
+  }
+  try{
+    const sql=getNeonSql();
+    const [active,source]=await Promise.all([
+      getActiveFunds(),
+      sql.query("SELECT id::text,filename FROM imports WHERE storage_key LIKE 'funds/performance/%' "+
+        "AND filename ILIKE '%.xlsx' ORDER BY uploaded_at DESC,id DESC LIMIT 1")
+    ]);
+    if(active.length!==107||!source.length)
+      return validationError("Import the current 107-fund workbook before generating a proposal.");
+    const sourceId=String(source[0].id);
+    const idMap=new Map(active.map(f=>[f.id,f]));
+    if([...requestedIds].some(id=>!idMap.has(id)))
+      return validationError("Some portfolio funds are no longer listed in the current workbook.");
 
-    // Never misrepresent the prototype's synthetic or session-upload data as verified.
-    const report = buildProposalReport(data);
-    const buffer = await renderToBuffer(OmegaProposalPDF({ report }));
-
-    return new Response(new Uint8Array(buffer), {
-      status: 200,
-      headers: {
-        ...noCache,
-        "Content-Type": "application/pdf",
-        "Content-Disposition": "inline; filename=\"Omega-Investment-Bond-Proposal.pdf\"",
-        "Content-Length": String(buffer.byteLength),
-      },
+    // Do not trust returns or fund metadata from the browser. Resolve every
+    // selected series independently against the most recent workbook import.
+    const [rows,activeSources,linkedDocs]=await Promise.all([
+      sql.query("SELECT provider,row_number,source_name,reported_returns "+
+        "FROM fund_source_performance WHERE import_id=$1::uuid",[sourceId]),
+      sql.query("SELECT DISTINCT workbook_import_id::text AS id FROM fund_active_names"),
+      sql.query("SELECT fund_id,factsheet_import_id::text,status,evidence,"+
+        "extracted_factsheet FROM fund_reconciliations")
+    ]);
+    if(activeSources.length!==1||String(activeSources[0].id)!==sourceId)
+      return validationError("The workbook has been uploaded but not imported. Run workbook matching first.");
+    const entries:WorkbookEntry[]=rows.map(row=>({
+      provider:String(row.provider),rowNumber:Number(row.row_number),
+      sourceName:String(row.source_name),returns:row.reported_returns as ReportedReturns
+    }));
+    const pdfMap=new Map(linkedDocs.map(row=>[String(row.fund_id),row]));
+    const portfolioReports=data.portfolios.map(p=>{
+      const funds:WorkbookProposalFund[]=Object.entries(p.weights)
+        .filter(([,weight])=>weight>0)
+        .map(([id,weight])=>{
+          const fund=idMap.get(id)!;
+          const row=matchWorkbookReturn(fund,entries);
+          if(!row)throw new Error("Workbook return row missing for "+fund.name);
+          const doc=pdfMap.get(id);
+          const proof=doc?.evidence as {matchBasis?:string}|null;
+          const metadata=doc?.extracted_factsheet as {filename?:string}|null;
+          return {
+            id,name:fund.name,provider:fund.provider,
+            weight,allocatedAmount:data.investment*weight/100,
+            returns:safeReturns(row.returns),
+            factsheetFilename:proof?.matchBasis==="unique_provider_qualified_filename"
+              ?metadata?.filename??null:null
+          };
+        });
+      return {id:p.id,title:p.title,description:p.description,funds};
     });
-  } catch (error) {
-    if (error instanceof z.ZodError || error instanceof SyntaxError) {
-      return Response.json({ error: "Invalid proposal input. Please review the entries." }, { status: 400, headers: noCache });
-    }
-    if (error instanceof Error && error.message.includes("allocations")) {
-      return Response.json({ error: error.message }, { status: 400, headers: noCache });
-    }
-    // Do not leak sensitive client details or render errors in the response.
-    console.error("Omega proposal PDF generation failed.");
-    return Response.json({ error: "PDF generation failed. Please retry or contact the administrator." }, { status: 500, headers: noCache });
+    const report:WorkbookProposalData={
+      client:data.client,adviser:data.adviser,objective:data.objective,
+      investment:data.investment,workbookFilename:String(source[0].filename),
+      preparedDate:new Intl.DateTimeFormat("en-IE",{
+        timeZone:"Europe/Dublin",day:"numeric",month:"long",year:"numeric"
+      }).format(new Date()),
+      portfolios:portfolioReports
+    };
+    const pdf=await renderToBuffer(WorkbookProposalPDF({data:report}));
+    return new Response(new Uint8Array(pdf),{
+      status:200,headers:{...noCache,
+        "Content-Type":"application/pdf",
+        "Content-Disposition":"attachment; filename=\"Omega-Investment-Bond-Proposal-Draft.pdf\"",
+        "Content-Length":String(pdf.byteLength)
+      }
+    });
+  }catch(error){
+    if(error instanceof Error && (
+      error.message.startsWith("Workbook return row missing")||
+      error.message.startsWith("A workbook return value is invalid")
+    ))return validationError(error.message);
+    console.error("Omega workbook proposal PDF generation failed.");
+    return validationError("The draft proposal could not be generated. Check the latest workbook import and retry.",500);
   }
 }
