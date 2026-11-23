@@ -115,113 +115,212 @@ function ringWedge(cx:number,cy:number,outer:number,inner:number,start:number,en
     " 1 "+x2+" "+y2+" L "+x3+" "+y3+
     " A "+inner+" "+inner+" 0 "+large+" 0 "+x4+" "+y4+" Z";
 }
-function PortfolioAllocationChart({funds}:{funds:WorkbookProposalFund[]}){
-  const shown=funds.slice(0,8);
+
+/** One-page portfolio layout: chart above, small allocation/breakdown,
+ * and the original reported-return table anchored below. */
+function CompactPortfolioAllocationAndBreakdown({
+  funds,allFunds,totalInvestment,dense
+}:{
+  funds:WorkbookProposalFund[];
+  allFunds:WorkbookProposalFund[];
+  totalInvestment:number;
+  dense:boolean;
+}){
   let total=0;
-  const paths=shown.map((fund,index)=>{
-    const start=total;
-    total+=fund.weight;
-    const end=total;
-    const angle=360*fund.weight/100;
-    return {
-      id:fund.id,color:CHART_COLORS[index%CHART_COLORS.length],
-      path:ringWedge(82,82,72,48,-90+start*3.6+Math.min(.8,angle/8),
-        -90+end*3.6-Math.min(.8,angle/8))
-    };
+  const paths=allFunds.map((fund,index)=>{
+    const start=total;total+=fund.weight;
+    const gap=Math.min(.5,360*fund.weight/100/10);
+    return {id:fund.id,color:CHART_COLORS[index%CHART_COLORS.length],
+      path:ringWedge(82,82,72,48,
+        -90+start*3.6+gap,-90+total*3.6-gap)};
   });
-  return <View style={style.visualCard} wrap={false}>
-    <Text style={style.visualTitle}>Portfolio allocation</Text>
-    <Text style={style.visualNote}>Initial investment weight by fund · actual selected percentages</Text>
-    <View style={{flexDirection:"row",alignItems:"center",marginTop:13,gap:15}}>
-      <View style={{width:168,height:166}}>
-        <Svg width={164} height={164} viewBox="0 0 164 164">
-          {shown.length===1?
-            <Circle cx={82} cy={82} r={60} stroke={CHART_COLORS[0]}
-              strokeWidth={24} fill="none"/>:
-            paths.map(p=><Path key={p.id} d={p.path} fill={p.color}/>)}
-          <Circle cx={82} cy={82} r={44} fill="#FFFFFF"/>
-        </Svg>
-        <View style={{position:"absolute",top:65,left:48,width:68,alignItems:"center"}}>
-          <Text style={{fontFamily:"Helvetica-Bold",fontSize:19,color:color.wine}}>100%</Text>
-          <Text style={{fontSize:7,color:color.muted}}>allocated</Text>
+  const portfolioWeight=allFunds.reduce((n,f)=>n+f.weight,0);
+  return <View style={{flexDirection:"row",gap:11,marginTop:11}} wrap={false}>
+    <View style={{
+      width:"49%",borderWidth:.7,borderColor:color.border,
+      borderRadius:7,padding:dense?10:12,backgroundColor:"#FDFDFC"
+    }}>
+      <Text style={{
+        fontFamily:"Times-Roman",fontSize:14,color:color.wine,marginBottom:7
+      }}>Portfolio allocation</Text>
+      <View style={{flexDirection:"row",alignItems:"center",gap:6}}>
+        <View style={{width:100,height:101,position:"relative"}}>
+          <Svg width={98} height={98} viewBox="0 0 164 164">
+            {allFunds.length===1?
+              <Circle cx={82} cy={82} r={60} stroke={CHART_COLORS[0]}
+                strokeWidth={24} fill="none"/>:
+              paths.map(p=><Path key={p.id} d={p.path} fill={p.color}/>)}
+            <Circle cx={82} cy={82} r={43} fill="#FFFFFF"/>
+          </Svg>
+          <View style={{position:"absolute",top:37,left:15,width:68,alignItems:"center"}}>
+            <Text style={{fontFamily:"Helvetica-Bold",fontSize:15,color:color.wine}}>
+              {portfolioWeight.toFixed(0)}%
+            </Text>
+            <Text style={{fontSize:6.5,color:color.muted}}>allocated</Text>
+          </View>
+        </View>
+        <View style={{flex:1}}>
+          {funds.map(f=>{
+            const position=allFunds.findIndex(item=>item.id===f.id);
+            return <View key={f.id} style={{
+              flexDirection:"row",alignItems:"flex-start",
+              gap:4,marginBottom:dense?3:7
+            }}>
+              <View style={{width:7,height:7,marginTop:2,borderRadius:1,
+                backgroundColor:CHART_COLORS[position%CHART_COLORS.length]}}/>
+              <Text style={{fontSize:dense?6.3:7,lineHeight:1.25,
+                flex:1,color:color.ink}}>{f.name}</Text>
+              <Text style={{fontFamily:"Helvetica-Bold",fontSize:dense?6.5:7.2,
+                color:color.ink,width:30,textAlign:"right"}}>{f.weight.toFixed(0)}%</Text>
+            </View>;
+          })}
         </View>
       </View>
-      <View style={{flex:1}}>
-        {shown.map((f,i)=><View key={f.id} style={{
-          flexDirection:"row",alignItems:"flex-start",marginBottom:8,gap:7}}>
-          <View style={{width:9,height:9,borderRadius:2,
-            backgroundColor:CHART_COLORS[i%CHART_COLORS.length],marginTop:2}}/>
-          <Text style={style.legendText}>{f.name}</Text>
-          <Text style={{fontSize:8.5,fontFamily:"Helvetica-Bold",
-            color:color.ink,width:43,textAlign:"right"}}>{f.weight.toFixed(1)}%</Text>
-        </View>)}
-        {funds.length>8&&<Text style={style.visualNote}>
-          Chart shows the first 8 funds. All {funds.length} weights are in the full allocation table.</Text>}
+    </View>
+    <View style={{
+      width:"49%",borderWidth:.7,borderColor:color.border,
+      borderRadius:7,padding:dense?10:12,backgroundColor:"#FDFDFC"
+    }}>
+      <Text style={{
+        fontFamily:"Times-Roman",fontSize:14,color:color.wine,marginBottom:8
+      }}>Initial investment breakdown</Text>
+      <View style={{flexDirection:"row",justifyContent:"space-between",
+        backgroundColor:color.pale,padding:7,marginBottom:dense?5:9}}>
+        <Text style={{fontSize:8,fontFamily:"Helvetica-Bold"}}>Total initial investment</Text>
+        <Text style={{fontSize:9,fontFamily:"Helvetica-Bold",color:color.wine}}>
+          {euro(totalInvestment)}
+        </Text>
       </View>
+      {funds.map(f=><View key={f.id} style={{
+        flexDirection:"row",justifyContent:"space-between",
+        borderBottomWidth:.4,borderBottomColor:color.border,
+        paddingVertical:dense?3:5
+      }}>
+        <Text style={{fontSize:dense?6.7:7.4,width:"73%",lineHeight:1.2}}>
+          {f.name} ({f.weight.toFixed(0)}%)
+        </Text>
+        <Text style={{fontSize:dense?7:7.5,textAlign:"right"}}>
+          {euro(f.allocatedAmount)}
+        </Text>
+      </View>)}
     </View>
   </View>;
 }
-/** Four categorical lookback periods are shown, not inferred prices between dates. */
-function CumulativeReturnLineChart({funds}:{
-  funds:WorkbookProposalFund[]
+function CumulativeReturnLineChart({funds,dense}:{
+  funds:WorkbookProposalFund[];dense:boolean
 }){
   const rows=funds.map(f=>({fund:f,values:cumulativeReturnValues(f.returns)}));
   const {min,max}=cumulativeChartDomain(rows.map(row=>row.values));
-  const xLeft=58,xRight=485,yTop=22,yBottom=234;
+  const xLeft=55,xRight=485,yTop=16,yBottom=180;
   const graphWidth=xRight-xLeft,graphHeight=yBottom-yTop;
   const x=(i:number)=>xLeft+(i/(CUMULATIVE_PERIODS.length-1))*graphWidth;
   const y=(v:number)=>yBottom-(v-min)/(max-min)*graphHeight;
   const ticks=Array.from({length:5},(_,i)=>min+(max-min)*i/4);
   const hasValues=rows.some(row=>row.values.some(value=>value!==null));
   const label=(n:number)=>Number.isInteger(n)?n.toFixed(0):n.toFixed(1);
-  return <View style={style.visualCard} wrap={false}>
-    <Text style={style.visualTitle}>Cumulative fund performance</Text>
-    <Text style={style.visualNote}>Reported cumulative returns (%) by investment lookback period</Text>
-    {hasValues?<Svg width="100%" height={278} viewBox="0 0 505 270">
+  return <View style={{
+    borderWidth:.7,borderColor:color.border,borderRadius:8,
+    paddingHorizontal:12,paddingTop:11,paddingBottom:dense?8:10,
+    marginTop:11,backgroundColor:"#FDFDFC"
+  }} wrap={false}>
+    <Text style={{fontFamily:"Times-Roman",color:color.wine,fontSize:16,
+      marginBottom:4}}>Cumulative fund performance</Text>
+    <Text style={{fontSize:7.8,color:color.muted}}>
+      Reported cumulative returns (%) · 1-, 3-, 5- and 10-year lookback periods
+    </Text>
+    {hasValues?<Svg width="100%" height={dense?155:184} viewBox="0 0 505 210">
       {ticks.map((tick,index)=><React.Fragment key={"grid-"+index}>
         <Line x1={xLeft} x2={xRight} y1={y(tick)} y2={y(tick)}
           stroke={Math.abs(tick)<1e-8?"#C6C5C0":"#E9E8E3"}
-          strokeWidth={Math.abs(tick)<1e-8?1.5:.8}/>
-        <Text x={8} y={y(tick)+3.5}
+          strokeWidth={Math.abs(tick)<1e-8?1.4:.8}/>
+        <Text x={6} y={y(tick)+3.5}
           style={{fontSize:9,fill:color.muted}}>{label(tick)}%</Text>
       </React.Fragment>)}
       {CUMULATIVE_PERIODS.map((period,i)=><React.Fragment key={period.key}>
         <Line x1={x(i)} x2={x(i)} y1={yTop} y2={yBottom}
-          stroke="#F2F1ED" strokeWidth={.6}/>
-        <Text x={x(i)-16} y={yBottom+22}
+          stroke="#F0EFEB" strokeWidth={.5}/>
+        <Text x={x(i)-18} y={yBottom+22}
           style={{fontSize:10,fill:color.ink}}>{period.label}</Text>
       </React.Fragment>)}
       {rows.flatMap(({fund,values},fundIndex)=>{
         const lineColor=CHART_COLORS[fundIndex%CHART_COLORS.length];
-        const segments=contiguousReturnSegments(values);
-        const paths=segments.map((indices,j)=>
+        const paths=contiguousReturnSegments(values).map((indices,j)=>
           <Path key={fund.id+"-line-"+j}
-            d={indices.map((i,k)=>(k?"L":"M")+x(i).toFixed(2)+" "+y(values[i]!).toFixed(2)).join(" ")}
-            stroke={lineColor} strokeWidth={2.7} fill="none"
+            d={indices.map((i,k)=>(k?"L":"M")+x(i).toFixed(2)+" "+
+              y(values[i]!).toFixed(2)).join(" ")}
+            stroke={lineColor} strokeWidth={2.8} fill="none"
             strokeLinejoin="round" strokeLinecap="round"/>);
         const markers=values.flatMap((value,i)=>value===null?[]:[
           <Circle key={fund.id+"-point-"+i} cx={x(i)} cy={y(value)}
-            r={4.1} fill={lineColor} stroke="#FFFFFF" strokeWidth={1.1}/>
+            r={3.8} fill={lineColor} stroke="#FFFFFF" strokeWidth={1.1}/>
         ]);
         return [...paths,...markers];
       })}
-    </Svg>:<Text style={[style.visualNote,{marginTop:15}]}>
-      No 1-, 3-, 5- or 10-year cumulative return values are available for these funds.
+    </Svg>:<Text style={{marginTop:15,fontSize:8,color:color.muted}}>
+      No reported 1-, 3-, 5- or 10-year returns are available.
     </Text>}
-    <View style={{flexDirection:"row",flexWrap:"wrap",marginTop:13,gap:5}}>
+    <View style={{flexDirection:"row",flexWrap:"wrap",gap:dense?2:4,
+      marginTop:dense?4:7}}>
       {funds.map((fund,i)=><View key={fund.id} style={{
-        width:"49%",flexDirection:"row",alignItems:"flex-start",gap:7,
-        paddingVertical:5,paddingRight:6
+        width:"49%",flexDirection:"row",alignItems:"flex-start",
+        gap:6,paddingVertical:dense?2:4
       }}>
         <View style={{backgroundColor:CHART_COLORS[i%CHART_COLORS.length],
-          width:17,height:3,marginTop:5}}/>
-        <Text style={{fontSize:8,color:color.ink,flex:1,lineHeight:1.35}}>
-          {fund.name}
-        </Text>
+          width:13,height:2.5,marginTop:4}}/>
+        <Text style={{fontSize:dense?7:7.6,color:color.ink,flex:1,
+          lineHeight:1.3}}>{fund.name}</Text>
       </View>)}
     </View>
-    <Text style={[style.visualNote,{marginTop:12}]}>
-      Lines join reported lookback-period values; intervening monthly performance is not shown.
+  </View>;
+}
+function FundAllocationReturnsTable({funds,dense}:{
+  funds:WorkbookProposalFund[];dense:boolean
+}){
+  return <View style={{marginTop:dense?10:14}}>
+    <Text style={{fontFamily:"Times-Roman",fontSize:14.5,color:color.wine,
+      marginBottom:7}}>Fund allocations and reported cumulative returns</Text>
+    <View style={{flexDirection:"row",backgroundColor:"#F3F2EE",
+      paddingVertical:dense?6:8,borderBottomWidth:1,
+      borderBottomColor:color.border}}>
+      {[
+        {value:"FUND",width:"37%"},{value:"WEIGHT",width:"12%"},
+        {value:"1 YEAR",width:"13%"},{value:"3 YEARS",width:"13%"},
+        {value:"5 YEARS",width:"13%"},{value:"10 YEARS",width:"12%"}
+      ].map((head,index)=><View key={head.value} style={{
+        width:head.width,paddingHorizontal:index?2:7
+      }}>
+        <Text style={{fontSize:dense?6.5:7,fontFamily:"Helvetica-Bold",
+          color:color.muted,textAlign:index?"right":"left"}}>{head.value}</Text>
+      </View>)}
+    </View>
+    {funds.map(f=><View key={f.id} style={{
+      flexDirection:"row",alignItems:"center",minHeight:dense?22:31,
+      paddingVertical:dense?3:5,borderBottomWidth:.6,borderBottomColor:color.border
+    }} wrap={false}>
+      <View style={{width:"37%",paddingHorizontal:7}}>
+        <Text style={{fontFamily:"Helvetica-Bold",fontSize:dense?7:8,
+          lineHeight:1.24}}>{f.name}</Text>
+        {!dense&&<Text style={{fontSize:6.9,color:color.muted,marginTop:2}}>
+          {f.provider}
+        </Text>}
+      </View>
+      <View style={{width:"12%",paddingHorizontal:2}}>
+        <Text style={{fontSize:dense?7:7.8,textAlign:"right"}}>
+          {f.weight.toFixed(2)}%
+        </Text>
+      </View>
+      {([f.returns.oneYear,f.returns.threeYear,
+          f.returns.fiveYear,f.returns.tenYear] as (number|null)[])
+        .map((value,index)=><View key={index} style={{
+          width:index===3?"12%":"13%",paddingHorizontal:2
+        }}>
+          <Text style={{fontSize:dense?7:7.8,textAlign:"right"}}>
+            {percentage(value)}
+          </Text>
+        </View>)}
+    </View>)}
+    <Text style={{fontSize:7.2,color:color.muted,marginTop:7}}>
+      Cumulative returns, not annualised · — indicates unavailable data
     </Text>
   </View>;
 }
@@ -258,71 +357,33 @@ export default function WorkbookProposalPDF({data}:{data:WorkbookProposalData}){
 
       <Footer/>
     </Page>
-    {data.portfolios.map((p,index)=><Page key={p.id+"-visual"} size="A4" style={style.page} wrap>
-      <Banner label={"PORTFOLIO "+String.fromCharCode(65+index)+" · VISUAL OVERVIEW"}/>
-      <Text style={style.eyebrow}>PORTFOLIO ANALYSIS</Text>
-      <Text style={style.heading}>{p.title} · At a glance</Text>
-      <Text style={style.subtitle}>{p.description}</Text>
-      <PortfolioAllocationChart funds={p.funds}/>
-      <Footer/>
-    </Page>)}
-    {data.portfolios.flatMap((p,portfolioIndex)=>
-      chartFundGroups(p.funds).map((group,groupIndex,groups)=>
-        <Page key={p.id+"-cumulative-"+groupIndex} size="A4" style={style.page} wrap>
-          <Banner label={"PORTFOLIO "+String.fromCharCode(65+portfolioIndex)+" · FUND PERFORMANCE"}/>
-          <Text style={style.eyebrow}>CUMULATIVE PERFORMANCE</Text>
-          <Text style={style.heading}>{p.title} · Fund comparison</Text>
-          <Text style={style.subtitle}>
-            1-, 3-, 5- and 10-year cumulative returns{groups.length>1?
-              " · Group "+(groupIndex+1)+" of "+groups.length:""}
+    {data.portfolios.flatMap((p,index)=>
+      chartFundGroups(p.funds,8).map((group,groupIndex,groups)=>{
+        const dense=group.length>4;
+        const portfolioLabel="PORTFOLIO "+String.fromCharCode(65+index);
+        return <Page key={p.id+"-overview-"+groupIndex}
+          size="A4" style={style.page} wrap={false}>
+          <Banner label={portfolioLabel+" · INVESTMENT OVERVIEW"}/>
+          <Text style={[style.eyebrow,{marginTop:14}]}>
+            INVESTMENT BOND PROPOSAL
           </Text>
-          <CumulativeReturnLineChart funds={group}/>
+          <Text style={[style.heading,{marginTop:6,marginBottom:4}]}>
+            {p.title}
+          </Text>
+          <Text style={style.subtitle}>
+            {p.description}{groups.length>1?
+              " · Funds "+(groupIndex*8+1)+"–"+(groupIndex*8+group.length)+
+              " of "+p.funds.length:""}
+          </Text>
+          <CumulativeReturnLineChart funds={group} dense={dense}/>
+          <CompactPortfolioAllocationAndBreakdown
+            funds={group} allFunds={p.funds}
+            totalInvestment={data.investment} dense={dense}/>
+          <FundAllocationReturnsTable funds={group} dense={dense}/>
           <Footer/>
-        </Page>)
+        </Page>;
+      })
     )}
-    {data.portfolios.map((p,index)=><Page key={p.id} size="A4" style={style.page} wrap>
-      <Banner label={"PORTFOLIO "+String.fromCharCode(65+index)+" · ALLOCATIONS"}/>
-      <Text style={style.eyebrow}>PORTFOLIO COMPOSITION</Text>
-      <Text style={style.heading}>{p.title}</Text>
-      <Text style={style.subtitle}>{p.description}</Text>
-      <View style={style.box}>
-        <Text style={style.fieldLabel}>Allocated capital</Text>
-        <Text style={style.fieldValue}>{euro(data.investment)} · 100% total allocation · {p.funds.length} selected funds</Text>
-      </View>
-      <View style={{marginTop:20}}>
-        <Text style={style.section}>Fund allocations and reported cumulative returns</Text>
-        <View style={style.tableHeader} fixed>
-          <View style={{width:"37%",paddingHorizontal:7}}><Text style={style.headerCell}>FUND</Text></View>
-          <View style={{width:"12%",paddingHorizontal:3}}><Text style={[style.headerCell,{textAlign:"right"}]}>WEIGHT</Text></View>
-          <View style={{width:"13%",paddingHorizontal:3}}><Text style={[style.headerCell,{textAlign:"right"}]}>1 YEAR</Text></View>
-          <View style={{width:"13%",paddingHorizontal:3}}><Text style={[style.headerCell,{textAlign:"right"}]}>3 YEARS</Text></View>
-          <View style={{width:"13%",paddingHorizontal:3}}><Text style={[style.headerCell,{textAlign:"right"}]}>5 YEARS</Text></View>
-          <View style={{width:"12%",paddingHorizontal:3}}><Text style={[style.headerCell,{textAlign:"right"}]}>10 YEARS</Text></View>
-        </View>
-        {p.funds.map(f=><View key={f.id} style={style.row} wrap={false}>
-          <View style={{width:"37%",paddingHorizontal:7}}>
-            <Text style={style.fundName}>{f.name}</Text>
-            <Text style={style.fundProvider}>{f.provider}</Text>
-          </View>
-          <View style={{width:"12%",paddingHorizontal:3}}><Text style={style.number}>{f.weight.toFixed(2)}%</Text></View>
-          <View style={{width:"13%",paddingHorizontal:3}}><Text style={style.number}>{percentage(f.returns.oneYear)}</Text></View>
-          <View style={{width:"13%",paddingHorizontal:3}}><Text style={style.number}>{percentage(f.returns.threeYear)}</Text></View>
-          <View style={{width:"13%",paddingHorizontal:3}}><Text style={style.number}>{percentage(f.returns.fiveYear)}</Text></View>
-          <View style={{width:"12%",paddingHorizontal:3}}><Text style={style.number}>{percentage(f.returns.tenYear)}</Text></View>
-        </View>)}
-      </View>
-      <View style={{marginTop:12}}>
-        <Text style={style.note}>Performance figures are cumulative percentages, not annualised. “—” indicates that a value is unavailable.</Text>
-      </View>
-      <View style={style.divider}/>
-      <Text style={style.section}>Initial investment breakdown</Text>
-      {p.funds.map(f=><View key={f.id} style={{flexDirection:"row",justifyContent:"space-between",marginBottom:6}} wrap={false}>
-        <Text style={[style.note,{width:"76%"}]}>{f.name} ({f.weight.toFixed(2)}%)</Text>
-        <Text style={style.note}>{euro(f.allocatedAmount)}</Text>
-      </View>)}
-
-      <Footer/>
-    </Page>)}
     {data.portfolios.map((p,index)=><Page key={p.id+"-factsheets"} size="A4" style={style.page} wrap>
       <Banner label={"PORTFOLIO "+String.fromCharCode(65+index)+" · FUND DETAILS"}/>
       <Text style={style.eyebrow}>FUND INFORMATION</Text>

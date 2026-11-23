@@ -37,7 +37,7 @@ test("new A4 Omega PDF displays actual workbook fund charts and PDF metadata wit
   assert.match(pdf,/f\.factsheet\.amcPct/);
   assert.doesNotMatch(pdf,/Charts in source PDF|Printed PDF title|data\.workbookFilename\}/);
   assert.doesNotMatch(pdf,/DRAFT|NOT APPROVED FOR CLIENT DISTRIBUTION/);
-  assert.match(pdf,/PortfolioAllocationChart/);
+  assert.match(pdf,/CompactPortfolioAllocationAndBreakdown/);
   assert.match(pdf,/CumulativeReturnLineChart/);
   assert.match(pdf,/CUMULATIVE_PERIODS/);
   assert.match(pdf,/cumulativeReturnValues\(f.returns\)/);
@@ -80,8 +80,21 @@ test("client PDF omits internal upload provenance, validation notices and review
   ])assert.doesNotMatch(pdf,expression);
   assert.match(pdf,/f\.factsheet\.objective/);
   assert.match(pdf,/f\.returns\.oneYear/);
-  assert.match(pdf,/PortfolioAllocationChart/);
-  assert.match(pdf,/Lines join reported lookback-period values/);
+  assert.match(pdf,/CompactPortfolioAllocationAndBreakdown/);
+  assert.match(pdf,/Cumulative returns, not annualised/);
   const viewer=read("src/components/proposal-pdf-viewer.tsx");
   assert.match(viewer,/Omega-Investment-Bond-Proposal\.pdf/);
+});
+
+test("each portfolio combines line chart, compact donut, invested amounts and cumulative-return table on one A4 overview page",()=>{
+  const pdf=read("src/lib/pdf/workbook-proposal.tsx");
+  assert.match(pdf,/CompactPortfolioAllocationAndBreakdown/);
+  assert.match(pdf,/CumulativeReturnLineChart funds=\{group\}/);
+  assert.match(pdf,/FundAllocationReturnsTable funds=\{group\}/);
+  assert.match(pdf,/INVESTMENT OVERVIEW/);
+  assert.match(pdf,/totalInvestment=\{data\.investment\}/);
+  assert.doesNotMatch(pdf,/p\.id\+"-visual"/);
+  assert.doesNotMatch(pdf,/p\.id\+"-cumulative-"/);
+  assert.doesNotMatch(pdf,/p\.id\+"-history"/);
+  assert.match(pdf,/chartFundGroups\(p\.funds,8\)/);
 });
