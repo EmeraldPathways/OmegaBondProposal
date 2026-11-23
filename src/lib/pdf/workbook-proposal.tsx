@@ -1,8 +1,10 @@
 import React from "react";
 import {Document,Page,View,Text,StyleSheet,Svg,Path,Circle,Rect,Line} from "@react-pdf/renderer";
 import {OMEGA_LOGO_PATHS} from "@/lib/branding/omega-logo-paths";
-import type {SourceGrowthSeries} from "@/lib/reconciliation/chart-digitize";
-import {reconstructPortfolioGrowth} from "@/lib/pdf/historical-growth";
+import {
+  CUMULATIVE_PERIODS,cumulativeReturnValues,contiguousReturnSegments,
+  cumulativeChartDomain,chartFundGroups
+} from "@/lib/pdf/cumulative-return-chart";
 
 export type WorkbookReturnPeriods = Record<
   "ytd"|"oneMonth"|"threeMonth"|"sixMonth"|"oneYear"|"threeYear"|"fiveYear"|"tenYear"|"sinceLaunch",
@@ -11,7 +13,6 @@ export type WorkbookReturnPeriods = Record<
 export type WorkbookProposalFund = {
   id:string;name:string;provider:string;weight:number;allocatedAmount:number;
   returns:WorkbookReturnPeriods;
-  growthChart?:SourceGrowthSeries|null;
   factsheet:{
     filename:string|null; title:string|null; date:string|null;
     objective:string|null;strategy:string|null;moneyMateId:string|null;
@@ -160,109 +161,67 @@ function PortfolioAllocationChart({funds}:{funds:WorkbookProposalFund[]}){
     </View>
   </View>;
 }
-type FundReturnHorizon="oneYear"|"threeYear";
-function FundReturnChart({funds,horizon,title}:{
-  funds:WorkbookProposalFund[];horizon:FundReturnHorizon;title:string
+/** Four categorical lookback periods are shown, not inferred prices between dates. */
+function CumulativeReturnLineChart({funds}:{
+  funds:WorkbookProposalFund[]
 }){
-  const shown=funds.slice(0,8);
-  const values=shown.map(f=>f.returns[horizon]).filter(
-    (v):v is number=>typeof v==="number"&&Number.isFinite(v));
-  const low=Math.min(0,...values);
-  const high=Math.max(0,...values);
-  const min=low<0?low*1.16:0;
-  const max=high>0?high*1.16:1;
-  const span=max-min||1;
-  const graphWidth=215;
-  const zeroX=(0-min)/span*graphWidth;
+  const rows=funds.map(f=>({fund:f,values:cumulativeReturnValues(f.returns)}));
+  const {min,max}=cumulativeChartDomain(rows.map(row=>row.values));
+  const xLeft=58,xRight=485,yTop=22,yBottom=234;
+  const graphWidth=xRight-xLeft,graphHeight=yBottom-yTop;
+  const x=(i:number)=>xLeft+(i/(CUMULATIVE_PERIODS.length-1))*graphWidth;
+  const y=(v:number)=>yBottom-(v-min)/(max-min)*graphHeight;
+  const ticks=Array.from({length:5},(_,i)=>min+(max-min)*i/4);
+  const hasValues=rows.some(row=>row.values.some(value=>value!==null));
+  const label=(n:number)=>Number.isInteger(n)?n.toFixed(0):n.toFixed(1);
   return <View style={style.visualCard} wrap={false}>
-    <Text style={style.visualTitle}>{title}</Text>
-    <Text style={style.visualNote}>Cumulative performance by fund · %</Text>
-    <View style={{marginTop:12}}>
-      {shown.map((f,index)=>{
-        const value=f.returns[horizon];
-        const end=value==null?zeroX:(value-min)/span*graphWidth;
-        return <View key={f.id} style={style.chartRow}>
-          <Text style={style.chartName}>{f.name.length>43?f.name.slice(0,40)+"…":f.name}</Text>
-          <View style={{width:"50%",justifyContent:"center"}}>
-            <Svg width="100%" height={17} viewBox={"0 0 "+graphWidth+" 17"}>
-              <Line x1={zeroX} x2={zeroX} y1={0} y2={17}
-                stroke="#A6AAA5" strokeWidth={1}/>
-              {value!=null?<Rect x={Math.min(zeroX,end)} y={4}
-                width={Math.max(1.5,Math.abs(end-zeroX))} height={9} rx={2}
-                fill={CHART_COLORS[index%CHART_COLORS.length]}/>:null}
-            </Svg>
-          </View>
-          <Text style={style.chartValue}>{percentage(value)}</Text>
-        </View>;
+    <Text style={style.visualTitle}>Cumulative fund performance</Text>
+    <Text style={style.visualNote}>Reported cumulative returns (%) by investment lookback period</Text>
+    {hasValues?<Svg width="100%" height={278} viewBox="0 0 505 270">
+      {ticks.map((tick,index)=><React.Fragment key={"grid-"+index}>
+        <Line x1={xLeft} x2={xRight} y1={y(tick)} y2={y(tick)}
+          stroke={Math.abs(tick)<1e-8?"#C6C5C0":"#E9E8E3"}
+          strokeWidth={Math.abs(tick)<1e-8?1.5:.8}/>
+        <Text x={8} y={y(tick)+3.5}
+          style={{fontSize:9,fill:color.muted}}>{label(tick)}%</Text>
+      </React.Fragment>)}
+      {CUMULATIVE_PERIODS.map((period,i)=><React.Fragment key={period.key}>
+        <Line x1={x(i)} x2={x(i)} y1={yTop} y2={yBottom}
+          stroke="#F2F1ED" strokeWidth={.6}/>
+        <Text x={x(i)-16} y={yBottom+22}
+          style={{fontSize:10,fill:color.ink}}>{period.label}</Text>
+      </React.Fragment>)}
+      {rows.flatMap(({fund,values},fundIndex)=>{
+        const lineColor=CHART_COLORS[fundIndex%CHART_COLORS.length];
+        const segments=contiguousReturnSegments(values);
+        const paths=segments.map((indices,j)=>
+          <Path key={fund.id+"-line-"+j}
+            d={indices.map((i,k)=>(k?"L":"M")+x(i).toFixed(2)+" "+y(values[i]!).toFixed(2)).join(" ")}
+            stroke={lineColor} strokeWidth={2.7} fill="none"
+            strokeLinejoin="round" strokeLinecap="round"/>);
+        const markers=values.flatMap((value,i)=>value===null?[]:[
+          <Circle key={fund.id+"-point-"+i} cx={x(i)} cy={y(value)}
+            r={4.1} fill={lineColor} stroke="#FFFFFF" strokeWidth={1.1}/>
+        ]);
+        return [...paths,...markers];
       })}
-    </View>
-    {funds.length>8&&<Text style={[style.visualNote,{marginTop:7}]}>
-      Showing 8 of {funds.length} funds. All reported periods appear in the allocation table.</Text>}
-    {values.length===0&&<Text style={[style.visualNote,{marginTop:7}]}>No reported values are available for this period.</Text>}
-  </View>;
-}
-
-function HistoricalPortfolioGrowthChart({funds}:{funds:WorkbookProposalFund[]}){
-  const reconstructed=reconstructPortfolioGrowth(funds);
-  if(!reconstructed)return <View style={style.visualCard}>
-    <Text style={style.visualTitle}>Historical growth reconstruction</Text>
-    <Text style={style.visualNote}>Historical growth chart not available for this selection.</Text>
-  </View>;
-  const lines=reconstructed.fundLines;
-  const all=reconstructed.portfolioLine?[...lines.map(l=>l.values),reconstructed.portfolioLine]:lines.map(l=>l.values);
-  const values=all.flat();
-  const min=Math.min(100,...values),max=Math.max(100,...values);
-  const bottom=Math.floor((min-3)/5)*5,top=Math.ceil((max+3)/5)*5;
-  const w=490,h=220,left=42,right=12,upper=14,lower=26;
-  const cw=w-left-right,ch=h-upper-lower;
-  const x=(i:number)=>left+(i/Math.max(1,reconstructed.dates.length-1))*cw;
-  const y=(v:number)=>upper+((top-v)/Math.max(1,top-bottom))*ch;
-  const d=(items:number[])=>items.map((v,i)=>(i?"L":"M")+x(i).toFixed(2)+" "+y(v).toFixed(2)).join(" ");
-  const shownLines=lines.slice(0,7);
-  return <View style={style.visualCard} wrap={false}>
-    <Text style={style.visualTitle}>Reconstructed historical growth</Text>
-    <Text style={style.visualNote}>Illustrative reconstruction · Index 100 at {reconstructed.start}</Text>
-    <Svg width="100%" height={230} viewBox={"0 0 "+w+" "+h}>
-      {[0,1,2,3,4].map(i=>{
-        const v=bottom+(top-bottom)*i/4;
-        const yy=y(v);
-        return <React.Fragment key={"grid-"+i}>
-          <Line x1={left} x2={w-right} y1={yy} y2={yy}
-            stroke="#E9E9E5" strokeWidth={.8}/>
-          <Text x={0} y={yy+3} style={{fontSize:7,fill:"#73766F"}}>{v.toFixed(0)}</Text>
-        </React.Fragment>;
-      })}
-      {shownLines.map((line,i)=><Path key={line.id} d={d(line.values)}
-        stroke={CHART_COLORS[(i+1)%CHART_COLORS.length]}
-        strokeWidth={1.25} fill="none"/>)}
-      {reconstructed.portfolioLine?<Path d={d(reconstructed.portfolioLine)}
-        stroke={color.wine} strokeWidth={3} fill="none"/>:null}
-    </Svg>
-    <View style={{flexDirection:"row",justifyContent:"space-between",
-      paddingHorizontal:25,marginTop:-3}}>
-      <Text style={style.visualNote}>{reconstructed.start.slice(0,7)}</Text>
-      <Text style={style.visualNote}>{reconstructed.dates[Math.floor(reconstructed.dates.length/2)].slice(0,7)}</Text>
-      <Text style={style.visualNote}>{reconstructed.end.slice(0,7)}</Text>
-    </View>
-    <View style={{marginTop:15}}>
-      {reconstructed.portfolioLine?<View style={{flexDirection:"row",alignItems:"center",gap:8,marginBottom:8}}>
-        <View style={{width:18,height:3,backgroundColor:color.wine}}/>
-        <Text style={{fontSize:8.5,fontFamily:"Helvetica-Bold",color:color.wine}}>
-          Illustrative combined portfolio · initial allocation
+    </Svg>:<Text style={[style.visualNote,{marginTop:15}]}>
+      No 1-, 3-, 5- or 10-year cumulative return values are available for these funds.
+    </Text>}
+    <View style={{flexDirection:"row",flexWrap:"wrap",marginTop:13,gap:5}}>
+      {funds.map((fund,i)=><View key={fund.id} style={{
+        width:"49%",flexDirection:"row",alignItems:"flex-start",gap:7,
+        paddingVertical:5,paddingRight:6
+      }}>
+        <View style={{backgroundColor:CHART_COLORS[i%CHART_COLORS.length],
+          width:17,height:3,marginTop:5}}/>
+        <Text style={{fontSize:8,color:color.ink,flex:1,lineHeight:1.35}}>
+          {fund.name}
         </Text>
-      </View>:null}
-      {shownLines.map((line,i)=><View key={line.id} style={{flexDirection:"row",
-        gap:8,alignItems:"center",marginBottom:5}}>
-        <View style={{width:14,height:2,backgroundColor:CHART_COLORS[(i+1)%CHART_COLORS.length]}}/>
-        <Text style={style.visualNote}>{line.name} ({line.weight.toFixed(1)}%)</Text>
       </View>)}
     </View>
-    {!reconstructed.allFundsCovered?
-      <Text style={[style.visualNote,{marginTop:8,color:color.wine}]}>
-        Combined portfolio line unavailable. Individual fund lines shown: {reconstructed.missingFunds.join("; ")}
-      </Text>:null}
     <Text style={[style.visualNote,{marginTop:12}]}>
-      Illustrative chart reconstructed from plotted data; not an official historical portfolio return.
+      Lines join reported lookback-period values; intervening monthly performance is not shown.
     </Text>
   </View>;
 }
@@ -305,21 +264,22 @@ export default function WorkbookProposalPDF({data}:{data:WorkbookProposalData}){
       <Text style={style.heading}>{p.title} · At a glance</Text>
       <Text style={style.subtitle}>{p.description}</Text>
       <PortfolioAllocationChart funds={p.funds}/>
-      <FundReturnChart funds={p.funds} horizon="threeYear"
-        title="3-year cumulative fund returns"/>
-      {p.funds.length<=5?<FundReturnChart funds={p.funds} horizon="oneYear"
-        title="1-year cumulative fund returns"/>:null}
-
       <Footer/>
     </Page>)}
-    {data.portfolios.filter(p=>reconstructPortfolioGrowth(p.funds)!==null).map((p,index)=><Page key={p.id+"-history"} size="A4" style={style.page} wrap>
-      <Banner label={"PORTFOLIO "+String.fromCharCode(65+index)+" · HISTORICAL GROWTH"}/>
-      <Text style={style.eyebrow}>HISTORICAL PERFORMANCE</Text>
-      <Text style={style.heading}>{p.title} · Historical growth</Text>
-      <HistoricalPortfolioGrowthChart funds={p.funds}/>
-
-      <Footer/>
-    </Page>)}
+    {data.portfolios.flatMap((p,portfolioIndex)=>
+      chartFundGroups(p.funds).map((group,groupIndex,groups)=>
+        <Page key={p.id+"-cumulative-"+groupIndex} size="A4" style={style.page} wrap>
+          <Banner label={"PORTFOLIO "+String.fromCharCode(65+portfolioIndex)+" · FUND PERFORMANCE"}/>
+          <Text style={style.eyebrow}>CUMULATIVE PERFORMANCE</Text>
+          <Text style={style.heading}>{p.title} · Fund comparison</Text>
+          <Text style={style.subtitle}>
+            1-, 3-, 5- and 10-year cumulative returns{groups.length>1?
+              " · Group "+(groupIndex+1)+" of "+groups.length:""}
+          </Text>
+          <CumulativeReturnLineChart funds={group}/>
+          <Footer/>
+        </Page>)
+    )}
     {data.portfolios.map((p,index)=><Page key={p.id} size="A4" style={style.page} wrap>
       <Banner label={"PORTFOLIO "+String.fromCharCode(65+index)+" · ALLOCATIONS"}/>
       <Text style={style.eyebrow}>PORTFOLIO COMPOSITION</Text>

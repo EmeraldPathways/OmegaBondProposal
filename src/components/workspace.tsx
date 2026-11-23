@@ -10,7 +10,6 @@ import {
 import OmegaLogo from "@/components/omega-logo";
 import SecureFundUploads from "@/components/secure-fund-uploads";
 import ProposalPdfViewer from "@/components/proposal-pdf-viewer";
-import FundChartReconstruction from "@/components/fund-chart-reconstruction";
 import FundSourceAudit from "@/components/fund-source-audit";
 import { APPROVED_FUND_GROUPS, type ApprovedFund } from "@/lib/approved-funds";
 import type { Portfolio } from "@/lib/types";
@@ -104,7 +103,6 @@ export default function Workspace() {
   const [adviser, setAdviser] = useState("Omega Financial Management");
   const [objective, setObjective] = useState("Review diversified investment options in line with the client's objectives and risk profile.");
   const [includePortfolios,setIncludePortfolios]=useState<Record<string,boolean>>({a:true,b:true,c:true});
-  const [chartRevision,setChartRevision]=useState(0);
 
   const filtered = useMemo(() => funds.filter(f =>
     (provider === "All providers" || f.provider === provider) &&
@@ -370,7 +368,7 @@ export default function Workspace() {
               })}
             </div>
             <div className="notice neutral" style={{marginTop:17}}>
-              <ShieldAlert size={18}/><span>This PDF uses the workbook for all fund names and cumulative return percentages. The linked PDFs supply objectives, strategy, risk rating, charges, factsheet date and source references where extractable. Missing PDF fields are labelled unavailable. The PDF contains allocation and actual cumulative fund-return charts; no historical price series or synthetic portfolio growth charts are invented.</span>
+              <ShieldAlert size={18}/><span>This PDF uses the workbook for all fund names and cumulative return percentages. The linked PDFs supply objectives, strategy, risk rating, charges, factsheet date and source references where extractable. Missing PDF fields are labelled unavailable. The PDF contains an allocation chart and a cumulative-return line chart with the reported 1-, 3-, 5- and 10-year figures; missing periods are left blank.</span>
             </div>
             <div className="notice neutral">
               <ShieldAlert size={18}/><span>The export is marked <strong>draft for adviser review</strong> because PDF contents, share classes, return reporting dates and charges have not been independently verified for client distribution. A matched filename does not constitute this sign-off.</span>
@@ -382,11 +380,7 @@ export default function Workspace() {
             </div>
             {!readyForProposal&&<p className="fineprint">The live PDF preview becomes available when at least one selected portfolio has a 100% allocation and every selected fund has a current workbook return row and exact PDF filename match.</p>}
           </section>
-          <FundChartReconstruction autoStart={readyForProposal}
-            selectedFundIds={proposalPortfolios.flatMap(p=>Object.entries(p.weights)
-              .filter(([,weight])=>weight>0).map(([id])=>id))}
-            onUpdated={()=>setChartRevision(n=>n+1)}/>
-          {readyForProposal&&<ProposalPdfViewer key={chartRevision} input={{
+          {readyForProposal&&<ProposalPdfViewer input={{
             client,adviser,objective,investment,portfolios:proposalPortfolios
           }}/>}
           <FundSourceAudit/>

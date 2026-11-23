@@ -39,20 +39,6 @@ test("A4 PDF can render uploaded-workbook returns and PDF factsheet metadata wit
       weight:34,allocatedAmount:34000,
       returns:{...primary.returns,oneYear:-2.05,threeYear:6.09,fiveYear:-9.26}}
   );
-  const observations=Array.from({length:14},(_,month)=>({
-    date:new Date(Date.UTC(2024,month,1)).toISOString().slice(0,10),
-    value:10000+month*310+Math.sin(month)*480
-  }));
-  data.portfolios[0].funds.forEach((f,i)=>{
-    f.growthChart={
-      source:"digitized_pdf_graph",sourcePage:1,
-      sourceLabel:"Growth of €10,000",method:"raster_trace_with_axis_calibration",
-      estimated:true,currency:"EUR",
-      observations:observations.map((p,j)=>({...p,value:p.value*(1+i*.09+j*.002)})),
-      quality:{dateAxisR2:.998,valueAxisR2:.997,pixelCoverage:.88,
-        sampledMonths:14,confidence:.88}
-    };
-  });
   const bytes=await renderToBuffer(WorkbookProposalPDF({data}));
   assert.ok(bytes.byteLength>3000,"PDF must contain a real rendered document");
   assert.equal(Buffer.from(bytes).subarray(0,4).toString("ascii"),"%PDF");
