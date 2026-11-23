@@ -32,6 +32,27 @@ try{
           "GRAPH FOUND "+outcome.series.observations.length+" monthly samples, quality="+
           outcome.series.quality.confidence+" page="+outcome.series.sourcePage:
           "REVIEW "+outcome.reason));
+      if(row.provider==="Aviva"&&!outcome.series){
+        const cv=await import("@napi-rs/canvas");
+        Object.assign(globalThis,{DOMMatrix:cv.DOMMatrix,ImageData:cv.ImageData,Path2D:cv.Path2D});
+        const pdfjs=await import("pdfjs-dist/legacy/build/pdf.mjs");
+        const task=pdfjs.getDocument({data:new Uint8Array(bytes),disableFontFace:true,useSystemFonts:true});
+        try{
+          const doc=await task.promise;
+          const page=await doc.getPage(1);
+          const raw=await page.getTextContent();
+          const height=page.getViewport({scale:1}).height;
+          const values=raw.items.flatMap(i=>{
+            if(!("str" in i)||!i.transform)return[];
+            const label=i.str.trim();
+            if(!/(?:Jan|Jul|202[0-9]|20[0-9]{2}|['’][0-9]{2}|€)/i.test(label))return[];
+            return [{str:label.slice(0,32),x:Math.round(i.transform[4]),
+              y:Math.round(height-i.transform[5]),w:Math.round(i.width??0)}];
+          });
+          console.log("[Omega graph probe] AVIVA_SOURCE_TEXT "+
+            JSON.stringify(values.filter(i=>i.x>180&&i.y>270&&i.y<590).slice(0,65)));
+        }finally{await task.destroy()}
+      }
     }catch(e){
       console.log("[Omega graph probe] "+row.provider+": sample check failed ("+
         (e instanceof Error?e.name:"error")+")");
