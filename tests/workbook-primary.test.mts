@@ -132,3 +132,29 @@ test("True duplicate workbook labels still fail validation",()=>{
   master.getRow(3).getCell(2).value=master.getRow(2).getCell(2).value;
   assert.throws(()=>workbookFundNames(book),/Duplicate fund name/);
 });
+
+test("Two similarly named New Ireland PDF titles resolve to different funds without swapping their returns",()=>{
+  const tech={id:"tech",provider:"New Ireland" as const,name:"New Ireland Tech Indexed"};
+  const technology={id:"technology",provider:"New Ireland" as const,name:"New Ireland Technology Indexed Fund"};
+  const pdfs=[
+    {importId:"pdf-tech",filename:"New Ireland Tech Indexed.pdf",
+      providerHint:"New Ireland",title:"New Ireland Tech Indexed"},
+    {importId:"pdf-technology",filename:"New Ireland Technology Indexed Fund.pdf",
+      providerHint:"New Ireland",title:"New Ireland Technology Indexed Fund"}
+  ] as FactSheetData[];
+  const a=reconcilePdfOnly(tech,pdfs,{requireExactPrintedTitle:true});
+  const b=reconcilePdfOnly(technology,pdfs,{requireExactPrintedTitle:true});
+  assert.equal(a.factsheetIdentityApproved,true);
+  assert.equal(b.factsheetIdentityApproved,true);
+  assert.equal(a.factsheet?.importId,"pdf-tech");
+  assert.equal(b.factsheet?.importId,"pdf-technology");
+});
+test("Never auto-approve only the other alias-equivalent PDF",()=>{
+  const tech={id:"tech",provider:"New Ireland" as const,name:"New Ireland Tech Indexed"};
+  const unrelated={
+    importId:"pdf-technology",filename:"New Ireland Technology Indexed Fund.pdf",
+    providerHint:"New Ireland",title:"New Ireland Technology Indexed Fund"
+  } as FactSheetData;
+  const match=reconcilePdfOnly(tech,[unrelated],{requireExactPrintedTitle:true});
+  assert.equal(match.factsheetIdentityApproved,false);
+});
