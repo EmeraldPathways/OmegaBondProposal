@@ -2,6 +2,7 @@
 
  import { useCallback, useEffect, useRef, useState } from "react";
 import FundPerformanceReview from "@/components/fund-performance-review";
+import FundSourceAudit from "@/components/fund-source-audit";
 import {
   ArrowDownToLine, CheckCircle2, FileSpreadsheet, FileText, FolderLock,
   LoaderCircle, RefreshCw, ShieldAlert, UploadCloud
@@ -131,7 +132,7 @@ export default function SecureFundUploads() {
       <section className="panel padded">
         <div className="section-icon" style={{ width: "fit-content" }}><FileText size={20} /></div>
         <h2 style={{ marginTop: 18 }}>Fund factsheets</h2>
-        <p className="muted">Upload your newly renamed PDFs after the workbook. Each document should represent the correct fund/share class; matching is verified against its printed title.</p>
+        <p className="muted">Upload your renamed PDFs after the workbook. Each PDF links automatically by its unique exact filename against the workbook fund name; the printed PDF title does not control the link.</p>
         <input ref={pdfInput} hidden multiple type="file" accept=".pdf,application/pdf"
           aria-label="Select PDF fund factsheets" onChange={e => void uploadFiles(e.currentTarget.files, "factsheet")} />
         <button type="button" className="dropzone" disabled={busy} onClick={() => pdfInput.current?.click()}>
@@ -180,7 +181,7 @@ export default function SecureFundUploads() {
             <td><b style={{ whiteSpace: "normal", overflowWrap: "anywhere" }}>{d.filename}</b></td>
             <td>{d.kind === "factsheet" ? "Factsheet PDF" : "Performance data"}</td>
             <td>{new Date(d.uploaded_at).toLocaleDateString("en-IE")}</td>
-            <td><span className="soft-pill">{d.status === "pending" ? "Pending review" : d.status}</span></td>
+            <td><span className="soft-pill">{d.status === "linked" ? "Filename linked" : d.status === "imported" ? "Workbook imported" : d.status === "pending" ? "Not yet linked" : d.status}</span></td>
             <td><a className="btn quiet" href={"/api/fund-uploads/" + encodeURIComponent(d.id) + "/download"} aria-label={"Download " + d.filename}>
               <ArrowDownToLine size={15} /> Download
             </a></td>
@@ -189,6 +190,7 @@ export default function SecureFundUploads() {
       )}
     </section>
 
+    <FundSourceAudit/>
     <FundPerformanceReview key={resetSequence} />
 
     <div className="notice neutral" style={{ marginBottom: 22 }}>
