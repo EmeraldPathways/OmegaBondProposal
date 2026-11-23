@@ -1,6 +1,8 @@
 import React from "react";
-import {Document,Page,View,Text,StyleSheet,Svg,Path} from "@react-pdf/renderer";
+import {Document,Page,View,Text,StyleSheet,Svg,Path,Circle,Rect,Line} from "@react-pdf/renderer";
 import {OMEGA_LOGO_PATHS} from "@/lib/branding/omega-logo-paths";
+import type {SourceGrowthSeries} from "@/lib/reconciliation/chart-digitize";
+import {reconstructPortfolioGrowth} from "@/lib/pdf/historical-growth";
 
 export type WorkbookReturnPeriods = Record<
   "ytd"|"oneMonth"|"threeMonth"|"sixMonth"|"oneYear"|"threeYear"|"fiveYear"|"tenYear"|"sinceLaunch",
@@ -9,6 +11,7 @@ export type WorkbookReturnPeriods = Record<
 export type WorkbookProposalFund = {
   id:string;name:string;provider:string;weight:number;allocatedAmount:number;
   returns:WorkbookReturnPeriods;
+  growthChart?:SourceGrowthSeries|null;
   factsheet:{
     filename:string|null; title:string|null; date:string|null;
     objective:string|null;strategy:string|null;moneyMateId:string|null;
@@ -50,6 +53,14 @@ const style=StyleSheet.create({
   section:{fontFamily:"Helvetica-Bold",fontSize:10,color:color.wine,marginBottom:9},
   p:{fontSize:9,color:color.ink,lineHeight:1.6},
   note:{fontSize:8.1,color:color.muted,lineHeight:1.55},
+  visualCard:{borderWidth:.7,borderColor:color.border,borderRadius:8,padding:16,marginTop:15,backgroundColor:"#FDFDFC"},
+  visualTitle:{fontFamily:"Times-Roman",color:color.wine,fontSize:16,marginBottom:7},
+  visualNote:{fontSize:7.8,color:color.muted,lineHeight:1.55},
+  chartRow:{flexDirection:"row",alignItems:"center",paddingVertical:7,borderBottomColor:"#EFEEE9",borderBottomWidth:.4},
+  chartName:{fontSize:7.8,color:color.ink,width:"35%",paddingRight:8},
+  chartValue:{fontSize:8.4,fontFamily:"Helvetica-Bold",color:color.ink,
+    textAlign:"right",width:"15%"},
+  legendText:{fontSize:8.1,color:color.ink,lineHeight:1.3,flex:1},
   sourceCard:{borderWidth:.7,borderColor:color.border,borderRadius:7,padding:12,marginTop:11},
   sourceTitle:{fontFamily:"Helvetica-Bold",fontSize:9.6,color:color.wine,marginBottom:5},
   meta:{fontSize:7.9,color:color.ink,lineHeight:1.55,marginBottom:5},
@@ -88,6 +99,173 @@ function Footer(){
     <Text style={style.footerText}>ADVISER REVIEW DRAFT</Text>
   </View>;
 }
+const CHART_COLORS=["#671E27","#A8995F","#647579","#809485","#AC7471","#9A9C94","#977F70","#76808B"];
+const radians=(degrees:number)=>degrees*Math.PI/180;
+function pointOnCircle(cx:number,cy:number,r:number,angle:number){
+  return [cx+Math.cos(radians(angle))*r,cy+Math.sin(radians(angle))*r];
+}
+function ringWedge(cx:number,cy:number,outer:number,inner:number,start:number,end:number){
+  const [x1,y1]=pointOnCircle(cx,cy,outer,start);
+  const [x2,y2]=pointOnCircle(cx,cy,outer,end);
+  const [x3,y3]=pointOnCircle(cx,cy,inner,end);
+  const [x4,y4]=pointOnCircle(cx,cy,inner,start);
+  const large=end-start>180?1:0;
+  return "M "+x1+" "+y1+" A "+outer+" "+outer+" 0 "+large+
+    " 1 "+x2+" "+y2+" L "+x3+" "+y3+
+    " A "+inner+" "+inner+" 0 "+large+" 0 "+x4+" "+y4+" Z";
+}
+function PortfolioAllocationChart({funds}:{funds:WorkbookProposalFund[]}){
+  const shown=funds.slice(0,8);
+  let total=0;
+  const paths=shown.map((fund,index)=>{
+    const start=total;
+    total+=fund.weight;
+    const end=total;
+    const angle=360*fund.weight/100;
+    return {
+      id:fund.id,color:CHART_COLORS[index%CHART_COLORS.length],
+      path:ringWedge(82,82,72,48,-90+start*3.6+Math.min(.8,angle/8),
+        -90+end*3.6-Math.min(.8,angle/8))
+    };
+  });
+  return <View style={style.visualCard} wrap={false}>
+    <Text style={style.visualTitle}>Portfolio allocation</Text>
+    <Text style={style.visualNote}>Initial investment weight by fund · actual selected percentages</Text>
+    <View style={{flexDirection:"row",alignItems:"center",marginTop:13,gap:15}}>
+      <View style={{width:168,height:166}}>
+        <Svg width={164} height={164} viewBox="0 0 164 164">
+          {shown.length===1?
+            <Circle cx={82} cy={82} r={60} stroke={CHART_COLORS[0]}
+              strokeWidth={24} fill="none"/>:
+            paths.map(p=><Path key={p.id} d={p.path} fill={p.color}/>)}
+          <Circle cx={82} cy={82} r={44} fill="#FFFFFF"/>
+        </Svg>
+        <View style={{position:"absolute",top:65,left:48,width:68,alignItems:"center"}}>
+          <Text style={{fontFamily:"Helvetica-Bold",fontSize:19,color:color.wine}}>100%</Text>
+          <Text style={{fontSize:7,color:color.muted}}>allocated</Text>
+        </View>
+      </View>
+      <View style={{flex:1}}>
+        {shown.map((f,i)=><View key={f.id} style={{
+          flexDirection:"row",alignItems:"flex-start",marginBottom:8,gap:7}}>
+          <View style={{width:9,height:9,borderRadius:2,
+            backgroundColor:CHART_COLORS[i%CHART_COLORS.length],marginTop:2}}/>
+          <Text style={style.legendText}>{f.name}</Text>
+          <Text style={{fontSize:8.5,fontFamily:"Helvetica-Bold",
+            color:color.ink,width:43,textAlign:"right"}}>{f.weight.toFixed(1)}%</Text>
+        </View>)}
+        {funds.length>8&&<Text style={style.visualNote}>
+          Chart shows the first 8 funds. All {funds.length} weights are in the full allocation table.</Text>}
+      </View>
+    </View>
+  </View>;
+}
+type FundReturnHorizon="oneYear"|"threeYear";
+function FundReturnChart({funds,horizon,title}:{
+  funds:WorkbookProposalFund[];horizon:FundReturnHorizon;title:string
+}){
+  const shown=funds.slice(0,8);
+  const values=shown.map(f=>f.returns[horizon]).filter(
+    (v):v is number=>typeof v==="number"&&Number.isFinite(v));
+  const low=Math.min(0,...values);
+  const high=Math.max(0,...values);
+  const min=low<0?low*1.16:0;
+  const max=high>0?high*1.16:1;
+  const span=max-min||1;
+  const graphWidth=215;
+  const zeroX=(0-min)/span*graphWidth;
+  return <View style={style.visualCard} wrap={false}>
+    <Text style={style.visualTitle}>{title}</Text>
+    <Text style={style.visualNote}>Individual fund results, as reported in the uploaded workbook. No portfolio return or price history is implied.</Text>
+    <View style={{marginTop:12}}>
+      {shown.map((f,index)=>{
+        const value=f.returns[horizon];
+        const end=value==null?zeroX:(value-min)/span*graphWidth;
+        return <View key={f.id} style={style.chartRow}>
+          <Text style={style.chartName}>{f.name.length>43?f.name.slice(0,40)+"…":f.name}</Text>
+          <View style={{width:"50%",justifyContent:"center"}}>
+            <Svg width="100%" height={17} viewBox={"0 0 "+graphWidth+" 17"}>
+              <Line x1={zeroX} x2={zeroX} y1={0} y2={17}
+                stroke="#A6AAA5" strokeWidth={1}/>
+              {value!=null?<Rect x={Math.min(zeroX,end)} y={4}
+                width={Math.max(1.5,Math.abs(end-zeroX))} height={9} rx={2}
+                fill={CHART_COLORS[index%CHART_COLORS.length]}/>:null}
+            </Svg>
+          </View>
+          <Text style={style.chartValue}>{percentage(value)}</Text>
+        </View>;
+      })}
+    </View>
+    {funds.length>8&&<Text style={[style.visualNote,{marginTop:7}]}>
+      Showing 8 of {funds.length} funds. All reported periods appear in the allocation table.</Text>}
+    {values.length===0&&<Text style={[style.visualNote,{marginTop:7}]}>No reported values are available for this period.</Text>}
+  </View>;
+}
+
+function HistoricalPortfolioGrowthChart({funds}:{funds:WorkbookProposalFund[]}){
+  const reconstructed=reconstructPortfolioGrowth(funds);
+  if(!reconstructed)return <View style={style.visualCard}>
+    <Text style={style.visualTitle}>Historical growth reconstruction</Text>
+    <Text style={style.visualNote}>A historical line could not be reconstructed with adequate date-axis and curve evidence for these funds. The app will not invent historical monthly unit prices. See the saved chart digitisation status in Omega.</Text>
+  </View>;
+  const lines=reconstructed.fundLines;
+  const all=reconstructed.portfolioLine?[...lines.map(l=>l.values),reconstructed.portfolioLine]:lines.map(l=>l.values);
+  const values=all.flat();
+  const min=Math.min(100,...values),max=Math.max(100,...values);
+  const bottom=Math.floor((min-3)/5)*5,top=Math.ceil((max+3)/5)*5;
+  const w=490,h=220,left=42,right=12,upper=14,lower=26;
+  const cw=w-left-right,ch=h-upper-lower;
+  const x=(i:number)=>left+(i/Math.max(1,reconstructed.dates.length-1))*cw;
+  const y=(v:number)=>upper+((top-v)/Math.max(1,top-bottom))*ch;
+  const d=(items:number[])=>items.map((v,i)=>(i?"L":"M")+x(i).toFixed(2)+" "+y(v).toFixed(2)).join(" ");
+  const shownLines=lines.slice(0,7);
+  return <View style={style.visualCard} wrap={false}>
+    <Text style={style.visualTitle}>Reconstructed historical growth</Text>
+    <Text style={style.visualNote}>Based on the plotted historical curves in the original provider factsheets, digitised and redrawn by Omega. Indexed to 100 on the first common month: {reconstructed.start}.</Text>
+    <Svg width="100%" height={230} viewBox={"0 0 "+w+" "+h}>
+      {[0,1,2,3,4].map(i=>{
+        const v=bottom+(top-bottom)*i/4;
+        const yy=y(v);
+        return <React.Fragment key={"grid-"+i}>
+          <Line x1={left} x2={w-right} y1={yy} y2={yy}
+            stroke="#E9E9E5" strokeWidth={.8}/>
+          <Text x={0} y={yy+3} style={{fontSize:7,fill:"#73766F"}}>{v.toFixed(0)}</Text>
+        </React.Fragment>;
+      })}
+      {shownLines.map((line,i)=><Path key={line.id} d={d(line.values)}
+        stroke={CHART_COLORS[(i+1)%CHART_COLORS.length]}
+        strokeWidth={1.25} fill="none"/>)}
+      {reconstructed.portfolioLine?<Path d={d(reconstructed.portfolioLine)}
+        stroke={color.wine} strokeWidth={3} fill="none"/>:null}
+    </Svg>
+    <View style={{flexDirection:"row",justifyContent:"space-between",
+      paddingHorizontal:25,marginTop:-3}}>
+      <Text style={style.visualNote}>{reconstructed.start.slice(0,7)}</Text>
+      <Text style={style.visualNote}>{reconstructed.dates[Math.floor(reconstructed.dates.length/2)].slice(0,7)}</Text>
+      <Text style={style.visualNote}>{reconstructed.end.slice(0,7)}</Text>
+    </View>
+    <View style={{marginTop:15}}>
+      {reconstructed.portfolioLine?<View style={{flexDirection:"row",alignItems:"center",gap:8,marginBottom:8}}>
+        <View style={{width:18,height:3,backgroundColor:color.wine}}/>
+        <Text style={{fontSize:8.5,fontFamily:"Helvetica-Bold",color:color.wine}}>
+          Indicative portfolio index · initial weights, no rebalancing
+        </Text>
+      </View>:null}
+      {shownLines.map((line,i)=><View key={line.id} style={{flexDirection:"row",
+        gap:8,alignItems:"center",marginBottom:5}}>
+        <View style={{width:14,height:2,backgroundColor:CHART_COLORS[(i+1)%CHART_COLORS.length]}}/>
+        <Text style={style.visualNote}>{line.name} ({line.weight.toFixed(1)}%)</Text>
+      </View>)}
+    </View>
+    {!reconstructed.allFundsCovered?
+      <Text style={[style.visualNote,{marginTop:8,color:color.wine}]}>
+        Indicative portfolio line is withheld: no compatible digitised chart exists for {reconstructed.missingFunds.join("; ")}. The individually reconstructed fund lines are shown for reference.
+      </Text>:null}
+    <Text style={[style.visualNote,{marginTop:12}]}>
+      {reconstructed.caveat} All reconstructed readings are approximate graph samples, not official NAV observations, and cannot replace workbook performance returns.
+    </Text>
+  </View>;
+}
 export default function WorkbookProposalPDF({data}:{data:WorkbookProposalData}){
   return <Document title="Omega Investment Bond Proposal - Draft"
     author="Omega Financial Management"
@@ -124,6 +302,34 @@ export default function WorkbookProposalPDF({data}:{data:WorkbookProposalData}){
       </View>
       <Footer/>
     </Page>
+    {data.portfolios.map((p,index)=><Page key={p.id+"-visual"} size="A4" style={style.page} wrap>
+      <Banner label={"PORTFOLIO "+String.fromCharCode(65+index)+" · VISUAL OVERVIEW"}/>
+      <Text style={style.eyebrow}>PORTFOLIO ANALYSIS · WORKBOOK SOURCE</Text>
+      <Text style={style.heading}>{p.title} · At a glance</Text>
+      <Text style={style.subtitle}>{p.description}</Text>
+      <PortfolioAllocationChart funds={p.funds}/>
+      <FundReturnChart funds={p.funds} horizon="threeYear"
+        title="3-year cumulative fund returns"/>
+      {p.funds.length<=5?<FundReturnChart funds={p.funds} horizon="oneYear"
+        title="1-year cumulative fund returns"/>:null}
+      <Text style={[style.visualNote,{marginTop:11}]}>
+        Charts illustrate actual allocations and individual fund-level cumulative returns only. Figures may have different reporting dates or fee bases. No monthly history, implied portfolio growth or portfolio-level return has been calculated. Source: {data.workbookFilename}.
+      </Text>
+      <Footer/>
+    </Page>)}
+    {data.portfolios.map((p,index)=><Page key={p.id+"-history"} size="A4" style={style.page} wrap>
+      <Banner label={"PORTFOLIO "+String.fromCharCode(65+index)+" · HISTORICAL GROWTH"}/>
+      <Text style={style.eyebrow}>ORIGINAL PDF GRAPH CURVES · RECONSTRUCTED</Text>
+      <Text style={style.heading}>{p.title} · Historical growth</Text>
+      <HistoricalPortfolioGrowthChart funds={p.funds}/>
+      <View style={style.alert}>
+        <Text style={style.alertTitle}>RECONSTRUCTION NOTICE</Text>
+        <Text style={style.note}>
+          This line chart was redrawn using approximate monthly readings digitised from provider factsheet graphics. It is illustrative and does not represent a verified portfolio performance calculation or independently sourced unit-price history. The cumulative return tables elsewhere in this proposal come exclusively from the uploaded Excel workbook.
+        </Text>
+      </View>
+      <Footer/>
+    </Page>)}
     {data.portfolios.map((p,index)=><Page key={p.id} size="A4" style={style.page} wrap>
       <Banner label={"PORTFOLIO "+String.fromCharCode(65+index)+" · DRAFT"}/>
       <Text style={style.eyebrow}>PORTFOLIO COMPOSITION</Text>

@@ -7,6 +7,8 @@ import type { NextConfig } from "next";
  */
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  // Native canvas (.node) and PDF.js are runtime Node modules, not Webpack assets.
+  serverExternalPackages: ["@napi-rs/canvas","pdfjs-dist"],
   outputFileTracingIncludes: {
     "/api/proposal/pdf": [
       "./node_modules/pdfkit/js/standard-fonts/**/*",
