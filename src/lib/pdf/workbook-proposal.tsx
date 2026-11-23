@@ -84,8 +84,8 @@ function Banner({label}:{label:string}){
 }
 function Footer(){
   return <View style={style.footer} fixed>
-    <Text style={style.footerText}>OMEGA FINANCIAL MANAGEMENT  •  DRAFT FOR ADVISER REVIEW</Text>
-    <Text style={style.footerText} render={({pageNumber,totalPages})=>pageNumber+" / "+totalPages}/>
+    <Text style={style.footerText}>OFM Financial Ltd T/A Omega Financial Management · regulated by the Central Bank of Ireland</Text>
+    <Text style={style.footerText}>ADVISER REVIEW DRAFT</Text>
   </View>;
 }
 export default function WorkbookProposalPDF({data}:{data:WorkbookProposalData}){
