@@ -96,7 +96,7 @@ function Banner({label}:{label:string}){
 function Footer(){
   return <View style={style.footer} fixed>
     <Text style={style.footerText}>OFM Financial Ltd T/A Omega Financial Management · regulated by the Central Bank of Ireland</Text>
-    <Text style={style.footerText}>ADVISER REVIEW DRAFT</Text>
+    <Text style={style.footerText}>INVESTMENT BOND PROPOSAL</Text>
   </View>;
 }
 const CHART_COLORS=["#671E27","#A8995F","#647579","#809485","#AC7471","#9A9C94","#977F70","#76808B"];
@@ -176,7 +176,7 @@ function FundReturnChart({funds,horizon,title}:{
   const zeroX=(0-min)/span*graphWidth;
   return <View style={style.visualCard} wrap={false}>
     <Text style={style.visualTitle}>{title}</Text>
-    <Text style={style.visualNote}>Individual fund results, as reported in the uploaded workbook. No portfolio return or price history is implied.</Text>
+    <Text style={style.visualNote}>Cumulative performance by fund · %</Text>
     <View style={{marginTop:12}}>
       {shown.map((f,index)=>{
         const value=f.returns[horizon];
@@ -206,7 +206,7 @@ function HistoricalPortfolioGrowthChart({funds}:{funds:WorkbookProposalFund[]}){
   const reconstructed=reconstructPortfolioGrowth(funds);
   if(!reconstructed)return <View style={style.visualCard}>
     <Text style={style.visualTitle}>Historical growth reconstruction</Text>
-    <Text style={style.visualNote}>A historical line could not be reconstructed with adequate date-axis and curve evidence for these funds. The app will not invent historical monthly unit prices. See the saved chart digitisation status in Omega.</Text>
+    <Text style={style.visualNote}>Historical growth chart not available for this selection.</Text>
   </View>;
   const lines=reconstructed.fundLines;
   const all=reconstructed.portfolioLine?[...lines.map(l=>l.values),reconstructed.portfolioLine]:lines.map(l=>l.values);
@@ -221,7 +221,7 @@ function HistoricalPortfolioGrowthChart({funds}:{funds:WorkbookProposalFund[]}){
   const shownLines=lines.slice(0,7);
   return <View style={style.visualCard} wrap={false}>
     <Text style={style.visualTitle}>Reconstructed historical growth</Text>
-    <Text style={style.visualNote}>Based on the plotted historical curves in the original provider factsheets, digitised and redrawn by Omega. Indexed to 100 on the first common month: {reconstructed.start}.</Text>
+    <Text style={style.visualNote}>Illustrative reconstruction · Index 100 at {reconstructed.start}</Text>
     <Svg width="100%" height={230} viewBox={"0 0 "+w+" "+h}>
       {[0,1,2,3,4].map(i=>{
         const v=bottom+(top-bottom)*i/4;
@@ -248,7 +248,7 @@ function HistoricalPortfolioGrowthChart({funds}:{funds:WorkbookProposalFund[]}){
       {reconstructed.portfolioLine?<View style={{flexDirection:"row",alignItems:"center",gap:8,marginBottom:8}}>
         <View style={{width:18,height:3,backgroundColor:color.wine}}/>
         <Text style={{fontSize:8.5,fontFamily:"Helvetica-Bold",color:color.wine}}>
-          Indicative portfolio index · initial weights, no rebalancing
+          Illustrative combined portfolio · initial allocation
         </Text>
       </View>:null}
       {shownLines.map((line,i)=><View key={line.id} style={{flexDirection:"row",
@@ -259,22 +259,22 @@ function HistoricalPortfolioGrowthChart({funds}:{funds:WorkbookProposalFund[]}){
     </View>
     {!reconstructed.allFundsCovered?
       <Text style={[style.visualNote,{marginTop:8,color:color.wine}]}>
-        Indicative portfolio line is withheld: no compatible digitised chart exists for {reconstructed.missingFunds.join("; ")}. The individually reconstructed fund lines are shown for reference.
+        Combined portfolio line unavailable. Individual fund lines shown: {reconstructed.missingFunds.join("; ")}
       </Text>:null}
     <Text style={[style.visualNote,{marginTop:12}]}>
-      {reconstructed.caveat} All reconstructed readings are approximate graph samples, not official NAV observations, and cannot replace workbook performance returns.
+      Illustrative chart reconstructed from plotted data; not an official historical portfolio return.
     </Text>
   </View>;
 }
 export default function WorkbookProposalPDF({data}:{data:WorkbookProposalData}){
-  return <Document title="Omega Investment Bond Proposal - Draft"
+  return <Document title="Omega Investment Bond Proposal"
     author="Omega Financial Management"
-    subject="Draft investment allocation and uploaded workbook fund returns" language="en-IE">
+    subject="Investment bond proposal and selected portfolio allocations" language="en-IE">
     <Page size="A4" style={style.page}>
-      <Banner label="DRAFT PROPOSAL · ADVISER REVIEW"/>
+      <Banner label="INVESTMENT BOND PROPOSAL"/>
       <Text style={style.eyebrow}>INVESTMENT BOND & PORTFOLIO ALLOCATION</Text>
       <Text style={style.title}>Investment bond proposal</Text>
-      <Text style={style.subtitle}>Prepared {data.preparedDate}. Fund performance is reproduced from the current Omega uploaded workbook, not from PDF factsheet performance tables.</Text>
+      <Text style={style.subtitle}>Prepared {data.preparedDate}</Text>
       <View style={style.hero}>
         <Text style={style.fieldLabel}>Initial investment</Text>
         <Text style={style.investment}>{euro(data.investment)}</Text>
@@ -282,7 +282,7 @@ export default function WorkbookProposalPDF({data}:{data:WorkbookProposalData}){
           <View style={style.fact}><Text style={style.fieldLabel}>Prepared for</Text><Text style={style.fieldValue}>{data.client||"Client name not provided"}</Text></View>
           <View style={style.fact}><Text style={style.fieldLabel}>Prepared by</Text><Text style={style.fieldValue}>{data.adviser}</Text></View>
           <View style={style.fact}><Text style={style.fieldLabel}>Portfolio options</Text><Text style={style.fieldValue}>{String(data.portfolios.length)}</Text></View>
-          <View style={style.fact}><Text style={style.fieldLabel}>Performance source</Text><Text style={style.fieldValue}>Uploaded Omega workbook</Text></View>
+          <View style={style.fact}><Text style={style.fieldLabel}>Selected funds</Text><Text style={style.fieldValue}>{String(data.portfolios.reduce((n,p)=>n+p.funds.length,0))}</Text></View>
         </View>
       </View>
       <View style={style.box}>
@@ -296,15 +296,12 @@ export default function WorkbookProposalPDF({data}:{data:WorkbookProposalData}){
           <Text style={style.note}>{p.description}</Text>
         </View>)}
       </View>
-      <View style={style.alert}>
-        <Text style={style.alertTitle}>IMPORTANT — DRAFT, NOT APPROVED FOR CLIENT DISTRIBUTION</Text>
-        <Text style={style.note}>Fund returns are the cumulative percentages supplied in the uploaded workbook. Individual fund reporting dates, return/fee conventions, product charges, share classes and suitability have not been independently verified. A PDF filename match indicates a document link only, not verification of its contents. No monthly unit prices, portfolio-level historical returns, annual values or forecasts have been invented.</Text>
-      </View>
+
       <Footer/>
     </Page>
     {data.portfolios.map((p,index)=><Page key={p.id+"-visual"} size="A4" style={style.page} wrap>
       <Banner label={"PORTFOLIO "+String.fromCharCode(65+index)+" · VISUAL OVERVIEW"}/>
-      <Text style={style.eyebrow}>PORTFOLIO ANALYSIS · WORKBOOK SOURCE</Text>
+      <Text style={style.eyebrow}>PORTFOLIO ANALYSIS</Text>
       <Text style={style.heading}>{p.title} · At a glance</Text>
       <Text style={style.subtitle}>{p.description}</Text>
       <PortfolioAllocationChart funds={p.funds}/>
@@ -312,26 +309,19 @@ export default function WorkbookProposalPDF({data}:{data:WorkbookProposalData}){
         title="3-year cumulative fund returns"/>
       {p.funds.length<=5?<FundReturnChart funds={p.funds} horizon="oneYear"
         title="1-year cumulative fund returns"/>:null}
-      <Text style={[style.visualNote,{marginTop:11}]}>
-        Charts illustrate actual allocations and individual fund-level cumulative returns only. Figures may have different reporting dates or fee bases. No monthly history, implied portfolio growth or portfolio-level return has been calculated. Source: {data.workbookFilename}.
-      </Text>
+
       <Footer/>
     </Page>)}
-    {data.portfolios.map((p,index)=><Page key={p.id+"-history"} size="A4" style={style.page} wrap>
+    {data.portfolios.filter(p=>reconstructPortfolioGrowth(p.funds)!==null).map((p,index)=><Page key={p.id+"-history"} size="A4" style={style.page} wrap>
       <Banner label={"PORTFOLIO "+String.fromCharCode(65+index)+" · HISTORICAL GROWTH"}/>
-      <Text style={style.eyebrow}>ORIGINAL PDF GRAPH CURVES · RECONSTRUCTED</Text>
+      <Text style={style.eyebrow}>HISTORICAL PERFORMANCE</Text>
       <Text style={style.heading}>{p.title} · Historical growth</Text>
       <HistoricalPortfolioGrowthChart funds={p.funds}/>
-      <View style={style.alert}>
-        <Text style={style.alertTitle}>RECONSTRUCTION NOTICE</Text>
-        <Text style={style.note}>
-          This line chart was redrawn using approximate monthly readings digitised from provider factsheet graphics. It is illustrative and does not represent a verified portfolio performance calculation or independently sourced unit-price history. The cumulative return tables elsewhere in this proposal come exclusively from the uploaded Excel workbook.
-        </Text>
-      </View>
+
       <Footer/>
     </Page>)}
     {data.portfolios.map((p,index)=><Page key={p.id} size="A4" style={style.page} wrap>
-      <Banner label={"PORTFOLIO "+String.fromCharCode(65+index)+" · DRAFT"}/>
+      <Banner label={"PORTFOLIO "+String.fromCharCode(65+index)+" · ALLOCATIONS"}/>
       <Text style={style.eyebrow}>PORTFOLIO COMPOSITION</Text>
       <Text style={style.heading}>{p.title}</Text>
       <Text style={style.subtitle}>{p.description}</Text>
@@ -362,7 +352,7 @@ export default function WorkbookProposalPDF({data}:{data:WorkbookProposalData}){
         </View>)}
       </View>
       <View style={{marginTop:12}}>
-        <Text style={style.note}>All performance figures above are cumulative, not annualised; 3-, 5- and 10-year periods are not annual returns. “—” means unavailable in the workbook. Initial allocations reflect {euro(data.investment)} multiplied by each selected weight; no growth or rebalancing is assumed.</Text>
+        <Text style={style.note}>Performance figures are cumulative percentages, not annualised. “—” indicates that a value is unavailable.</Text>
       </View>
       <View style={style.divider}/>
       <Text style={style.section}>Initial investment breakdown</Text>
@@ -370,32 +360,25 @@ export default function WorkbookProposalPDF({data}:{data:WorkbookProposalData}){
         <Text style={[style.note,{width:"76%"}]}>{f.name} ({f.weight.toFixed(2)}%)</Text>
         <Text style={style.note}>{euro(f.allocatedAmount)}</Text>
       </View>)}
-      <View style={style.alert}>
-        <Text style={style.alertTitle}>DATA BASIS AND LIMITATIONS</Text>
-        <Text style={style.note}>Source: {data.workbookFilename}. Fund names and every return shown are taken only from that workbook. PDF filenames provide document association only. Dates and charge/fee basis for the workbook returns are not confirmed. Returns from different funds must not be aggregated as a validated portfolio return until common valuation dates and conventions are established. The value of investments can fall as well as rise; past performance is not a reliable indicator of future performance.</Text>
-      </View>
+
       <Footer/>
     </Page>)}
     {data.portfolios.map((p,index)=><Page key={p.id+"-factsheets"} size="A4" style={style.page} wrap>
-      <Banner label={"PORTFOLIO "+String.fromCharCode(65+index)+" · SOURCE DETAILS"}/>
-      <Text style={style.eyebrow}>PROVIDER FACTSHEET INFORMATION</Text>
+      <Banner label={"PORTFOLIO "+String.fromCharCode(65+index)+" · FUND DETAILS"}/>
+      <Text style={style.eyebrow}>FUND INFORMATION</Text>
       <Text style={style.heading}>{p.title} · Fund details</Text>
-      <Text style={style.note}>The following investment objectives, strategy notes, risks and charges are taken from the linked uploaded PDF factsheets where text extraction was available. These details have not been independently verified. Fund returns are sourced separately and exclusively from the Excel workbook.</Text>
+      
       {p.funds.map(f=><View key={f.id+"-source"} style={style.sourceCard} wrap={false}>
         <Text style={style.sourceTitle}>{f.name}</Text>
-        <Text style={style.meta}>{f.provider} · PDF: {f.factsheet.filename??"Not linked"}</Text>
-        <Text style={style.meta}>Printed PDF title: {f.factsheet.title??"Not extracted"} · Factsheet date: {f.factsheet.date??"Not available"}</Text>
+        <Text style={style.meta}>{f.provider}{f.factsheet.date?" · As at "+f.factsheet.date:""}</Text>
+        
         <Text style={style.meta}>MoneyMate ID: {f.factsheet.moneyMateId??"Not stated"} · Currency: {f.factsheet.baseCurrency??"Not stated"} · Numeric risk rating: {f.factsheet.riskRating==null?"Not stated":f.factsheet.riskRating+"/7"}</Text>
-        <Text style={style.meta}>AMC: {percentage(f.factsheet.amcPct)} · CIV charge: {percentage(f.factsheet.civPct)} (where stated in PDF; these charges have not been deducted from workbook returns)</Text>
-        <Text style={style.meta}>Objective: {f.factsheet.objective??"Not extracted from PDF"}</Text>
+        <Text style={style.meta}>AMC: {percentage(f.factsheet.amcPct)} · CIV charge: {percentage(f.factsheet.civPct)}</Text>
+        <Text style={style.meta}>Objective: {f.factsheet.objective??"Information unavailable"}</Text>
         {f.factsheet.strategy?<Text style={style.meta}>Strategy: {f.factsheet.strategy}</Text>:null}
-        {f.factsheet.chartPages.length?
-          <Text style={style.meta}>Charts in source PDF: {f.factsheet.chartPages.join("; ")}. Original PDF graphics are not recreated as calculated charts.</Text>:null}
+
       </View>)}
-      <View style={style.alert}>
-        <Text style={style.alertTitle}>ADVISER SOURCE CHECK</Text>
-        <Text style={style.note}>Please verify factsheet dates, share class, PDF descriptions, tax, risk and charges before sending to a client. Reported workbook returns are cumulative and have no confirmed common date or charge basis. Missing data is shown as unavailable rather than inferred.</Text>
-      </View>
+
       <Footer/>
     </Page>)}
   </Document>;
