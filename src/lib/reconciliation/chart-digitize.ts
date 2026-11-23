@@ -249,7 +249,7 @@ export async function digitizePdfGrowthChart(bytes:Uint8Array):Promise<GrowthRes
   try{
     const document=await task.promise;
     let last="No digitizable chart found";
-    for(let pageNumber=1;pageNumber<=Math.min(3,document.numPages);pageNumber++){
+    for(let pageNumber=1;pageNumber<=Math.min(12,document.numPages);pageNumber++){
       const page=await document.getPage(pageNumber);
       try{
         const result=await scanPage(page,pageNumber-1);
