@@ -66,7 +66,8 @@ test("A4 PDF can render uploaded-workbook returns and PDF factsheet metadata wit
     ])assert.ok(overview.includes(heading),
       "Portfolio overview page must contain "+heading);
   }finally{
-    await pdfDocument.destroy();
+    const disposable=pdfDocument as unknown as {destroy?:()=>Promise<void>};
+    if(typeof disposable.destroy==="function")await disposable.destroy();
   }
 
 });
