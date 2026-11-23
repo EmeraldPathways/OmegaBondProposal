@@ -35,13 +35,13 @@ test("new A4 Omega PDF displays actual workbook fund charts and PDF metadata wit
   assert.match(pdf,/f\.factsheet\.objective/);
   assert.match(pdf,/f\.factsheet\.riskRating/);
   assert.match(pdf,/f\.factsheet\.amcPct/);
-  assert.match(pdf,/f\.factsheet\.chartPages/);
-  assert.match(pdf,/DRAFT/);
+  assert.doesNotMatch(pdf,/Charts in source PDF|Printed PDF title|data\.workbookFilename\}/);
+  assert.doesNotMatch(pdf,/DRAFT|NOT APPROVED FOR CLIENT DISTRIBUTION/);
   assert.match(pdf,/PortfolioAllocationChart/);
   assert.match(pdf,/FundReturnChart/);
   assert.match(pdf,/3-year cumulative fund returns/);
   assert.match(pdf,/1-year cumulative fund returns/);
-  assert.match(pdf,/No monthly history, implied portfolio growth/);
+  assert.match(pdf,/HistoricalPortfolioGrowthChart/);
   assert.doesNotMatch(pdf,/Math\.random|monthlyPrices|performanceSeries|sampleHistorical/);
 });
 test("Vercel bundles the PDF renderer's fonts",()=>{
@@ -59,4 +59,27 @@ test("live preview and download share the identical authenticated PDF Blob",()=>
   assert.match(viewer,/a\.href=url/);
   assert.match(viewer,/credentials:"same-origin"/);
   assert.doesNotMatch(viewer,/print\(/);
+});
+
+test("client PDF omits internal upload provenance, validation notices and review blocks",()=>{
+  const pdf=read("src/lib/pdf/workbook-proposal.tsx");
+  for(const expression of [
+    /DATA BASIS AND LIMITATIONS/,
+    /ADVISER SOURCE CHECK/,
+    /IMPORTANT — DRAFT/,
+    /RECONSTRUCTION NOTICE/,
+    /Source: \{data\.workbookFilename\}/,
+    /Fund performance is reproduced from the current Omega uploaded workbook/,
+    /PDF filenames provide document association/,
+    /Please verify factsheet dates/,
+    /not been independently verified/,
+    /Original PDF graphics/,
+    /PDF: \{f\.factsheet\.filename/,
+  ])assert.doesNotMatch(pdf,expression);
+  assert.match(pdf,/f\.factsheet\.objective/);
+  assert.match(pdf,/f\.returns\.oneYear/);
+  assert.match(pdf,/PortfolioAllocationChart/);
+  assert.match(pdf,/Illustrative reconstruction/);
+  const viewer=read("src/components/proposal-pdf-viewer.tsx");
+  assert.match(viewer,/Omega-Investment-Bond-Proposal\.pdf/);
 });
