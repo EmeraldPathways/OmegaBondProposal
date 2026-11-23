@@ -3,8 +3,8 @@ import {z} from "zod";
 import {auth,ADMIN_EMAIL,isLoginConfigured} from "@/auth";
 import {getNeonSql} from "@/lib/server/neon";
 import {getActiveFunds} from "@/lib/server/active-funds";
-import {matchWorkbookReturn} from "@/lib/reconciliation/workbook-source";
-import type {WorkbookEntry,ReportedReturns} from "@/lib/reconciliation/engine";
+import {matchWorkbookReturn,workbookNameKey} from "@/lib/reconciliation/workbook-source";
+import type {WorkbookEntry,ReportedReturns,FactSheetData} from "@/lib/reconciliation/engine";
 import WorkbookProposalPDF, {
   type WorkbookProposalData,type WorkbookProposalFund,type WorkbookReturnPeriods
 } from "@/lib/pdf/workbook-proposal";
@@ -93,8 +93,11 @@ export async function POST(request:Request){
       sql.query("SELECT provider,row_number,source_name,reported_returns "+
         "FROM fund_source_performance WHERE import_id=$1::uuid",[sourceId]),
       sql.query("SELECT DISTINCT workbook_import_id::text AS id FROM fund_active_names"),
-      sql.query("SELECT fund_id,factsheet_import_id::text,status,evidence,"+
-        "extracted_factsheet FROM fund_reconciliations")
+      sql.query("SELECT r.fund_id,r.factsheet_import_id::text,r.status,r.evidence,"+
+        "i.filename AS source_filename,s.data AS source_data "+
+        "FROM fund_reconciliations r "+
+        "LEFT JOIN imports i ON i.id=r.factsheet_import_id "+
+        "LEFT JOIN fund_source_factsheets s ON s.import_id=r.factsheet_import_id")
     ]);
     if(activeSources.length!==1||String(activeSources[0].id)!==sourceId)
       return validationError("The workbook has been uploaded but not imported. Run workbook matching first.");
@@ -112,13 +115,27 @@ export async function POST(request:Request){
           if(!row)throw new Error("Workbook return row missing for "+fund.name);
           const doc=pdfMap.get(id);
           const proof=doc?.evidence as {matchBasis?:string}|null;
-          const metadata=doc?.extracted_factsheet as {filename?:string}|null;
+          const pdfFilename=doc?.source_filename?String(doc.source_filename):null;
+          if(!pdfFilename || proof?.matchBasis!=="unique_provider_qualified_filename" ||
+             workbookNameKey(pdfFilename.replace(/\\.pdf$/i,""))!==workbookNameKey(fund.name))
+            throw new Error("A current matching PDF filename is missing for "+fund.name);
+          const pdf=doc?.source_data as FactSheetData|null;
+          const short=(v:unknown,max=600)=>typeof v==="string"?v.trim().slice(0,max)||null:null;
+          const numeric=(v:unknown)=>typeof v==="number"&&Number.isFinite(v)&&v>=0&&v<=100?v:null;
           return {
             id,name:fund.name,provider:fund.provider,
             weight,allocatedAmount:data.investment*weight/100,
             returns:safeReturns(row.returns),
-            factsheetFilename:proof?.matchBasis==="unique_provider_qualified_filename"
-              ?metadata?.filename??null:null
+            factsheet:{
+              filename:pdfFilename,title:short(pdf?.title,160),date:short(pdf?.asOf,50),
+              objective:short(pdf?.objective,1200),strategy:short(pdf?.strategy,1200),
+              moneyMateId:short(pdf?.moneyMateId,40),baseCurrency:short(pdf?.baseCurrency,8),
+              riskRating:typeof pdf?.riskRating==="number"&&Number.isInteger(pdf.riskRating)&&
+                pdf.riskRating>=1&&pdf.riskRating<=7?pdf.riskRating:null,
+              amcPct:numeric(pdf?.amcPct),civPct:numeric(pdf?.civPct),
+              chartPages:(pdf?.chartReferences??[]).slice(0,12).map(c=>
+                String(c.label).slice(0,60)+" (page "+Number(c.page)+")")
+            }
           };
         });
       return {id:p.id,title:p.title,description:p.description,funds};
@@ -142,6 +159,7 @@ export async function POST(request:Request){
   }catch(error){
     if(error instanceof Error && (
       error.message.startsWith("Workbook return row missing")||
+      error.message.startsWith("A current matching PDF filename is missing")||
       error.message.startsWith("A workbook return value is invalid")
     ))return validationError(error.message);
     console.error("Omega workbook proposal PDF generation failed.");
