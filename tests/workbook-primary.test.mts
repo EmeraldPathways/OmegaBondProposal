@@ -62,15 +62,15 @@ test("Duplicate workbook performance labels must not select an arbitrary row",()
   book.getWorksheet("AVIVA")!.addRow([f.name,1,2,3,4,5,6,7,8,9]);
   assert.equal(matchWorkbookReturn(f,workbookReturnRows(book)),null);
 });
-test("A renamed PDF cannot override contradictory printed identity",()=>{
+test("The exact PDF filename controls linking, even if the internal title differs",()=>{
   const f={id:"test",provider:"Aviva" as const,name:"Aviva Fixed ESG 80 Series 1"};
-  const pdf={importId:"pdf",filename:"Aviva - Aviva Fixed ESG 80 Series 1.pdf",
+  const pdf={importId:"pdf",filename:"Aviva Fixed ESG 80 Series 1.pdf",
     providerHint:"Aviva",title:"Aviva Fixed ESG 60 Series 1"} as FactSheetData;
-  assert.equal(reconcilePdfOnly(f,[pdf]).factsheetIdentityApproved,false);
+  assert.equal(reconcilePdfOnly(f,[pdf]).factsheetIdentityApproved,true);
 });
-test("Renamed PDF can assist matching when internally printed title supports it",()=>{
+test("An exact PDF filename links its corresponding workbook fund",()=>{
   const f={id:"test",provider:"Aviva" as const,name:"Aviva Fixed ESG 60 Series 1"};
-  const pdf={importId:"pdf",filename:"Aviva - Aviva Fixed ESG 60 Series 1.pdf",
+  const pdf={importId:"pdf",filename:"Aviva Fixed ESG 60 Series 1.pdf",
     providerHint:"Aviva",title:"Aviva Fixed ESG 60 Series 1"} as FactSheetData;
   assert.equal(reconcilePdfOnly(f,[pdf]).factsheetIdentityApproved,true);
 });
@@ -142,8 +142,8 @@ test("Two similarly named New Ireland PDF titles resolve to different funds with
     {importId:"pdf-technology",filename:"New Ireland Technology Indexed Fund.pdf",
       providerHint:"New Ireland",title:"New Ireland Technology Indexed Fund"}
   ] as FactSheetData[];
-  const a=reconcilePdfOnly(tech,pdfs,{requireExactPrintedTitle:true});
-  const b=reconcilePdfOnly(technology,pdfs,{requireExactPrintedTitle:true});
+  const a=reconcilePdfOnly(tech,pdfs);
+  const b=reconcilePdfOnly(technology,pdfs);
   assert.equal(a.factsheetIdentityApproved,true);
   assert.equal(b.factsheetIdentityApproved,true);
   assert.equal(a.factsheet?.importId,"pdf-tech");
@@ -155,6 +155,38 @@ test("Never auto-approve only the other alias-equivalent PDF",()=>{
     importId:"pdf-technology",filename:"New Ireland Technology Indexed Fund.pdf",
     providerHint:"New Ireland",title:"New Ireland Technology Indexed Fund"
   } as FactSheetData;
-  const match=reconcilePdfOnly(tech,[unrelated],{requireExactPrintedTitle:true});
+  const match=reconcilePdfOnly(tech,[unrelated]);
   assert.equal(match.factsheetIdentityApproved,false);
+});
+
+test("All 107 uniquely named PDFs link automatically using the workbook, not their printed titles",()=>{
+  const book=fixture(),funds=workbookFundNames(book),rows=workbookReturnRows(book);
+  verifyWorkbookConsistency(funds,rows);
+  const pdfs=funds.map((f,i)=>({
+    importId:"pdf-"+i,filename:f.name+".pdf",
+    // A missing or differing extracted title never changes the exact filename link.
+    providerHint:null,title:i%2?"Unrelated printed title":null
+  })) as FactSheetData[];
+  const matches=funds.map(f=>reconcilePdfOnly(f,pdfs));
+  assert.equal(matches.length,107);
+  assert.ok(matches.every(r=>r.status==="auto_approved"&&r.factsheetIdentityApproved));
+  assert.equal(new Set(matches.map(r=>r.factsheet!.importId)).size,107);
+  assert.ok(funds.every(f=>matchWorkbookReturn(f,rows)!==null));
+});
+test("Duplicate PDF filenames are not silently auto-linked",()=>{
+  const f={id:"aviva",provider:"Aviva" as const,name:"Aviva Cash Fund"};
+  const pdfs=[
+    {importId:"one",filename:"Aviva Cash Fund.pdf",providerHint:null,title:null},
+    {importId:"two",filename:"Aviva Cash Fund.PDF",providerHint:null,title:null}
+  ] as FactSheetData[];
+  const match=reconcilePdfOnly(f,pdfs);
+  assert.equal(match.factsheetIdentityApproved,false);
+  assert.equal(match.status,"needs_review");
+  assert.equal(match.factsheet,null);
+});
+test("A different series filename never receives an invented exact link",()=>{
+  const f={id:"a",provider:"Aviva" as const,name:"Aviva Fixed ESG 80 Series 1"};
+  const pdf={importId:"wrong",filename:"Aviva Fixed ESG 60 Series 1.pdf",
+    providerHint:"Aviva",title:"Aviva Fixed ESG 80 Series 1"} as FactSheetData;
+  assert.equal(reconcilePdfOnly(f,[pdf]).factsheetIdentityApproved,false);
 });
