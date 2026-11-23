@@ -1,5 +1,6 @@
 import ExcelJS from "exceljs";
-import {APPROVED_FUNDS,type ApprovedFund} from "@/lib/approved-funds";
+import {createHash} from "node:crypto";
+import type {ApprovedFund} from "@/lib/approved-funds";
 import {HORIZONS,normalName,type WorkbookEntry,type ReportedReturns} from "./engine";
 
 const sheets:Record<string,string>={
@@ -25,9 +26,20 @@ const percent=(cell:ExcelJS.Cell):number|null=>{
   return Number.isFinite(result)?result:null;
 };
 
-/** The FUNDS worksheet, not the old hard-coded names, controls all 115 names.
- * Stable IDs are assigned by provider row order, retaining portfolio references.
- * Do not reorder funds when correcting names. */
+export const CURRENT_FUND_COUNTS:Record<string,number>={
+  "Aviva":25,"Zurich":28,"New Ireland":40,"Standard Life":14
+};
+export const CURRENT_FUND_TOTAL=107;
+
+function fundId(provider:string,name:string):string{
+  const prefix=provider.toLowerCase().replace(/[^a-z0-9]+/g,"-");
+  const digest=createHash("sha256").update(provider+"|"+normalName(name)).digest("hex").slice(0,16);
+  return prefix+"-"+digest;
+}
+
+/** The corrected workbook is the source of all 107 current fund identities.
+ * IDs are name-based rather than based on the old 115-name list or worksheet
+ * row positions, so reordering provider rows cannot assign a wrong fund ID. */
 export function workbookFundNames(book:ExcelJS.Workbook):ApprovedFund[]{
   const master=book.getWorksheet("FUNDS");
   if(!master)throw new Error("Updated workbook must include a FUNDS worksheet.");
@@ -40,18 +52,15 @@ export function workbookFundNames(book:ExcelJS.Workbook):ApprovedFund[]{
     if(!provider&&!name)continue;
     if(!Object.hasOwn(sheets,provider)||!name||name.length>220)
       throw new Error("FUNDS row "+row+" must contain a valid provider and fund name.");
-    const count=(counters.get(provider)??0)+1;
-    counters.set(provider,count);
-    const template=APPROVED_FUNDS.filter(f=>f.provider===provider)[count-1];
-    if(!template)throw new Error("FUNDS has too many "+provider+" rows.");
+    counters.set(provider,(counters.get(provider)??0)+1);
     const identity=provider+"|"+normalName(name);
     if(seen.has(identity))throw new Error("Duplicate fund name in FUNDS: "+name);
     seen.add(identity);
-    all.push({...template,name});
+    all.push({id:fundId(provider,name),provider:provider as ApprovedFund["provider"],name});
   }
-  if(all.length!==115 ||
-      Object.keys(sheets).some(p=>counters.get(p)!==APPROVED_FUNDS.filter(f=>f.provider===p).length))
-    throw new Error("FUNDS must contain the original 115 funds with the same provider counts (Aviva 30, Zurich 29, New Ireland 42, Standard Life 14).");
+  if(all.length!==CURRENT_FUND_TOTAL ||
+      Object.keys(CURRENT_FUND_COUNTS).some(p=>counters.get(p)!==CURRENT_FUND_COUNTS[p]))
+    throw new Error("FUNDS must list 107 funds: Aviva 25, Zurich 28, New Ireland 40, Standard Life 14.");
   return all;
 }
 
@@ -75,6 +84,25 @@ export function workbookReturnRows(book:ExcelJS.Workbook):WorkbookEntry[]{
     }
   }
   return results;
+}
+
+/** Reject incomplete, duplicated or unmatched provider performance rows.
+ * All names must be in the FUNDS list and all FUNDS names must have one row. */
+export function verifyWorkbookConsistency(funds:ApprovedFund[],rows:WorkbookEntry[]):void{
+  if(rows.length!==funds.length)
+    throw new Error("Provider performance sheets must contain exactly "+funds.length+" fund rows.");
+  const counts=new Map<string,number>();
+  for(const row of rows){
+    const identity=row.provider+"|"+normalName(row.sourceName);
+    counts.set(identity,(counts.get(identity)??0)+1);
+  }
+  for(const fund of funds){
+    const key=fund.provider+"|"+normalName(fund.name);
+    if(counts.get(key)!==1)
+      throw new Error("Missing or duplicated performance row for "+fund.provider+" / "+fund.name);
+  }
+  if([...counts].some(([key,count])=>count!==1||!funds.some(f=>f.provider+"|"+normalName(f.name)===key)))
+    throw new Error("Provider sheets include duplicates or fund names not listed in FUNDS.");
 }
 
 /** Unique normalized name AND provider match. Ambiguous or absent workbook rows
