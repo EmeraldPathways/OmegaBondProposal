@@ -37,6 +37,11 @@ export function workbookNameKey(name:string):string{
   return name.normalize("NFKC").toLowerCase().replace(/&/g," and ")
     .replace(/[^a-z0-9]+/g," ").replace(/\s+/g," ").trim();
 }
+/** The *filename*, not a PDF's internally printed title, identifies the
+ * workbook fund. Strip exactly the final .pdf extension before comparison. */
+export function pdfFilenameFundKey(filename:string):string{
+  return workbookNameKey(filename.replace(/\.pdf$/i,""));
+}
 function fundId(provider:string,name:string):string{
   const prefix=provider.toLowerCase().replace(/[^a-z0-9]+/g,"-");
   const digest=createHash("sha256").update(provider+"|"+workbookNameKey(name)).digest("hex").slice(0,16);
