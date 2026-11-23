@@ -85,3 +85,16 @@ test("client PDF omits internal upload provenance, validation notices and review
   const viewer=read("src/components/proposal-pdf-viewer.tsx");
   assert.match(viewer,/Omega-Investment-Bond-Proposal\.pdf/);
 });
+
+test("each portfolio combines line chart, compact donut, invested amounts and cumulative-return table on one A4 overview page",()=>{
+  const pdf=read("src/lib/pdf/workbook-proposal.tsx");
+  assert.match(pdf,/CompactPortfolioAllocationAndBreakdown/);
+  assert.match(pdf,/CumulativeReturnLineChart funds=\{group\}/);
+  assert.match(pdf,/FundAllocationReturnsTable funds=\{group\}/);
+  assert.match(pdf,/INVESTMENT OVERVIEW/);
+  assert.match(pdf,/totalInvestment=\{data\.investment\}/);
+  assert.doesNotMatch(pdf,/p\.id\+"-visual"/);
+  assert.doesNotMatch(pdf,/p\.id\+"-cumulative-"/);
+  assert.doesNotMatch(pdf,/p\.id\+"-history"/);
+  assert.match(pdf,/chartFundGroups\(p\.funds,8\)/);
+});
