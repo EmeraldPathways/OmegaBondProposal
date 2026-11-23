@@ -1,41 +1,45 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+const read = p => readFileSync(new URL("../"+p,import.meta.url),"utf8");
 
-const read = p => readFileSync(new URL("../" + p, import.meta.url), "utf8");
-
-test("server-generated PDF viewer is preserved for verified client proposals",()=>{
-  const workspace = read("src/components/workspace.tsx");
-  const viewer = read("src/components/proposal-pdf-viewer.tsx");
-  const endpoint = read("src/app/api/proposal/pdf/route.ts");
-  assert.doesNotMatch(workspace, /window\.print\s*\(/);
-  assert.doesNotMatch(workspace, /<ProposalPdfViewer/);
-  assert.match(workspace, /PDF template has not been removed/);
-  assert.match(viewer, /URL\.createObjectURL\(blob\)/);
-  assert.match(viewer, /anchor\.href = url/);
-  assert.match(viewer, /<iframe/);
-  assert.match(endpoint, /renderToBuffer/);
+test("client proposal export uses the current workbook and linked PDF sources, not demo prices",()=>{
+  const workspace=read("src/components/workspace.tsx");
+  const endpoint=read("src/app/api/proposal/pdf/route.ts");
+  assert.doesNotMatch(workspace,/window\.print\s*\(|<ProposalPdfViewer/);
+  assert.match(workspace,/Generate proposal PDF/);
+  assert.match(workspace,/\/api\/proposal\/pdf/);
+  assert.match(endpoint,/renderToBuffer/);
+  assert.match(endpoint,/getActiveFunds/);
+  assert.match(endpoint,/matchWorkbookReturn/);
+  assert.match(endpoint,/fund_source_performance/);
+  assert.match(endpoint,/fund_source_factsheets/);
+  assert.match(endpoint,/unique_provider_qualified_filename/);
+  assert.doesNotMatch(endpoint,/synthetic|session.price|buildProposalReport|price_observations/);
 });
-
-test("PDF is generated for authenticated sessions only, with private/no-store headers",()=>{
-  const endpoint = read("src/app/api/proposal/pdf/route.ts");
-  assert.match(endpoint, /await auth\(\)/);
-  assert.match(endpoint, /Content-Type": "application\/pdf"/);
-  assert.match(endpoint, /private, no-store/);
-  assert.match(endpoint, /status: 401/);
+test("proposal PDF is authenticated and privately generated",()=>{
+  const endpoint=read("src/app/api/proposal/pdf/route.ts");
+  assert.match(endpoint,/await auth\(\)/);
+  assert.match(endpoint,/Content-Type":"application\/pdf"/);
+  assert.match(endpoint,/private, no-store/);
+  assert.match(endpoint,/401/);
+  assert.match(endpoint,/same-origin/);
 });
-
-test("Omega PDF uses the supplied logo and has no page numbering or browser metadata",()=>{
-  const pdf = read("src/lib/pdf/omega-proposal.tsx");
-  assert.match(pdf, /OMEGA_LOGO_PATHS/);
-  assert.match(pdf, /size="A4"/);
-  assert.doesNotMatch(pdf, /pageNumber|totalPages|window\.print|document\.title/);
-  assert.match(pdf, /regulated by the Central Bank of Ireland/);
+test("new A4 Omega PDF displays original fund returns and linked PDF metadata with no invented historical chart",()=>{
+  const pdf=read("src/lib/pdf/workbook-proposal.tsx");
+  assert.match(pdf,/OMEGA_LOGO_PATHS/);
+  assert.match(pdf,/size="A4"/);
+  assert.match(pdf,/f\.returns\.threeYear/);
+  assert.match(pdf,/f\.factsheet\.objective/);
+  assert.match(pdf,/f\.factsheet\.riskRating/);
+  assert.match(pdf,/f\.factsheet\.amcPct/);
+  assert.match(pdf,/f\.factsheet\.chartPages/);
+  assert.match(pdf,/DRAFT/);
+  assert.doesNotMatch(pdf,/Math\.random|monthlyPrices|performanceSeries|sampleHistorical/);
 });
-
-test("Vercel includes PDFKit built-in fonts in the PDF route bundle",()=>{
-  const config = read("next.config.ts");
-  assert.match(config, /outputFileTracingIncludes/);
-  assert.match(config, /\/api\/proposal\/pdf/);
-  assert.match(config, /pdfkit\/js\/standard-fonts/);
+test("Vercel bundles the PDF renderer's fonts",()=>{
+  const config=read("next.config.ts");
+  assert.match(config,/outputFileTracingIncludes/);
+  assert.match(config,/\/api\/proposal\/pdf/);
+  assert.match(config,/pdfkit\/js\/standard-fonts/);
 });
