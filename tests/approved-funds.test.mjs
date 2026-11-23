@@ -25,14 +25,15 @@ test("names are unique within each provider and are preserved verbatim",()=>{
   assert.ok(groups["Standard Life"].includes("Standard Life Vanguard US 500 Stock Index fund"));
   assert.ok(groups["New Ireland"].includes("Goodbody Dividend Income 6"));
 });
-test("visible fund library and portfolio builder use approved fund universe only",()=>{
+test("visible library and portfolio builder load the current workbook's active fund universe",()=>{
   const workspace=text("src/components/workspace.tsx");
-  assert.match(workspace,/APPROVED_FUNDS/);
+  assert.match(workspace,/setFunds\(data.funds\)/);
+  assert.match(workspace,/useState<ApprovedFund\[\]>\(\[\]\)/);
   assert.doesNotMatch(workspace,/demoFunds|demoPortfolios|portfolioSeries|monthlyPrices/);
   assert.match(workspace,/<SecureFundUploads/);
 });
 test("published performance is not invented from monthly unit prices",()=>{
   const workspace=text("src/components/workspace.tsx");
   assert.doesNotMatch(workspace,/<LineChart|volatilityPct|synthetic price/);
-  assert.match(workspace,new RegExp("Workbook/PDF match pending"));
+  assert.match(workspace,/Workbook returns \+ PDF filename linked/);
 });
