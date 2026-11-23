@@ -69,6 +69,9 @@ export async function POST(request:Request){
   try{
     await ensure();
     const sql=getNeonSql();
+    const body=await request.json().catch(()=>({}));
+    const preferred=Array.isArray(body.fundIds)?
+      body.fundIds.filter((id:unknown)=>typeof id==="string"&&id.length<120).slice(0,30):[];
     const targets=await sql.query([
       "SELECT r.fund_id,r.approved_name AS name,r.factsheet_import_id::text AS pdf_id,",
       "i.storage_key FROM fund_reconciliations r",
@@ -78,8 +81,10 @@ export async function POST(request:Request){
       " AND c.factsheet_import_id=r.factsheet_import_id",
       "WHERE r.factsheet_import_id IS NOT NULL",
       "AND r.evidence->>'matchBasis'='unique_provider_qualified_filename'",
-      "AND c.fund_id IS NULL ORDER BY r.provider,r.approved_name LIMIT 2"
-    ].join(" "));
+      "AND c.fund_id IS NULL",
+      "ORDER BY CASE WHEN r.fund_id=ANY($1::text[]) THEN 0 ELSE 1 END,",
+      "r.provider,r.approved_name LIMIT 2"
+    ].join(" "),[preferred]);
     const completed:{name:string;status:string;reason:string}[]=[];
     for(const target of targets){
       let status="needs_review",reason="Chart could not be digitized from source";
