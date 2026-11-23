@@ -9,7 +9,12 @@ export type WorkbookReturnPeriods = Record<
 export type WorkbookProposalFund = {
   id:string;name:string;provider:string;weight:number;allocatedAmount:number;
   returns:WorkbookReturnPeriods;
-  factsheetFilename:string|null;
+  factsheet:{
+    filename:string|null; title:string|null; date:string|null;
+    objective:string|null;strategy:string|null;moneyMateId:string|null;
+    baseCurrency:string|null;riskRating:number|null;amcPct:number|null;
+    civPct:number|null;chartPages:string[];
+  };
 };
 export type WorkbookProposalPortfolio = {
   id:string;title:string;description:string;funds:WorkbookProposalFund[];
@@ -45,6 +50,9 @@ const style=StyleSheet.create({
   section:{fontFamily:"Helvetica-Bold",fontSize:10,color:color.wine,marginBottom:9},
   p:{fontSize:9,color:color.ink,lineHeight:1.6},
   note:{fontSize:8.1,color:color.muted,lineHeight:1.55},
+  sourceCard:{borderWidth:.7,borderColor:color.border,borderRadius:7,padding:12,marginTop:11},
+  sourceTitle:{fontFamily:"Helvetica-Bold",fontSize:9.6,color:color.wine,marginBottom:5},
+  meta:{fontSize:7.9,color:color.ink,lineHeight:1.55,marginBottom:5},
   alert:{backgroundColor:"#FAF4F2",padding:12,borderRadius:6,marginTop:19},
   alertTitle:{fontFamily:"Helvetica-Bold",fontSize:9,color:color.wine,marginBottom:6},
   divider:{height:1,backgroundColor:color.border,marginTop:15,marginBottom:15},
@@ -159,6 +167,28 @@ export default function WorkbookProposalPDF({data}:{data:WorkbookProposalData}){
       <View style={style.alert}>
         <Text style={style.alertTitle}>DATA BASIS AND LIMITATIONS</Text>
         <Text style={style.note}>Source: {data.workbookFilename}. Fund names and every return shown are taken only from that workbook. PDF filenames provide document association only. Dates and charge/fee basis for the workbook returns are not confirmed. Returns from different funds must not be aggregated as a validated portfolio return until common valuation dates and conventions are established. The value of investments can fall as well as rise; past performance is not a reliable indicator of future performance.</Text>
+      </View>
+      <Footer/>
+    </Page>)}
+    {data.portfolios.map((p,index)=><Page key={p.id+"-factsheets"} size="A4" style={style.page} wrap>
+      <Banner label={"PORTFOLIO "+String.fromCharCode(65+index)+" · SOURCE DETAILS"}/>
+      <Text style={style.eyebrow}>PROVIDER FACTSHEET INFORMATION</Text>
+      <Text style={style.heading}>{p.title} · Fund details</Text>
+      <Text style={style.note}>The following investment objectives, strategy notes, risks and charges are taken from the linked uploaded PDF factsheets where text extraction was available. These details have not been independently verified. Fund returns are sourced separately and exclusively from the Excel workbook.</Text>
+      {p.funds.map(f=><View key={f.id+"-source"} style={style.sourceCard} wrap={false}>
+        <Text style={style.sourceTitle}>{f.name}</Text>
+        <Text style={style.meta}>{f.provider} · PDF: {f.factsheet.filename??"Not linked"}</Text>
+        <Text style={style.meta}>Printed PDF title: {f.factsheet.title??"Not extracted"} · Factsheet date: {f.factsheet.date??"Not available"}</Text>
+        <Text style={style.meta}>MoneyMate ID: {f.factsheet.moneyMateId??"Not stated"} · Currency: {f.factsheet.baseCurrency??"Not stated"} · Numeric risk rating: {f.factsheet.riskRating==null?"Not stated":f.factsheet.riskRating+"/7"}</Text>
+        <Text style={style.meta}>AMC: {percentage(f.factsheet.amcPct)} · CIV charge: {percentage(f.factsheet.civPct)} (where stated in PDF; these charges have not been deducted from workbook returns)</Text>
+        <Text style={style.meta}>Objective: {f.factsheet.objective??"Not extracted from PDF"}</Text>
+        {f.factsheet.strategy?<Text style={style.meta}>Strategy: {f.factsheet.strategy}</Text>:null}
+        {f.factsheet.chartPages.length?
+          <Text style={style.meta}>Charts in source PDF: {f.factsheet.chartPages.join("; ")}. Original PDF graphics are not recreated as calculated charts.</Text>:null}
+      </View>)}
+      <View style={style.alert}>
+        <Text style={style.alertTitle}>ADVISER SOURCE CHECK</Text>
+        <Text style={style.note}>Please verify factsheet dates, share class, PDF descriptions, tax, risk and charges before sending to a client. Reported workbook returns are cumulative and have no confirmed common date or charge basis. Missing data is shown as unavailable rather than inferred.</Text>
       </View>
       <Footer/>
     </Page>)}
