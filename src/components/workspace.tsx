@@ -208,7 +208,7 @@ export default function Workspace() {
               </select><ChevronDown size={15}/></label>
             </div>
             <div className="table-scroll"><table className="data-table">
-              <thead><tr><th>FUND</th><th>PROVIDER</th><th>1 YEAR*</th><th>3 YEARS*</th><th>5 YEARS*</th><th>10 YEARS*</th><th>PERFORMANCE SOURCE</th><th></th></tr></thead>
+              <thead><tr><th>FUND</th><th>PROVIDER</th><th>1 YEAR*</th><th>3 YEARS CUM.*</th><th>5 YEARS CUM.*</th><th>10 YEARS CUM.*</th><th>PERFORMANCE SOURCE</th><th></th></tr></thead>
               <tbody>{filtered.map(f=><tr key={f.id}>
                 <td><b>{f.name}</b></td><td>{f.provider}</td>
                 <td>{formatReported(workbookReturns(published[f.id])?.oneYear)}</td>
@@ -224,7 +224,7 @@ export default function Workspace() {
               </tr>)}</tbody>
             </table>{filtered.length===0 && <div className="empty">No matching funds found.</div>}</div>
           </div>
-          <p className="fineprint">{filtered.length} of {funds.length} approved funds displayed. Unselected funds in the source workbook are intentionally excluded. * Returns come only from the newly uploaded performance workbook, not from older PDFs. The workbook does not state whether multi-year figures are cumulative or annualised; validate return conventions before client use. Differences in reporting dates and charges must be considered; these figures are not yet approved for client proposals.</p>
+          <p className="fineprint">{filtered.length} of {funds.length} approved funds displayed. Unselected funds in the source workbook are intentionally excluded. * Returns come only from the newly uploaded performance workbook, not from older PDFs. All displayed periods, including 3-, 5- and 10-year returns, are cumulative percentages, as confirmed for the workbook; they are not annualised. Reporting dates and charges must still be verified before client use. Differences in reporting dates and charges must be considered; these figures are not yet approved for client proposals.</p>
         </>}
 
         {view === "imports" && <SecureFundUploads/>}
@@ -358,9 +358,9 @@ export default function Workspace() {
           <p><strong>Match:</strong> {published[selectedFund.id].status.replaceAll("_"," ")} — {published[selectedFund.id].reason}</p>
           <div className="mini-stats">
             <Stat label="1-year reported" value={formatReported(workbookReturns(published[selectedFund.id])?.oneYear)} />
-            <Stat label="3-year reported" value={formatReported(workbookReturns(published[selectedFund.id])?.threeYear)} />
-            <Stat label="5-year reported" value={formatReported(workbookReturns(published[selectedFund.id])?.fiveYear)} />
-            <Stat label="10-year reported" value={formatReported(workbookReturns(published[selectedFund.id])?.tenYear)} />
+            <Stat label="3-year cumulative" value={formatReported(workbookReturns(published[selectedFund.id])?.threeYear)} />
+            <Stat label="5-year cumulative" value={formatReported(workbookReturns(published[selectedFund.id])?.fiveYear)} />
+            <Stat label="10-year cumulative" value={formatReported(workbookReturns(published[selectedFund.id])?.tenYear)} />
           </div>
           {published[selectedFund.id].extracted_factsheet && <>
             <h3>Original provider factsheet — recorded source</h3>
