@@ -27,6 +27,18 @@ test("A4 PDF can render uploaded-workbook returns and PDF factsheet metadata wit
       }]
     }]
   };
+  const primary=data.portfolios[0].funds[0];
+  primary.weight=33;
+  primary.allocatedAmount=33000;
+  data.portfolios[0].funds.push(
+    {...primary,id:"zurich-fund",provider:"Zurich",name:"Zurich International Equity",
+      weight:33,allocatedAmount:33000,
+      returns:{...primary.returns,oneYear:10.19,threeYear:36.40}},
+    {...primary,id:"standard-fund",provider:"Standard Life",
+      name:"Standard Life Vanguard Global Bond Index Fund",
+      weight:34,allocatedAmount:34000,
+      returns:{...primary.returns,oneYear:-2.05,threeYear:6.09,fiveYear:-9.26}}
+  );
   const bytes=await renderToBuffer(WorkbookProposalPDF({data}));
   assert.ok(bytes.byteLength>3000,"PDF must contain a real rendered document");
   assert.equal(Buffer.from(bytes).subarray(0,4).toString("ascii"),"%PDF");
