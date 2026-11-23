@@ -6,7 +6,7 @@ import { getNeonSql } from "@/lib/server/neon";
 import { APPROVED_FUNDS } from "@/lib/approved-funds";
 import { getActiveFunds,ensureActiveFundNamesTable } from "@/lib/server/active-funds";
 import { workbookFundNames,workbookReturnRows,verifyWorkbookConsistency,matchWorkbookReturn } from "@/lib/reconciliation/workbook-source";
-import { similarity,normalName } from "@/lib/reconciliation/engine";
+import { similarity } from "@/lib/reconciliation/engine";
 import { extractFundFactsheet } from "@/lib/reconciliation/factsheet";
 import { HORIZONS, downgradeDuplicateApprovals } from "@/lib/reconciliation/engine";
 import { reconcilePdfOnly } from "@/lib/reconciliation/pdf-only";
@@ -99,8 +99,10 @@ async function factsheets(){
 }
 async function reconcile(){
   const sql=getNeonSql();
-  const [facts,funds,stored]=await Promise.all([
-    sql.query("SELECT data FROM fund_source_factsheets WHERE status='parsed' AND data IS NOT NULL"),
+  const [files,funds,stored]=await Promise.all([
+    sql.query("SELECT i.id::text AS id,i.filename,f.data,f.status,f.error_message "+
+      "FROM imports i LEFT JOIN fund_source_factsheets f ON f.import_id=i.id "+
+      "WHERE i.storage_key LIKE 'funds/factsheets/%' AND i.filename ILIKE '%.pdf'"),
     getActiveFunds(),latestWorkbook()
   ]);
   if(!stored)throw new Error("Upload the new workbook before matching PDFs.");
@@ -113,16 +115,25 @@ async function reconcile(){
     provider:String(row.provider),rowNumber:Number(row.row_number),
     sourceName:String(row.source_name),returns:row.reported_returns as ReportedReturns
   }));
-  const extracted=facts.map(row=>row.data as FactSheetData);
+  // Always include uploaded PDF filenames, even when OCR/text extraction failed.
+  // Filename association does not require a printed title to be extractable.
+  const extracted:FactSheetData[]=files.map(file=>{
+    const id=String(file.id),filename=String(file.filename);
+    const parsed=file.data as FactSheetData|null;
+    return parsed?{...parsed,importId:id,filename}:{
+      importId:id,filename,providerHint:null,title:null,moneyMateId:null,
+      asOf:null,launchDate:null,baseCurrency:null,amcPct:null,civPct:null,
+      riskRating:null,objective:null,strategy:null,holdings:[],allocations:[],
+      chartReferences:[],pageCount:0,titleEvidence:null,performance:null,
+      extractionWarnings:[String(file.error_message??"PDF text unavailable; filename linked only.")]
+    };
+  });
   const table=await sql.query("SELECT to_regclass('public.fund_identity_reviews') IS NOT NULL AS present");
   const confirmed=table[0]?.present
     ?await sql.query("SELECT fund_id,factsheet_import_id::text,performance_import_id::text,performance_row FROM fund_identity_reviews WHERE decision='confirmed'")
     :[];
   const results=downgradeDuplicateApprovals(
-    funds.map(f=>reconcilePdfOnly(f,extracted,{
-      requireExactPrintedTitle:funds.some(other=>other.id!==f.id &&
-        other.provider===f.provider && normalName(other.name)===normalName(f.name))
-    })),
+    funds.map(f=>reconcilePdfOnly(f,extracted)),
     confirmed.map(x=>({fundId:String(x.fund_id),
       factsheetImportId:x.factsheet_import_id?String(x.factsheet_import_id):null,
       performanceImportId:x.performance_import_id?String(x.performance_import_id):null,
@@ -147,7 +158,7 @@ async function reconcile(){
       factsheetId:r.factsheet?.importId??null,
       extracted:r.factsheet??null,
       reason:approved?
-        "PDF identity matched automatically and exact current-workbook return series linked. Fee/date validation is still required for client use.":
+        "Unique PDF filename linked to the exact current workbook fund and return row. PDF contents, charges and date are not independently verified for client use.":
         exact?
           r.reason+" Workbook returns remain withheld until PDF identity is confirmed.":
           r.reason+" No unique exact return series in the updated workbook.",
@@ -163,7 +174,10 @@ async function reconcile(){
         candidateFactsheets:r.alternativeFactsheets,
         matchScores:{factsheet:r.factsheetScore,workbook:exact?1:0,combined:r.score},
         factsheetIdentityApproved:r.factsheetIdentityApproved,
-        seriesIdentityApproved:approved,
+        filenameMatchApproved:approved,
+        matchBasis:approved?"unique_provider_qualified_filename":"unmatched_filename",
+        pdfContentsIndependentlyVerified:false,
+        seriesIdentityApproved:false,
         identityOnly:!r.factsheetIdentityApproved,
         performanceSourceBasis:approved?"workbook_returns_cumulative_fee_basis_not_confirmed":"not_confirmed",
         workbookAsOf:null

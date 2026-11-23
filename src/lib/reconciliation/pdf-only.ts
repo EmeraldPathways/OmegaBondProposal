@@ -1,88 +1,66 @@
 import type { ApprovedFund } from "@/lib/approved-funds";
-import {workbookNameKey} from "./workbook-source";
-import {
-  classSignals, similarity,
-  type FactSheetData, type Review
-} from "./engine";
+import { workbookNameKey } from "./workbook-source";
+import { similarity, type FactSheetData, type Review } from "./engine";
 
 /**
- * Primary source reconciliation: an official PDF's internally printed name
- * establishes the fund identity. Workbook rows are never required for a match.
+ * Link an uploaded PDF to its workbook fund by the full, unique filename.
  *
- * This function proposes/approves SOURCE IDENTITY only. The separate PDF
- * performance parser and report validation determine whether returns can be
- * shown and whether they are suitable for client documents.
+ * Fund names and all published return values come exclusively from the latest
+ * uploaded workbook. PDF content is supporting metadata only. A filename match
+ * is NOT independent verification of the document's printed fund name, series,
+ * investment suitability, data date or charges.
  */
-export function reconcilePdfOnly(fund: ApprovedFund, factsheets: FactSheetData[], options?:{requireExactPrintedTitle?:boolean}): Review {
-  const ranked = factsheets
-    .filter(f => f.providerHint === fund.provider && Boolean(f.title?.trim()))
-    .map(f => {
-      const printedScore=similarity(fund.name,f.title!);
-      const cleanFilename=f.filename.replace(/\.pdf$/i,"")
-        .replace(/^(Aviva|Zurich|New Ireland|Standard Life)\s*[-_:]\s*/i,"");
-      const printedExact=workbookNameKey(fund.name)===workbookNameKey(f.title!);
-      const filenameExact=workbookNameKey(fund.name)===workbookNameKey(cleanFilename);
-      // An exact filename corroborates a printed title; it cannot replace it.
-      const filenameSupported=filenameExact&&printedScore>=0.55;
-      return {document:f,printedScore,printedExact,filenameExact,filenameSupported,
-        score:filenameSupported?Math.max(printedScore,0.91):printedScore};
-    })
-    .filter(x => x.score >= 0.26)
-    .sort((a,b)=>Number(b.printedExact)-Number(a.printedExact) ||
-      Number(b.filenameExact)-Number(a.filenameExact) || b.score-a.score);
+export function reconcilePdfOnly(fund: ApprovedFund, factsheets: FactSheetData[]): Review {
+  const target=workbookNameKey(fund.name);
+  const exact=factsheets.filter(f=>
+    /\.pdf$/i.test(f.filename) &&
+    workbookNameKey(f.filename.replace(/\.pdf$/i,""))===target
+  );
 
-  const best = ranked[0];
-  const second = ranked[1];
-  const title = best?.document.title ?? "";
-  const exact = Boolean(best?.printedExact);
+  // The filename includes the provider (Aviva, Zurich, New Ireland or
+  // Standard Life). A unique provider-qualified exact filename is required.
+  // Never use fuzzy title similarity to auto-link an unmatched document.
+  const matched=exact.length===1?exact[0]:null;
+  const approved=Boolean(matched);
+  const otherCandidates=approved?[]:factsheets
+    .filter(f=>/\.pdf$/i.test(f.filename))
+    .map(f=>({
+      factsheet:f,
+      score:similarity(fund.name,f.filename.replace(/\.pdf$/i,""))
+    }))
+    .filter(v=>v.score>=0.30)
+    .sort((a,b)=>b.score-a.score)
+    .slice(0,10);
+  const alternatives=exact.length?
+    exact.map(f=>({factsheet:f,score:1})):otherCandidates;
+  const titleMatches=matched?.title?
+    workbookNameKey(matched.title)===target:null;
 
-  // An explicit series, pension/growth or group designation in the approved
-  // shortlist must also appear in the PDF itself. Never silently drop it.
-  const expected = classSignals(fund.name);
-  const printed = classSignals(title);
-  const classConsistent = [...expected].every(signal => printed.has(signal)) &&
-    [...printed].every(signal => expected.has(signal));
-  const sameTitleCount = best
-    ? ranked.filter(x => workbookNameKey(x.document.title!) === workbookNameKey(title)).length
-    : 0;
-  const distinct = Boolean(best && sameTitleCount === 1 &&
-    (!second || best.score - second.score >= 0.055 ||
-      (best.printedExact && best.filenameExact && !second.printedExact)));
-
-  // Avoid auto-approval on merely plausible names or competing share classes.
-  const identityApproved = Boolean(best && classConsistent && distinct &&
-    best.printedScore>=0.55 && (exact || best.printedScore>=0.80 || best.filenameSupported) &&
-    best.score>=0.72 && (!options?.requireExactPrintedTitle || best.printedExact));
-
-  const status: Review["status"] = identityApproved ? "auto_approved" :
-    best && best.score >= 0.45 ? "suggested" :
-    best ? "needs_review" : "unmatched";
-
-  const reason = identityApproved
-    ? "Unique PDF fund identity corroborates the workbook name; renamed filename is not sole evidence. "+
-      "The current workbook supplies returns; old PDF returns are reference-only."
-    : !best
-      ? "No plausible internally printed PDF title was found. Upload or review the fund factsheet."
-      : options?.requireExactPrintedTitle && !best.printedExact
-        ? "Two workbook fund labels share a search alias; their distinct printed titles require manual confirmation."
-      : !classConsistent
-        ? "The official PDF does not confirm every series or share-class designation of the approved fund; review required."
-        : !distinct
-          ? "Several candidate PDF titles compete for this fund; manual confirmation required."
-          : "Printed PDF title is plausible but not sufficiently corroborated for automatic approval.";
+  const reason=approved
+    ? "A unique uploaded PDF filename exactly matches this provider's current workbook fund name. "+
+      "PDF content and share class have not been independently verified; "+
+      "all displayed performance returns come from the uploaded workbook only."+
+      (titleMatches===false?" The PDF's printed title differs; check document content separately.":"")
+    : exact.length>1
+      ? "Multiple uploaded PDFs have the same exact fund filename. Remove the duplicate to link one unambiguously."
+      : "No uploaded PDF filename matches this workbook fund exactly. Check the filename and provider.";
 
   return {
-    fundId: fund.id, provider: fund.provider, name: fund.name,
-    status, score: best?.score ?? 0, factsheetScore: best?.score ?? 0,
-    workbookScore: 0, factsheetIdentityApproved: identityApproved,
-    seriesIdentityApproved: identityApproved, reason,
-    workbookRow: null, factsheet: best?.document ?? null,
-    alternativeRows: [],
-    alternativeFactsheets: ranked.slice(0, 10).map(x => ({
-      importId: x.document.importId,
-      title: x.document.title,
-      filename: x.document.filename, // display only; never scored
-      score: Math.round(x.score * 1000) / 1000
+    fundId:fund.id,provider:fund.provider,name:fund.name,
+    status:approved?"auto_approved":exact.length>1?"needs_review":"unmatched",
+    score:approved?1:0,
+    factsheetScore:approved?1:0,
+    workbookScore:0,
+    factsheetIdentityApproved:approved,
+    // Share class has not been independently verified from the PDF contents.
+    seriesIdentityApproved:false,
+    reason,workbookRow:null,factsheet:matched,
+    alternativeRows:[],
+    alternativeFactsheets:alternatives.map(v=>({
+      importId:v.factsheet.importId,
+      title:v.factsheet.title,
+      filename:v.factsheet.filename,
+      score:Math.round(v.score*1000)/1000
     }))
   };
 }
