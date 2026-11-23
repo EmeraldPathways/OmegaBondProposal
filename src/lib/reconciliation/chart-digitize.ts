@@ -40,17 +40,25 @@ const monthNums:Record<string,number>={
   jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11
 };
 function dateTick(s:string):number|null{
-  const match=/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[ .,'’]*(\d{2,4})\b/i.exec(s);
-  if(!match){
-    const yearOnly=/^\s*(?:19[89]\d|20\d{2})\s*$/.exec(s);
-    if(!yearOnly)return null;
-    const year=Number(yearOnly[0].trim());
-    return Date.UTC(year,0,1);
+  const tidy=s.trim().replace(/[’]/g,"'").replace(/\s+/g," ");
+  const month=/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[ .,'/-]*(\d{2,4})\b/i.exec(tidy);
+  if(month){
+    let year=Number(month[2]);
+    if(year<100)year+=year>=70?1900:2000;
+    if(year>=1980&&year<=2035)
+      return Date.UTC(year,monthNums[month[1].slice(0,3).toLowerCase()],1);
   }
-  let year=Number(match[2]);
-  if(year<100)year+=year>=70?1900:2000;
-  if(year<1980||year>2035)return null;
-  return Date.UTC(year,monthNums[match[1].slice(0,3).toLowerCase()],1);
+  const numeric=/\b(\d{1,2})[/-](\d{1,2})[/-](20\d{2}|\d{2})\b/.exec(tidy);
+  if(numeric){
+    let year=Number(numeric[3]);
+    if(year<100)year+=2000;
+    const first=Number(numeric[1]),second=Number(numeric[2]);
+    if(first>=1&&first<=31&&second>=1&&second<=12&&year>=1980&&year<=2035)
+      return Date.UTC(year,second-1,1);
+  }
+  const standalone=/^\s*((?:19[89]|20)\d{2})\s*$/.exec(tidy);
+  if(standalone)return Date.UTC(Number(standalone[1]),0,1);
+  return null;
 }
 function euroTick(s:string):{value:number;currency:"EUR"|"GBP"|"USD"}|null{
   const m=/^\s*([€£$])\s*(-?\d[\d,]*(?:\.\d+)?)\s*$/.exec(s);
@@ -59,8 +67,30 @@ function euroTick(s:string):{value:number;currency:"EUR"|"GBP"|"USD"}|null{
   if(!Number.isFinite(value)||Math.abs(value)>1e7)return null;
   return {value,currency:m[1]==="€"?"EUR":m[1]==="£"?"GBP":"USD"};
 }
+/** A printed axis label such as "Jul '22" is often split into several
+ * adjacent PDF text operators. Rejoin nearby same-baseline elements only for
+ * the purpose of calibrating numeric/chart axes. */
+export function expandAxisAnchors(items:TextAnchor[]):TextAnchor[]{
+  const expanded=[...items];
+  const lines=[...items].sort((a,b)=>a.y-b.y||a.x-b.x);
+  for(let i=0;i<lines.length;i++){
+    const a=lines[i];
+    let end=a.x+a.width;
+    let label=a.label;
+    for(let j=i+1;j<Math.min(lines.length,i+5);j++){
+      const b=lines[j];
+      if(Math.abs(b.y-a.y)>3.8)break;
+      if(b.x<end-3||b.x-end>30)break;
+      label+=" "+b.label;
+      end=Math.max(end,b.x+b.width);
+      if(label.length>38)break;
+      expanded.push({label,x:a.x,y:a.y,width:end-a.x});
+    }
+  }
+  return expanded;
+}
 function groupDates(items:TextAnchor[]):{ticks:Tick[];y:number}|null{
-  const dateItems=items.flatMap(t=>{
+  const dateItems=expandAxisAnchors(items).flatMap(t=>{
     const value=dateTick(t.label);
     return value===null?[]:[{x:t.x+t.width/2,y:t.y,value}];
   });
@@ -77,7 +107,7 @@ function groupDates(items:TextAnchor[]):{ticks:Tick[];y:number}|null{
   return {ticks:best,y:best.reduce((s,x)=>s+x.y,0)/best.length};
 }
 function groupValueTicks(items:TextAnchor[],axisY:number,firstDateX:number){
-  const all=items.flatMap(t=>{
+  const all=expandAxisAnchors(items).flatMap(t=>{
     const result=euroTick(t.label);
     if(!result)return[];
     if(t.y>axisY-5||t.y<axisY-190||t.x>=firstDateX-2)return[];
