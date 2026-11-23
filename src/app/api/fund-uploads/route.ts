@@ -45,7 +45,35 @@ export async function GET() {
       FROM imports
       WHERE storage_key LIKE 'funds/factsheets/%' OR storage_key LIKE 'funds/performance/%'
       ORDER BY uploaded_at DESC LIMIT 200`;
-    return NextResponse.json({ documents: rows }, { headers: noStore });
+    // Import intake status remains 'pending' for archival purposes. Derive
+    // the visible, CURRENT filename-link state from the reconciliation tables.
+    const tables = await sql`SELECT
+      to_regclass('public.fund_reconciliations') IS NOT NULL AS linked,
+      to_regclass('public.fund_active_names') IS NOT NULL AS names`;
+    const canLink = Boolean(tables[0]?.linked && tables[0]?.names);
+    const linked = canLink ? await sql`
+      SELECT DISTINCT r.factsheet_import_id::text AS id
+      FROM fund_reconciliations r
+      INNER JOIN fund_active_names n ON n.fund_id = r.fund_id
+      WHERE r.factsheet_import_id IS NOT NULL
+        AND r.status = 'auto_approved'
+        AND r.evidence->>'matchBasis' = 'unique_provider_qualified_filename'
+        AND r.evidence->>'displayedReturnsSource' = 'uploaded_workbook'
+    ` : [];
+    const imported = tables[0]?.names ? await sql`
+      SELECT DISTINCT workbook_import_id::text AS id FROM fund_active_names
+    ` : [];
+    const matchedIds = new Set(linked.map(row => String(row.id)));
+    const importedIds = new Set(imported.map(row => String(row.id)));
+    const documents = rows.map(row => ({
+      ...row,
+      status: row.kind === "factsheet" && matchedIds.has(String(row.id))
+        ? "linked"
+        : row.kind === "performance" && importedIds.has(String(row.id))
+          ? "imported"
+          : row.status
+    }));
+    return NextResponse.json({ documents }, { headers: noStore });
   } catch {
     console.error("Fund import listing failed.");
     return NextResponse.json({ error: "Could not load stored documents." }, { status: 500, headers: noStore });

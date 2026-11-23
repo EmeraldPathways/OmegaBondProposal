@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import OmegaLogo from "@/components/omega-logo";
 import SecureFundUploads from "@/components/secure-fund-uploads";
+import FundSourceAudit from "@/components/fund-source-audit";
 import { APPROVED_FUND_GROUPS, type ApprovedFund } from "@/lib/approved-funds";
 import type { Portfolio } from "@/lib/types";
 import { fmtEuro, sumWeights } from "@/lib/analytics";
@@ -411,6 +412,7 @@ export default function Workspace() {
             </div>
             {!readyForProposal&&<p className="fineprint">To enable export, select at least one portfolio with 100% allocation and current workbook/PDF filename matches for all of its funds.</p>}
           </section>
+          <FundSourceAudit/>
         </>}
       </main>
     </div>

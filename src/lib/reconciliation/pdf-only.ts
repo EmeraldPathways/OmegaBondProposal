@@ -1,5 +1,5 @@
 import type { ApprovedFund } from "@/lib/approved-funds";
-import { workbookNameKey } from "./workbook-source";
+import { workbookNameKey, pdfFilenameFundKey } from "./workbook-source";
 import { similarity, type FactSheetData, type Review } from "./engine";
 
 /**
@@ -14,7 +14,7 @@ export function reconcilePdfOnly(fund: ApprovedFund, factsheets: FactSheetData[]
   const target=workbookNameKey(fund.name);
   const exact=factsheets.filter(f=>
     /\.pdf$/i.test(f.filename) &&
-    workbookNameKey(f.filename.replace(/\.pdf$/i,""))===target
+    pdfFilenameFundKey(f.filename)===target
   );
 
   // The filename includes the provider (Aviva, Zurich, New Ireland or
