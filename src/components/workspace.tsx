@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import OmegaLogo from "@/components/omega-logo";
 import SecureFundUploads from "@/components/secure-fund-uploads";
-import { APPROVED_FUNDS, APPROVED_FUND_GROUPS, type ApprovedFund } from "@/lib/approved-funds";
+import { APPROVED_FUND_GROUPS, type ApprovedFund } from "@/lib/approved-funds";
 import type { Portfolio } from "@/lib/types";
 import { fmtEuro, sumWeights } from "@/lib/analytics";
 
@@ -33,7 +33,7 @@ type ReconciledFund = {
   fund_id:string; status:string; confidence:number;selected_source_name:string|null;
   reported_returns:Record<string,number|null>|null;returns_approved:boolean;
   evidence?:{factsheetIdentityApproved?:boolean;seriesIdentityApproved?:boolean;
-    displayedReturnsSource?:string|null;publishedPerformance?:{asOf?:string|null;feeBasis?:string;asOfPrecision?:string}|null};
+    displayedReturnsSource?:string|null;matchBasis?:string;pdfContentsIndependentlyVerified?:boolean;publishedPerformance?:{asOf?:string|null;feeBasis?:string;asOfPrecision?:string}|null};
   factsheet_import_id:string|null;
   reason:string;
   extracted_factsheet:{
@@ -72,12 +72,12 @@ function MoneyInput({ value, onChange }: { value: number; onChange: (v: number) 
 
 export default function Workspace() {
   const [view, setView] = useState<View>("overview");
-  const [funds,setFunds]=useState<ApprovedFund[]>(APPROVED_FUNDS);
+  const [funds,setFunds]=useState<ApprovedFund[]>([]);
   const names=useMemo(()=>new Map(funds.map(f=>[f.id,f.name])),[funds]);
   const [mobile, setMobile] = useState(false);
   const [published,setPublished] = useState<Record<string,ReconciledFund>>({});
   useEffect(()=>{
-    if(view!=="funds"&&view!=="builder"&&view!=="overview")return;
+    if(!["funds","builder","overview","compare","proposal"].includes(view))return;
     let active=true;
     fetch("/api/fund-reconciliation",{credentials:"same-origin",cache:"no-store"})
       .then(async response=>{if(!response.ok)return null;return response.json() as Promise<{reviews?:ReconciledFund[];funds?:ApprovedFund[]}>})
@@ -92,7 +92,7 @@ export default function Workspace() {
   const [selectedFund, setSelectedFund] = useState<ApprovedFund | null>(null);
   const [portfolios, setPortfolios] = useState<Portfolio[]>(INITIAL_PORTFOLIOS);
   const [activePortfolio, setActivePortfolio] = useState(0);
-  const [addFundId, setAddFundId] = useState(APPROVED_FUNDS[0].id);
+  const [addFundId, setAddFundId] = useState("");
   useEffect(()=>{
     if(!funds.some(f=>f.id===addFundId))setAddFundId(funds[0]?.id??"");
   },[funds,addFundId]);
@@ -100,6 +100,10 @@ export default function Workspace() {
   const [client, setClient] = useState("");
   const [adviser, setAdviser] = useState("Omega Financial Management");
   const [objective, setObjective] = useState("Review diversified investment options in line with the client's objectives and risk profile.");
+  const [proposalBusy,setProposalBusy]=useState(false);
+  const [proposalError,setProposalError]=useState("");
+  const [proposalMessage,setProposalMessage]=useState("");
+  const [includePortfolios,setIncludePortfolios]=useState<Record<string,boolean>>({a:true,b:true,c:true});
 
   const filtered = useMemo(() => funds.filter(f =>
     (provider === "All providers" || f.provider === provider) &&
@@ -127,6 +131,43 @@ export default function Workspace() {
   }
   function removeFund(id: string) {
     const weights = { ...current.weights }; delete weights[id]; changePortfolio(activePortfolio, { weights });
+  }
+  const linked=(fund:ReconciledFund|undefined)=>
+    Boolean(fund?.evidence?.matchBasis==="unique_provider_qualified_filename" &&
+      fund?.factsheet_import_id && fund?.evidence?.displayedReturnsSource==="uploaded_workbook");
+  const proposalPortfolios=portfolios.filter(p=>
+    includePortfolios[p.id] && Object.entries(p.weights).some(([,weight])=>weight>0));
+  const readyForProposal=proposalPortfolios.length>0 &&
+    proposalPortfolios.every(p=>Math.abs(sumWeights(p)-100)<.005 &&
+      Object.entries(p.weights).filter(([,weight])=>weight>0).every(([id])=>linked(published[id])));
+
+  async function generateProposal(){
+    setProposalError("");setProposalMessage("");
+    if(!readyForProposal){
+      setProposalError("Select a portfolio with 100% allocation and current workbook/PDF filename matches for every fund.");
+      return;
+    }
+    setProposalBusy(true);
+    try{
+      const response=await fetch("/api/proposal/pdf",{
+        method:"POST",credentials:"same-origin",cache:"no-store",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({client,adviser,objective,investment,portfolios:proposalPortfolios})
+      });
+      if(!response.ok){
+        const data=await response.json().catch(()=>({error:"Proposal PDF export failed."}));
+        throw new Error(data.error||"Proposal PDF export failed.");
+      }
+      const blob=await response.blob();
+      const url=URL.createObjectURL(blob);
+      const anchor=document.createElement("a");
+      anchor.href=url;anchor.download="Omega-Investment-Bond-Proposal-Draft.pdf";
+      document.body.appendChild(anchor);anchor.click();anchor.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),1500);
+      setProposalMessage("Proposal PDF created from the latest uploaded workbook and the linked PDF factsheet details.");
+    }catch(error){
+      setProposalError(error instanceof Error?error.message:"Proposal PDF export failed.");
+    }finally{setProposalBusy(false);}
   }
 
   return <div className="app-shell">
@@ -162,7 +203,7 @@ export default function Workspace() {
       </header>
       <main className="content">
         <div className="notice neutral" style={{marginBottom:24}}>
-          <ShieldAlert size={18}/><span><strong>Published-return workflow.</strong> Only the funds listed in the new workbook are available. Workbook returns and PDF identities must be matched; all client-report fee/date validations remain separate. Monthly prices are not required.</span>
+          <ShieldAlert size={18}/><span><strong>Workbook-backed workflow.</strong> Fund names and cumulative returns come from the current workbook; exact PDF filenames link supporting documents. Investment advice, factsheet content, return-date and charge checks remain separate. No monthly price history is fabricated.</span>
         </div>
 
         {view === "overview" && <>
@@ -216,10 +257,10 @@ export default function Workspace() {
                 <td>{formatReported(workbookReturns(published[f.id])?.fiveYear)}</td>
                 <td>{formatReported(workbookReturns(published[f.id])?.tenYear)}</td>
                 <td><span className="soft-pill">{workbookReturns(published[f.id])?
-  "Current workbook · "+(published[f.id]?.evidence?.publishedPerformance?.asOf??"date unknown"):
+  "Workbook returns + PDF filename linked":
   published[f.id]?.status==="manual_rejected"?"Rejected · review required":
-  published[f.id]?.extracted_factsheet?.performance?.status==="not_published"?"Workbook return series unavailable":
-  "Workbook/PDF match pending"}</span></td>
+  published[f.id]?.extracted_factsheet?.performance?.status==="not_published"?"Workbook value unavailable":
+  "Filename not linked"}</span></td>
                 <td><button className="icon-action" aria-label={"View " + f.name} onClick={()=>setSelectedFund(f)}><ArrowRight size={17}/></button></td>
               </tr>)}</tbody>
             </table>{filtered.length===0 && <div className="empty">No matching funds found.</div>}</div>
@@ -280,7 +321,7 @@ export default function Workspace() {
                 <Stat label="Initial investment" value={fmtEuro(investment)}/>
                 <Stat label="Allocated funds" value={String(allocated.length)}/>
                 <Stat label="Allocation total" value={total.toFixed(1)+"%"}/>
-                <Stat label="Verified historical return" value="Pending"/>
+                <Stat label="Historical portfolio return" value="Not calculated"/>
               </div>
               <div className="separator"/>
               <h3>Selected funds</h3>
@@ -294,7 +335,7 @@ export default function Workspace() {
 
         {view === "compare" && <>
           <div className="page-heading"><div><span className="eyebrow">PORTFOLIO COMPARISON</span><h1>Compare portfolios</h1>
-            <p>Review three draft allocations side by side. Historical return comparisons will be activated after the source-data reconciliation.</p></div>
+            <p>Compare the selected allocations. The workbook provides fund-level cumulative returns, not aligned monthly price observations for calculating historical portfolio performance.</p></div>
             <button className="btn quiet" onClick={()=>go("builder")}>Edit allocations <ArrowRight size={16}/></button>
           </div>
           <div className="portfolio-card-grid">{portfolios.map(p=>{
@@ -306,7 +347,7 @@ export default function Workspace() {
               <div className="portfolio-card-value">{sumWeights(p).toFixed(1)}%</div>
               <small>Allocation total {valid?"— complete":"— incomplete"}</small>
               <div className="portfolio-card-bottom"><span>Selected funds <b>{holdings.length}</b></span>
-                <span>Historical performance <b>Pending</b></span></div>
+                <span>Historical performance <b>Not calculated</b></span></div>
             </div>;
           })}</div>
           <div className="panel table-panel">
@@ -317,31 +358,58 @@ export default function Workspace() {
                 <tr><td>Initial investment</td>{portfolios.map(p=><td key={p.id}>{fmtEuro(investment)}</td>)}</tr>
                 <tr><td>Number of funds</td>{portfolios.map(p=><td key={p.id}>{Object.values(p.weights).filter(v=>v>0).length}</td>)}</tr>
                 <tr><td>Allocation total</td>{portfolios.map(p=><td key={p.id}>{sumWeights(p).toFixed(1)}%</td>)}</tr>
-                <tr><td>3-year published return</td>{portfolios.map(p=><td key={p.id}>Pending verification</td>)}</tr>
-                <tr><td>5-year published return</td>{portfolios.map(p=><td key={p.id}>Pending verification</td>)}</tr>
-                <tr><td>10-year published return</td>{portfolios.map(p=><td key={p.id}>Pending verification</td>)}</tr>
+                <tr><td>3-year published return</td>{portfolios.map(p=><td key={p.id}>Not calculated</td>)}</tr>
+                <tr><td>5-year published return</td>{portfolios.map(p=><td key={p.id}>Not calculated</td>)}</tr>
+                <tr><td>10-year published return</td>{portfolios.map(p=><td key={p.id}>Not calculated</td>)}</tr>
               </tbody>
             </table></div>
-            <p className="fineprint padded-note">No monthly price history is requested or generated. Provider reported returns must have matching dates, horizons and charge/return conventions before portfolio arithmetic is enabled.</p>
+            <p className="fineprint padded-note">No portfolio return, volatility or value history is calculated from unmatched date/fee conventions. The generated PDF lists the original cumulative returns for each allocated fund.</p>
           </div>
         </>}
 
         {view === "proposal" && <>
           <div className="page-heading"><div><span className="eyebrow">CLIENT DOCUMENTS</span><h1>Investment bond proposal</h1>
-            <p>The A4 Omega PDF design remains ready. Export of actual fund performance is paused until verified fund records replace demonstration data.</p></div>
+            <p>Generate an A4 Omega-branded proposal using allocations from Portfolio builder, cumulative returns from the current workbook and supporting information extracted from each linked PDF.</p></div>
           </div>
           <section className="panel padded">
-            <span className="eyebrow">DRAFT DETAILS</span>
+            <span className="eyebrow">PROPOSAL DETAILS</span>
             <label className="form-label" htmlFor="clientname">Client name</label>
             <input id="clientname" className="form-input" maxLength={120} value={client}
-              placeholder="Do not enter real client details until approval workflow is enabled" onChange={e=>setClient(e.target.value)}/>
+              placeholder="Client name (optional for internal drafts)" onChange={e=>setClient(e.target.value)}/>
             <label className="form-label" htmlFor="advisername">Prepared by</label>
             <input id="advisername" className="form-input" maxLength={120} value={adviser} onChange={e=>setAdviser(e.target.value)}/>
             <label className="form-label" htmlFor="objective">Investment objective</label>
             <textarea id="objective" className="form-input textarea" rows={2} maxLength={600} value={objective} onChange={e=>setObjective(e.target.value)}/>
-            <div className="notice neutral"><ShieldAlert size={18}/>
-              <span>The PDF template has not been removed, but client-facing export is withheld until the correct published returns and factsheet details are approved. This prevents showing invented monthly values or mismatched performance for your selected funds.</span></div>
-            <button className="btn quiet" onClick={()=>go("funds")}><Database size={16}/> Review approved funds</button>
+            <label className="form-label" style={{marginTop:18}}>Portfolios to include</label>
+            <div className="portfolio-card-grid">
+              {portfolios.map(p=>{
+                const weighted=Object.entries(p.weights).filter(([,v])=>v>0);
+                const totalWeight=sumWeights(p);
+                const matched=weighted.filter(([id])=>linked(published[id])).length;
+                return <label key={p.id} className="panel padded" style={{display:"block",cursor:"pointer"}}>
+                  <span style={{display:"flex",gap:9,alignItems:"center"}}>
+                    <input type="checkbox" checked={!!includePortfolios[p.id]}
+                      onChange={e=>setIncludePortfolios(state=>({...state,[p.id]:e.target.checked}))}/>
+                    <strong>{p.title}</strong>
+                  </span>
+                  <p className="muted">{weighted.length} funds · {totalWeight.toFixed(1)}% allocated · {matched}/{weighted.length} PDF filenames linked</p>
+                </label>;
+              })}
+            </div>
+            <div className="notice neutral" style={{marginTop:17}}>
+              <ShieldAlert size={18}/><span>This PDF uses the workbook for all fund names and cumulative return percentages. The linked PDFs supply objectives, strategy, risk rating, charges, factsheet date and source references where extractable. Missing PDF fields are labelled unavailable. Historical portfolio performance and charts are not invented.</span>
+            </div>
+            <div className="notice neutral">
+              <ShieldAlert size={18}/><span>The export is marked <strong>draft for adviser review</strong> because PDF contents, share classes, return reporting dates and charges have not been independently verified for client distribution. A matched filename does not constitute this sign-off.</span>
+            </div>
+            {proposalError&&<div className="notice error" role="alert"><ShieldAlert size={16}/>{proposalError}</div>}
+            {proposalMessage&&<div className="notice success" role="status"><CheckCircle2 size={16}/>{proposalMessage}</div>}
+            <div className="button-row" style={{marginTop:14}}>
+              <button className="btn primary" type="button" disabled={proposalBusy||!readyForProposal}
+                onClick={()=>void generateProposal()}><FileText size={16}/>{proposalBusy?"Generating PDF…":"Generate proposal PDF"}</button>
+              <button className="btn quiet" type="button" onClick={()=>go("builder")}><SlidersHorizontal size={16}/> Edit portfolio allocations</button>
+            </div>
+            {!readyForProposal&&<p className="fineprint">To enable export, select at least one portfolio with 100% allocation and current workbook/PDF filename matches for all of its funds.</p>}
           </section>
         </>}
       </main>
@@ -352,10 +420,10 @@ export default function Workspace() {
         <span className="eyebrow">OMEGA-APPROVED FUND</span><h2>{selectedFund.name}</h2>
         <p className="muted">{selectedFund.provider}</p>
         {published[selectedFund.id] ? <>
-          <p><strong>Performance source:</strong> {workbookReturns(published[selectedFund.id])?"Current uploaded workbook":"Pending workbook/PDF match"}</p>
+          <p><strong>Performance source:</strong> {workbookReturns(published[selectedFund.id])?"Current workbook + linked PDF":"PDF filename not linked"}</p>
           <p><strong>Workbook returns as of:</strong> {published[selectedFund.id].evidence?.publishedPerformance?.asOf??"Date not provided"} ·
             <strong> Fee treatment:</strong> {prettyFeeBasis(published[selectedFund.id].evidence?.publishedPerformance?.feeBasis)}</p>
-          <p><strong>Match:</strong> {published[selectedFund.id].status.replaceAll("_"," ")} — {published[selectedFund.id].reason}</p>
+          <p><strong>Source link:</strong> {linked(published[selectedFund.id])?"Workbook row and PDF filename matched":"PDF filename not linked"}.</p>
           <div className="mini-stats">
             <Stat label="1-year reported" value={formatReported(workbookReturns(published[selectedFund.id])?.oneYear)} />
             <Stat label="3-year cumulative" value={formatReported(workbookReturns(published[selectedFund.id])?.threeYear)} />
@@ -371,7 +439,7 @@ export default function Workspace() {
             {published[selectedFund.id].factsheet_import_id && <a target="_blank" rel="noopener noreferrer" href={"/api/fund-uploads/"+published[selectedFund.id].factsheet_import_id+"/download?view=1"}>View original factsheet and charts</a>}
           </>}
         </>:<div className="notice neutral"><ShieldAlert size={17}/> No matched current workbook return row and new PDF yet. Upload both sources, then run automatic matching.</div>}
-        <p className="fineprint">Source figures are not approved for client distribution. Exact share class, as-of date and return basis must be confirmed.</p>
+        <p className="fineprint">Workbook returns and supporting PDF filenames have been linked where shown. PDF contents, share class, reporting dates and fee treatment still require adviser verification before client distribution.</p>
         <button className="btn quiet" onClick={()=>setSelectedFund(null)}>Close details</button>
       </div>
     </div>}

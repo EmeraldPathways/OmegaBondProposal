@@ -236,7 +236,7 @@ export default function FundPerformanceReview(){
       <span className="eyebrow">EVIDENCE-BASED DATA RECONCILIATION</span>
       <h2 style={{marginTop:8}}>Factsheets and workbook returns</h2>
     </div><span className="soft-pill">Four providers · {status.approvedUniverse} approved funds</span></div>
-    <p className="muted">The newly uploaded workbook defines the {status.approvedUniverse} fund names and all displayed performance returns. Its multi-year returns are cumulative, not annualised. PDFs are linked by exact, unique provider-qualified filenames against the workbook Fund Name column. The printed PDF title does not determine the link. PDF content and share classes are not independently verified by this step. Returns come only from the workbook.</p>
+    <p className="muted">The latest uploaded workbook defines the {status.approvedUniverse} fund names and all displayed performance returns. Its multi-year returns are cumulative, not annualised. PDFs are linked by exact, unique provider-qualified filenames against the workbook Fund Name column. The printed PDF title does not determine the link. PDF content and share classes are not independently verified by this step. Returns come only from the workbook.</p>
 
     <div className="button-row">
       <button className="btn primary" type="button"
@@ -324,14 +324,14 @@ export default function FundPerformanceReview(){
             r.status==="manual_rejected"?"Rejected by adviser":
             pdfIdentityApproved(r)?"Filename matched":r.status==="suggested"?"Possible filename match":
             r.status==="needs_review"?"Needs checking":"Filename unmatched"}</span></td>
-          <td><button type="button" className="btn quiet"
+          <td>{needsPdfReview(r)?<button type="button" className="btn quiet"
             aria-expanded={expanded===r.fund_id}
             aria-controls={"fund-review-"+r.fund_id}
             onClick={()=>setExpanded(expanded===r.fund_id?null:r.fund_id)}>
-            {expanded===r.fund_id?"Close":"Review match"}
-          </button></td>
+            {expanded===r.fund_id?"Close":"Review filename exception"}
+          </button>:<span className="soft-pill">Linked · no manual review</span>}</td>
         </tr>
-        {expanded===r.fund_id&&<tr className="reconciliation-accordion-row" id={"fund-review-"+r.fund_id}>
+        {needsPdfReview(r)&&expanded===r.fund_id&&<tr className="reconciliation-accordion-row" id={"fund-review-"+r.fund_id}>
           <td colSpan={7} className="reconciliation-accordion-cell">
             <div className="reconciliation-accordion-content">
               <div className="reconciliation-accordion-title">
