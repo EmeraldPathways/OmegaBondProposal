@@ -64,7 +64,7 @@ export function workbookFundNames(book:ExcelJS.Workbook):ApprovedFund[]{
   return all;
 }
 
-/** Provider sheets carry the returns. They must not be inferred from the PDF,
+/** Provider sheets carry cumulative period returns, including 3/5/10 years. They must not be inferred from the PDF,
  * uploaded filenames or older workbook imports. */
 export function workbookReturnRows(book:ExcelJS.Workbook):WorkbookEntry[]{
   const results:WorkbookEntry[]=[];
