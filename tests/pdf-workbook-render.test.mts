@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {renderToBuffer} from "@react-pdf/renderer";
-import {getDocumentProxy,extractText} from "unpdf";
+import {getDocumentProxy} from "unpdf";
 import WorkbookProposalPDF,{type WorkbookProposalData} from "../src/lib/pdf/workbook-proposal.tsx";
 
 test("A4 PDF can render uploaded-workbook returns and PDF factsheet metadata without price histories",async()=>{
@@ -52,10 +52,9 @@ test("A4 PDF can render uploaded-workbook returns and PDF factsheet metadata wit
   const pdfDocument=await getDocumentProxy(new Uint8Array(bytes));
   try{
     assert.equal(pdfDocument.numPages,3);
-    const extracted=await extractText(pdfDocument);
-    const pages=Array.isArray(extracted.text)?extracted.text:[extracted.text];
-    assert.equal(pages.length,3,"PDF text extraction should preserve the three-page layout");
-    const overview=pages[1];
+    const overviewPage=await pdfDocument.getPage(2);
+    const extracted=await overviewPage.getTextContent();
+    const overview=extracted.items.map(item=>"str" in item?item.str:"").join(" ");
     for(const heading of [
       "Cumulative fund performance",
       "Portfolio allocation",
