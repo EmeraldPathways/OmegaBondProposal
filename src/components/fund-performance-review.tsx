@@ -94,7 +94,7 @@ export default function FundPerformanceReview(){
       await Promise.all([refresh(),refreshPdf()]);
       if(alive.current)setMessage("Imported "+master.funds+" authoritative fund names and "+
         master.rows+" provider performance rows from the updated workbook. "+
-        (result.counts?.auto_approved??0)+" PDF identities matched automatically. "+
+        (result.counts?.auto_approved??0)+" PDF filenames linked automatically to their workbook fund names. "+
         "Uncertain fund or return series remain in manual review. Returns from older PDFs are never used.");
     }catch(e){
       if(alive.current)setError(e instanceof Error?e.message:"Workbook and PDF reconciliation failed.");
@@ -174,11 +174,11 @@ export default function FundPerformanceReview(){
         if(!progress.hasMore)break;
         if(i===299)throw new Error("The document batch limit was reached. Continue to resume.");
       }
-      setStep("Matching provider and printed PDF fund identities");
+      setStep("Matching exact PDF filenames to the workbook fund names");
       const result=await invoke("reconcile");
       await Promise.all([refresh(),refreshPdf()]);
       if(alive.current)setMessage("Reconciliation complete: "+result.total+" shortlisted funds reviewed. "+
-        (result.counts?.auto_approved||0)+" strong identity matches and "+
+        (result.counts?.auto_approved||0)+" exact PDF filename matches and "+
         (result.counts?.suggested||0)+" additional scored suggestions; "+
         (result.counts?.needs_review||0)+" need further review; "+
         (result.counts?.unmatched||0)+" unmatched. Fund identities may be approved automatically, but no unverified return is approved for client proposals.");
@@ -234,9 +234,9 @@ export default function FundPerformanceReview(){
   return <section className="panel padded" style={{marginTop:22,marginBottom:24}}>
     <div className="panel-heading"><div>
       <span className="eyebrow">EVIDENCE-BASED DATA RECONCILIATION</span>
-      <h2 style={{marginTop:8}}>Factsheets and reported performance</h2>
+      <h2 style={{marginTop:8}}>Factsheets and workbook returns</h2>
     </div><span className="soft-pill">Four providers · {status.approvedUniverse} approved funds</span></div>
-    <p className="muted">The newly uploaded workbook defines the {status.approvedUniverse} fund names and all displayed performance returns. Its multi-year returns are cumulative, not annualised. Fresh PDFs provide fund identity, investment information and charts. Exact matches are automatic; missing or conflicting fund/share-class evidence enters manual review. PDF return tables never replace workbook values.</p>
+    <p className="muted">The newly uploaded workbook defines the {status.approvedUniverse} fund names and all displayed performance returns. Its multi-year returns are cumulative, not annualised. PDFs are linked by exact, unique provider-qualified filenames against the workbook Fund Name column. The printed PDF title does not determine the link. PDF content and share classes are not independently verified by this step. Returns come only from the workbook.</p>
 
     <div className="button-row">
       <button className="btn primary" type="button"
@@ -248,7 +248,7 @@ export default function FundPerformanceReview(){
       <button className="btn quiet" type="button" onClick={()=>void exportAllPdfTables()}
         disabled={busy||pdfBusy||status.totalFactsheets===0}>
         {pdfBusy?<LoaderCircle className="pdf-spin" size={16}/>:<ArrowDownToLine size={16}/>}
-        Export all PDF tables (.xlsx)
+        Export PDF reference tables (not published)
       </button>
       <button className="btn quiet" type="button" onClick={()=>void run()}
         disabled={busy||pdfBusy||status.totalFactsheets===0}>
@@ -266,25 +266,20 @@ export default function FundPerformanceReview(){
     {busy&&<div className="notice neutral" role="status">
       <LoaderCircle className="pdf-spin" size={16}/>{step}.
     </div>}
-    {pdfStatus&&<div className="notice neutral" role="status">
-      Reference PDF performance: {pdfStatus.extracted} tables extracted from {pdfStatus.processed} of {pdfStatus.total} documents.
-      {" "}{pdfStatus.libraryFunds} approved fund identities currently display current workbook returns.
-      {pdfStatus.failed>0?" "+pdfStatus.failed+" documents require extraction review.":""}
-    </div>}
     {error&&<div role="alert" className="notice error"><ShieldAlert size={17}/>{error}</div>}
     {message&&<div role="status" className="notice success"><CheckCircle2 size={17}/>{message}</div>}
 
     <div className="stats-grid" style={{marginTop:18}}>
       <div className="stat"><span>Factsheets processed</span><strong>{status.processedFactsheets} / {status.totalFactsheets}</strong></div>
       <div className="stat"><span>Funds displaying updated workbook returns</span><strong>{status.reviews.filter(r=>r.evidence?.displayedReturnsSource==="uploaded_workbook").length}</strong></div>
-      <div className="stat"><span>Auto-approved factsheet identities</span><strong>{status.reviews.filter(r=>r.evidence?.factsheetIdentityApproved && !r.manual_decision).length}</strong></div>
-      <div className="stat"><span>PDF sources linked</span><strong>{status.reviews.filter(r=>r.extracted_factsheet?.title).length}</strong></div>
-      <div className="stat"><span>PDF identities needing review</span><strong>{status.reviews.filter(needsPdfReview).length}</strong></div>
+      <div className="stat"><span>PDF filenames auto-matched</span><strong>{status.reviews.filter(r=>r.evidence?.factsheetIdentityApproved && !r.manual_decision).length}</strong></div>
+      <div className="stat"><span>PDF sources linked</span><strong>{status.reviews.filter(r=>r.extracted_factsheet?.filename).length}</strong></div>
+      <div className="stat"><span>PDF filenames needing review</span><strong>{status.reviews.filter(needsPdfReview).length}</strong></div>
       <div className="stat"><span>Manually confirmed</span><strong>{count("manually_confirmed")}</strong></div>
     </div>
     {loaded&&<div className="table-scroll" style={{marginTop:18}}>
       <table className="data-table">
-        <thead><tr><th>PROVIDER</th><th>PDF AUTO-APPROVED</th><th>COMPLETE AUTO-APPROVED</th><th>SUGGESTED</th><th>MANUAL CONFIRMED</th><th>NEEDS REVIEW</th></tr></thead>
+        <thead><tr><th>PROVIDER</th><th>PDF FILENAMES MATCHED</th><th>EXACT NAME LINKS</th><th>SUGGESTED</th><th>MANUAL CONFIRMED</th><th>NEEDS REVIEW</th></tr></thead>
         <tbody>{["Aviva","Zurich","Standard Life","New Ireland"].map(name=>
           <tr key={name}><td><b>{name}</b></td>
             <td>{status.reviews.filter(r=>r.provider===name&&r.evidence?.factsheetIdentityApproved&&!r.manual_decision).length}</td>
@@ -304,9 +299,9 @@ export default function FundPerformanceReview(){
           <option>All providers</option>{["Aviva","Zurich","New Ireland","Standard Life"].map(x=><option key={x}>{x}</option>)}
         </select></label>
         <label className="select-wrap"><select aria-label="Filter match status" value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}>
-          <option>Needs manual review</option><option value="pdf_approved">PDF identities approved</option>
+          <option>Needs manual review</option><option value="pdf_approved">PDF filenames matched</option>
           <option>All statuses</option>
-          <option value="auto_approved">Automatically approved</option>
+          <option value="auto_approved">Exact filename matches</option>
           <option value="suggested">Automatic suggestions</option>
           <option value="manually_confirmed">Manually confirmed</option>
           <option value="manual_rejected">Manually rejected</option>
@@ -314,21 +309,21 @@ export default function FundPerformanceReview(){
           <option value="unmatched">Unmatched</option>
         </select></label>
       </div>
-      <p className="fineprint">Showing {filtered.length} of {status.reviews.length} approved funds. Performance figures are taken exclusively from the latest imported workbook. Original PDF returns are reference-only. Identity scores are heuristic similarity measures (0–100), not measured accuracy. Even manual identity confirmation does not approve returns for client use.</p>
+      <p className="fineprint">Showing {filtered.length} of {status.reviews.length} approved funds. Performance figures are taken exclusively from the latest imported workbook. A 100/100 PDF filename match means the filename equals the workbook fund name; it does not independently verify PDF contents, share class, dates, or fees. Fund returns are not approved for client proposals.</p>
       <div className="table-scroll"><table className="data-table">
-        <thead><tr><th>APPROVED FUND</th><th>PROVIDER</th><th>PDF MATCH SCORE</th><th>PDF FACTSHEET DATE</th><th>PDF FACTSHEET</th><th>REVIEW STATUS</th><th></th></tr></thead>
+        <thead><tr><th>APPROVED FUND</th><th>PROVIDER</th><th>FILENAME MATCH</th><th>PDF FACTSHEET DATE</th><th>PDF FACTSHEET</th><th>REVIEW STATUS</th><th></th></tr></thead>
         <tbody>{filtered.map(r=><Fragment key={r.fund_id}><tr>
-          <td><b>{r.approved_name}</b><small>{r.extracted_factsheet?.title||"PDF title not identified"}</small></td>
+          <td><b>{r.approved_name}</b><small>{r.extracted_factsheet?.filename||"PDF filename not linked"}</small></td>
           <td>{r.provider}</td>
           <td><strong>{pdfScore(r)}/100</strong></td>
           <td>{r.extracted_factsheet?.performance?.asOf??"Not available"}</td>
-          <td>{r.extracted_factsheet?.title??"No verified PDF"}
+          <td>{r.extracted_factsheet?.filename??"No linked PDF"}
             {r.extracted_factsheet?.performance?.asOf?
               <small>As of {r.extracted_factsheet.performance.asOf}</small>:null}</td>
           <td><span className="soft-pill">{r.status==="manually_confirmed"?"Confirmed by adviser":
             r.status==="manual_rejected"?"Rejected by adviser":
-            pdfIdentityApproved(r)?"PDF identity approved":r.status==="suggested"?"Possible PDF match":
-            r.status==="needs_review"?"Needs checking":"Unmatched"}</span></td>
+            pdfIdentityApproved(r)?"Filename matched":r.status==="suggested"?"Possible filename match":
+            r.status==="needs_review"?"Needs checking":"Filename unmatched"}</span></td>
           <td><button type="button" className="btn quiet"
             aria-expanded={expanded===r.fund_id}
             aria-controls={"fund-review-"+r.fund_id}
@@ -358,6 +353,6 @@ export default function FundPerformanceReview(){
     </>:<div className="notice neutral" style={{marginTop:16}}>
       <ShieldAlert size={17}/> Source documents are stored privately. The full reconciliation has not yet been run against these uploads.
     </div>}
-    <p className="fineprint" style={{marginTop:12}}>No monthly price history is requested or inferred; displayed performance uses original PDFs only. Factsheet charts are accessible as their original PDF pages, not reconstructed numerical time series.</p>
+    <p className="fineprint" style={{marginTop:12}}>No monthly price history is requested or inferred. Displayed performance comes exclusively from the uploaded workbook. A matched filename does not verify a PDF's internal contents. Factsheet charts are accessible as their original PDF pages, not reconstructed numerical time series.</p>
   </section>;
 }
