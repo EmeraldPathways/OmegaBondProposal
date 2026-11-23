@@ -89,11 +89,31 @@ export function expandAxisAnchors(items:TextAnchor[]):TextAnchor[]{
   }
   return expanded;
 }
+/** Several PDF plot libraries draw the entire axis as one text string.
+ * Recover each dated tick's approximate horizontal position from character
+ * offsets instead of incorrectly treating the whole string as one tick.
+ * Only useful for calibrated date axes; not official fund price observations. */
+export function dateAnchorsFromPdfText(items:TextAnchor[]):Tick[]{
+  const out:Tick[]=[];
+  const pattern=/\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[ .,'’/-]*\d{2,4}\b|\b(?:19[89]|20)\d{2}\b/gi;
+  for(const t of expandAxisAnchors(items)){
+    const occurrences=[...t.label.matchAll(pattern)];
+    if(occurrences.length>=2 && t.width>16){
+      for(const m of occurrences){
+        const value=dateTick(m[0]);
+        if(value===null)continue;
+        const midpoint=(m.index??0)+m[0].length/2;
+        out.push({x:t.x+(midpoint/t.label.length)*t.width,y:t.y,value});
+      }
+    }else{
+      const value=dateTick(t.label);
+      if(value!==null)out.push({x:t.x+t.width/2,y:t.y,value});
+    }
+  }
+  return out;
+}
 function groupDates(items:TextAnchor[]):{ticks:Tick[];y:number}|null{
-  const dateItems=expandAxisAnchors(items).flatMap(t=>{
-    const value=dateTick(t.label);
-    return value===null?[]:[{x:t.x+t.width/2,y:t.y,value}];
-  });
+  const dateItems=dateAnchorsFromPdfText(items);
   let best:Tick[]=[];
   for(const tick of dateItems){
     const nearby=dateItems.filter(x=>Math.abs(x.y-tick.y)<=10 &&
