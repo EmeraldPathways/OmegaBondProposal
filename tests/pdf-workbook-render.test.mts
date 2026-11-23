@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {renderToBuffer} from "@react-pdf/renderer";
+import {getDocumentProxy,extractText} from "unpdf";
 import WorkbookProposalPDF,{type WorkbookProposalData} from "../src/lib/pdf/workbook-proposal.tsx";
 
 test("A4 PDF can render uploaded-workbook returns and PDF factsheet metadata without price histories",async()=>{
@@ -48,5 +49,25 @@ test("A4 PDF can render uploaded-workbook returns and PDF factsheet metadata wit
   // and one provider details page. Previously these took five pages.
   assert.equal(pageCount,3,"Three-fund portfolio must fit one A4 overview page");
   assert.ok(serialized.includes("/Type /Page"));
+  const pdfDocument=await getDocumentProxy(new Uint8Array(bytes));
+  try{
+    assert.equal(pdfDocument.numPages,3);
+    const extracted=await extractText(pdfDocument);
+    const pages=Array.isArray(extracted.text)?extracted.text:[extracted.text];
+    assert.equal(pages.length,3,"PDF text extraction should preserve the three-page layout");
+    const overview=pages[1];
+    for(const heading of [
+      "Cumulative fund performance",
+      "Portfolio allocation",
+      "Initial investment breakdown",
+      "Fund allocations and reported cumulative returns",
+      "Aviva Fixed ESG 60 Series 1",
+      "Zurich International Equity",
+      "10 YEARS"
+    ])assert.ok(overview.includes(heading),
+      "Portfolio overview page must contain "+heading);
+  }finally{
+    await pdfDocument.destroy();
+  }
 
 });
