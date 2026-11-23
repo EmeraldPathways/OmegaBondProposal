@@ -236,7 +236,7 @@ export default function FundPerformanceReview(){
       <span className="eyebrow">EVIDENCE-BASED DATA RECONCILIATION</span>
       <h2 style={{marginTop:8}}>Factsheets and reported performance</h2>
     </div><span className="soft-pill">Four providers · {status.approvedUniverse} approved funds</span></div>
-    <p className="muted">The newly uploaded workbook defines the {status.approvedUniverse} fund names and all displayed performance returns. Fresh PDFs provide fund identity, investment information and charts. Exact matches are automatic; missing or conflicting fund/share-class evidence enters manual review. PDF return tables never replace workbook values.</p>
+    <p className="muted">The newly uploaded workbook defines the {status.approvedUniverse} fund names and all displayed performance returns. Its multi-year returns are cumulative, not annualised. Fresh PDFs provide fund identity, investment information and charts. Exact matches are automatic; missing or conflicting fund/share-class evidence enters manual review. PDF return tables never replace workbook values.</p>
 
     <div className="button-row">
       <button className="btn primary" type="button"
@@ -267,8 +267,8 @@ export default function FundPerformanceReview(){
       <LoaderCircle className="pdf-spin" size={16}/>{step}.
     </div>}
     {pdfStatus&&<div className="notice neutral" role="status">
-      Original PDF performance: {pdfStatus.extracted} tables extracted from {pdfStatus.processed} of {pdfStatus.total} documents.
-      {" "}{pdfStatus.libraryFunds} approved fund identities currently display original PDF returns.
+      Reference PDF performance: {pdfStatus.extracted} tables extracted from {pdfStatus.processed} of {pdfStatus.total} documents.
+      {" "}{pdfStatus.libraryFunds} approved fund identities currently display current workbook returns.
       {pdfStatus.failed>0?" "+pdfStatus.failed+" documents require extraction review.":""}
     </div>}
     {error&&<div role="alert" className="notice error"><ShieldAlert size={17}/>{error}</div>}
