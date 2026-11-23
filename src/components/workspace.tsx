@@ -10,6 +10,7 @@ import {
 import OmegaLogo from "@/components/omega-logo";
 import SecureFundUploads from "@/components/secure-fund-uploads";
 import ProposalPdfViewer from "@/components/proposal-pdf-viewer";
+import FundChartReconstruction from "@/components/fund-chart-reconstruction";
 import FundSourceAudit from "@/components/fund-source-audit";
 import { APPROVED_FUND_GROUPS, type ApprovedFund } from "@/lib/approved-funds";
 import type { Portfolio } from "@/lib/types";
@@ -103,6 +104,7 @@ export default function Workspace() {
   const [adviser, setAdviser] = useState("Omega Financial Management");
   const [objective, setObjective] = useState("Review diversified investment options in line with the client's objectives and risk profile.");
   const [includePortfolios,setIncludePortfolios]=useState<Record<string,boolean>>({a:true,b:true,c:true});
+  const [chartRevision,setChartRevision]=useState(0);
 
   const filtered = useMemo(() => funds.filter(f =>
     (provider === "All providers" || f.provider === provider) &&
@@ -380,7 +382,11 @@ export default function Workspace() {
             </div>
             {!readyForProposal&&<p className="fineprint">The live PDF preview becomes available when at least one selected portfolio has a 100% allocation and every selected fund has a current workbook return row and exact PDF filename match.</p>}
           </section>
-          {readyForProposal&&<ProposalPdfViewer input={{
+          <FundChartReconstruction autoStart={readyForProposal}
+            selectedFundIds={proposalPortfolios.flatMap(p=>Object.entries(p.weights)
+              .filter(([,weight])=>weight>0).map(([id])=>id))}
+            onUpdated={()=>setChartRevision(n=>n+1)}/>
+          {readyForProposal&&<ProposalPdfViewer key={chartRevision} input={{
             client,adviser,objective,investment,portfolios:proposalPortfolios
           }}/>}
           <FundSourceAudit/>
