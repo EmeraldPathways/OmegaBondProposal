@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import OmegaLogo from "@/components/omega-logo";
 import SecureFundUploads from "@/components/secure-fund-uploads";
+import ProposalPdfViewer from "@/components/proposal-pdf-viewer";
 import FundSourceAudit from "@/components/fund-source-audit";
 import { APPROVED_FUND_GROUPS, type ApprovedFund } from "@/lib/approved-funds";
 import type { Portfolio } from "@/lib/types";
@@ -101,9 +102,6 @@ export default function Workspace() {
   const [client, setClient] = useState("");
   const [adviser, setAdviser] = useState("Omega Financial Management");
   const [objective, setObjective] = useState("Review diversified investment options in line with the client's objectives and risk profile.");
-  const [proposalBusy,setProposalBusy]=useState(false);
-  const [proposalError,setProposalError]=useState("");
-  const [proposalMessage,setProposalMessage]=useState("");
   const [includePortfolios,setIncludePortfolios]=useState<Record<string,boolean>>({a:true,b:true,c:true});
 
   const filtered = useMemo(() => funds.filter(f =>
@@ -142,34 +140,6 @@ export default function Workspace() {
     proposalPortfolios.every(p=>Math.abs(sumWeights(p)-100)<.005 &&
       Object.entries(p.weights).filter(([,weight])=>weight>0).every(([id])=>linked(published[id])));
 
-  async function generateProposal(){
-    setProposalError("");setProposalMessage("");
-    if(!readyForProposal){
-      setProposalError("Select a portfolio with 100% allocation and current workbook/PDF filename matches for every fund.");
-      return;
-    }
-    setProposalBusy(true);
-    try{
-      const response=await fetch("/api/proposal/pdf",{
-        method:"POST",credentials:"same-origin",cache:"no-store",
-        headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({client,adviser,objective,investment,portfolios:proposalPortfolios})
-      });
-      if(!response.ok){
-        const data=await response.json().catch(()=>({error:"Proposal PDF export failed."}));
-        throw new Error(data.error||"Proposal PDF export failed.");
-      }
-      const blob=await response.blob();
-      const url=URL.createObjectURL(blob);
-      const anchor=document.createElement("a");
-      anchor.href=url;anchor.download="Omega-Investment-Bond-Proposal-Draft.pdf";
-      document.body.appendChild(anchor);anchor.click();anchor.remove();
-      setTimeout(()=>URL.revokeObjectURL(url),1500);
-      setProposalMessage("Proposal PDF created from the latest uploaded workbook and the linked PDF factsheet details.");
-    }catch(error){
-      setProposalError(error instanceof Error?error.message:"Proposal PDF export failed.");
-    }finally{setProposalBusy(false);}
-  }
 
   return <div className="app-shell">
     <aside className={"sidebar " + (mobile ? "mobile-open" : "")}>
@@ -398,20 +368,21 @@ export default function Workspace() {
               })}
             </div>
             <div className="notice neutral" style={{marginTop:17}}>
-              <ShieldAlert size={18}/><span>This PDF uses the workbook for all fund names and cumulative return percentages. The linked PDFs supply objectives, strategy, risk rating, charges, factsheet date and source references where extractable. Missing PDF fields are labelled unavailable. Historical portfolio performance and charts are not invented.</span>
+              <ShieldAlert size={18}/><span>This PDF uses the workbook for all fund names and cumulative return percentages. The linked PDFs supply objectives, strategy, risk rating, charges, factsheet date and source references where extractable. Missing PDF fields are labelled unavailable. The PDF contains allocation and actual cumulative fund-return charts; no historical price series or synthetic portfolio growth charts are invented.</span>
             </div>
             <div className="notice neutral">
               <ShieldAlert size={18}/><span>The export is marked <strong>draft for adviser review</strong> because PDF contents, share classes, return reporting dates and charges have not been independently verified for client distribution. A matched filename does not constitute this sign-off.</span>
             </div>
-            {proposalError&&<div className="notice error" role="alert"><ShieldAlert size={16}/>{proposalError}</div>}
-            {proposalMessage&&<div className="notice success" role="status"><CheckCircle2 size={16}/>{proposalMessage}</div>}
             <div className="button-row" style={{marginTop:14}}>
-              <button className="btn primary" type="button" disabled={proposalBusy||!readyForProposal}
-                onClick={()=>void generateProposal()}><FileText size={16}/>{proposalBusy?"Generating PDF…":"Generate proposal PDF"}</button>
-              <button className="btn quiet" type="button" onClick={()=>go("builder")}><SlidersHorizontal size={16}/> Edit portfolio allocations</button>
+              <button className="btn quiet" type="button" onClick={()=>go("builder")}>
+                <SlidersHorizontal size={16}/> Edit portfolio allocations
+              </button>
             </div>
-            {!readyForProposal&&<p className="fineprint">To enable export, select at least one portfolio with 100% allocation and current workbook/PDF filename matches for all of its funds.</p>}
+            {!readyForProposal&&<p className="fineprint">The live PDF preview becomes available when at least one selected portfolio has a 100% allocation and every selected fund has a current workbook return row and exact PDF filename match.</p>}
           </section>
+          {readyForProposal&&<ProposalPdfViewer input={{
+            client,adviser,objective,investment,portfolios:proposalPortfolios
+          }}/>}
           <FundSourceAudit/>
         </>}
       </main>
