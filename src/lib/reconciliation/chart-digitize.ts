@@ -41,7 +41,12 @@ const monthNums:Record<string,number>={
 };
 function dateTick(s:string):number|null{
   const match=/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[ .,'’]*(\d{2,4})\b/i.exec(s);
-  if(!match)return null;
+  if(!match){
+    const yearOnly=/^\s*(?:19[89]\d|20\d{2})\s*$/.exec(s);
+    if(!yearOnly)return null;
+    const year=Number(yearOnly[0].trim());
+    return Date.UTC(year,0,1);
+  }
   let year=Number(match[2]);
   if(year<100)year+=year>=70?1900:2000;
   if(year<1980||year>2035)return null;
@@ -80,8 +85,8 @@ function groupValueTicks(items:TextAnchor[],axisY:number,firstDateX:number){
   });
   let best:typeof all=[];
   for(const tick of all){
-    const group=all.filter(x=>x.currency===tick.currency&&
-      Math.abs(x.x-tick.x)<21 && Math.abs(x.y-tick.y)>0.3 || x===tick);
+    const group=all.filter(x=>(x.currency===tick.currency&&
+      Math.abs(x.x-tick.x)<21 && Math.abs(x.y-tick.y)>0.3) || x===tick);
     const unique=[...new Map(group.map(x=>[x.value,x])).values()];
     if(unique.length>best.length)best=unique;
   }
