@@ -52,7 +52,8 @@ export function reconcilePdfOnly(fund: ApprovedFund, factsheets: FactSheetData[]
     factsheetScore:approved?1:0,
     workbookScore:0,
     factsheetIdentityApproved:approved,
-    seriesIdentityApproved:approved,
+    // Share class has not been independently verified from the PDF contents.
+    seriesIdentityApproved:false,
     reason,workbookRow:null,factsheet:matched,
     alternativeRows:[],
     alternativeFactsheets:alternatives.map(v=>({
