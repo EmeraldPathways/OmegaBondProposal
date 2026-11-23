@@ -1,6 +1,8 @@
 import React from "react";
 import {Document,Page,View,Text,StyleSheet,Svg,Path,Circle,Rect,Line} from "@react-pdf/renderer";
 import {OMEGA_LOGO_PATHS} from "@/lib/branding/omega-logo-paths";
+import type {SourceGrowthSeries} from "@/lib/reconciliation/chart-digitize";
+import {reconstructPortfolioGrowth} from "@/lib/pdf/historical-growth";
 
 export type WorkbookReturnPeriods = Record<
   "ytd"|"oneMonth"|"threeMonth"|"sixMonth"|"oneYear"|"threeYear"|"fiveYear"|"tenYear"|"sinceLaunch",
@@ -9,6 +11,7 @@ export type WorkbookReturnPeriods = Record<
 export type WorkbookProposalFund = {
   id:string;name:string;provider:string;weight:number;allocatedAmount:number;
   returns:WorkbookReturnPeriods;
+  growthChart?:SourceGrowthSeries|null;
   factsheet:{
     filename:string|null; title:string|null; date:string|null;
     objective:string|null;strategy:string|null;moneyMateId:string|null;
@@ -198,6 +201,71 @@ function FundReturnChart({funds,horizon,title}:{
     {values.length===0&&<Text style={[style.visualNote,{marginTop:7}]}>No reported values are available for this period.</Text>}
   </View>;
 }
+
+function HistoricalPortfolioGrowthChart({funds}:{funds:WorkbookProposalFund[]}){
+  const reconstructed=reconstructPortfolioGrowth(funds);
+  if(!reconstructed)return <View style={style.visualCard}>
+    <Text style={style.visualTitle}>Historical growth reconstruction</Text>
+    <Text style={style.visualNote}>A historical line could not be reconstructed with adequate date-axis and curve evidence for these funds. The app will not invent historical monthly unit prices. See the saved chart digitisation status in Omega.</Text>
+  </View>;
+  const lines=reconstructed.fundLines;
+  const all=reconstructed.portfolioLine?[...lines.map(l=>l.values),reconstructed.portfolioLine]:lines.map(l=>l.values);
+  const values=all.flat();
+  const min=Math.min(100,...values),max=Math.max(100,...values);
+  const bottom=Math.floor((min-3)/5)*5,top=Math.ceil((max+3)/5)*5;
+  const w=490,h=220,left=42,right=12,upper=14,lower=26;
+  const cw=w-left-right,ch=h-upper-lower;
+  const x=(i:number)=>left+(i/Math.max(1,reconstructed.dates.length-1))*cw;
+  const y=(v:number)=>upper+((top-v)/Math.max(1,top-bottom))*ch;
+  const d=(items:number[])=>items.map((v,i)=>(i?"L":"M")+x(i).toFixed(2)+" "+y(v).toFixed(2)).join(" ");
+  const shownLines=lines.slice(0,7);
+  return <View style={style.visualCard} wrap={false}>
+    <Text style={style.visualTitle}>Reconstructed historical growth</Text>
+    <Text style={style.visualNote}>Based on the plotted historical curves in the original provider factsheets, digitised and redrawn by Omega. Indexed to 100 on the first common month: {reconstructed.start}.</Text>
+    <Svg width="100%" height={230} viewBox={"0 0 "+w+" "+h}>
+      {[0,1,2,3,4].map(i=>{
+        const v=bottom+(top-bottom)*i/4;
+        const yy=y(v);
+        return <React.Fragment key={"grid-"+i}>
+          <Line x1={left} x2={w-right} y1={yy} y2={yy}
+            stroke="#E9E9E5" strokeWidth={.8}/>
+          <Text x={0} y={yy+3} style={{fontSize:7,fill:"#73766F"}}>{v.toFixed(0)}</Text>
+        </React.Fragment>;
+      })}
+      {shownLines.map((line,i)=><Path key={line.id} d={d(line.values)}
+        stroke={CHART_COLORS[(i+1)%CHART_COLORS.length]}
+        strokeWidth={1.25} fill="none"/>)}
+      {reconstructed.portfolioLine?<Path d={d(reconstructed.portfolioLine)}
+        stroke={color.wine} strokeWidth={3} fill="none"/>:null}
+    </Svg>
+    <View style={{flexDirection:"row",justifyContent:"space-between",
+      paddingHorizontal:25,marginTop:-3}}>
+      <Text style={style.visualNote}>{reconstructed.start.slice(0,7)}</Text>
+      <Text style={style.visualNote}>{reconstructed.dates[Math.floor(reconstructed.dates.length/2)].slice(0,7)}</Text>
+      <Text style={style.visualNote}>{reconstructed.end.slice(0,7)}</Text>
+    </View>
+    <View style={{marginTop:15}}>
+      {reconstructed.portfolioLine?<View style={{flexDirection:"row",alignItems:"center",gap:8,marginBottom:8}}>
+        <View style={{width:18,height:3,backgroundColor:color.wine}}/>
+        <Text style={{fontSize:8.5,fontFamily:"Helvetica-Bold",color:color.wine}}>
+          Indicative portfolio index · initial weights, no rebalancing
+        </Text>
+      </View>:null}
+      {shownLines.map((line,i)=><View key={line.id} style={{flexDirection:"row",
+        gap:8,alignItems:"center",marginBottom:5}}>
+        <View style={{width:14,height:2,backgroundColor:CHART_COLORS[(i+1)%CHART_COLORS.length]}}/>
+        <Text style={style.visualNote}>{line.name} ({line.weight.toFixed(1)}%)</Text>
+      </View>)}
+    </View>
+    {!reconstructed.allFundsCovered?
+      <Text style={[style.visualNote,{marginTop:8,color:color.wine}]}>
+        Indicative portfolio line is withheld: no compatible digitised chart exists for {reconstructed.missingFunds.join("; ")}. The individually reconstructed fund lines are shown for reference.
+      </Text>:null}
+    <Text style={[style.visualNote,{marginTop:12}]}>
+      {reconstructed.caveat} All reconstructed readings are approximate graph samples, not official NAV observations, and cannot replace workbook performance returns.
+    </Text>
+  </View>;
+}
 export default function WorkbookProposalPDF({data}:{data:WorkbookProposalData}){
   return <Document title="Omega Investment Bond Proposal - Draft"
     author="Omega Financial Management"
@@ -247,6 +315,19 @@ export default function WorkbookProposalPDF({data}:{data:WorkbookProposalData}){
       <Text style={[style.visualNote,{marginTop:11}]}>
         Charts illustrate actual allocations and individual fund-level cumulative returns only. Figures may have different reporting dates or fee bases. No monthly history, implied portfolio growth or portfolio-level return has been calculated. Source: {data.workbookFilename}.
       </Text>
+      <Footer/>
+    </Page>)}
+    {data.portfolios.map((p,index)=><Page key={p.id+"-history"} size="A4" style={style.page} wrap>
+      <Banner label={"PORTFOLIO "+String.fromCharCode(65+index)+" · HISTORICAL GROWTH"}/>
+      <Text style={style.eyebrow}>ORIGINAL PDF GRAPH CURVES · RECONSTRUCTED</Text>
+      <Text style={style.heading}>{p.title} · Historical growth</Text>
+      <HistoricalPortfolioGrowthChart funds={p.funds}/>
+      <View style={style.alert}>
+        <Text style={style.alertTitle}>RECONSTRUCTION NOTICE</Text>
+        <Text style={style.note}>
+          This line chart was redrawn using approximate monthly readings digitised from provider factsheet graphics. It is illustrative and does not represent a verified portfolio performance calculation or independently sourced unit-price history. The cumulative return tables elsewhere in this proposal come exclusively from the uploaded Excel workbook.
+        </Text>
+      </View>
       <Footer/>
     </Page>)}
     {data.portfolios.map((p,index)=><Page key={p.id} size="A4" style={style.page} wrap>
