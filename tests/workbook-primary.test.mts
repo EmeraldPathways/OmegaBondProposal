@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import ExcelJS from "exceljs";
 import {APPROVED_FUNDS} from "../src/lib/approved-funds.ts";
-import {workbookFundNames,workbookReturnRows,verifyWorkbookConsistency,matchWorkbookReturn,workbookNameKey} from "../src/lib/reconciliation/workbook-source.ts";
+import {workbookFundNames,workbookReturnRows,verifyWorkbookConsistency,matchWorkbookReturn,workbookNameKey,pdfFilenameFundKey} from "../src/lib/reconciliation/workbook-source.ts";
 import {reconcilePdfOnly} from "../src/lib/reconciliation/pdf-only.ts";
 import type {FactSheetData} from "../src/lib/reconciliation/engine.ts";
 
@@ -208,4 +208,32 @@ test("A different series filename never receives an invented exact link",()=>{
   const pdf={importId:"wrong",filename:"Aviva Fixed ESG 60 Series 1.pdf",
     providerHint:"Aviva",title:"Aviva Fixed ESG 80 Series 1"} as FactSheetData;
   assert.equal(reconcilePdfOnly(f,[pdf]).factsheetIdentityApproved,false);
+});
+
+test("Proposal filename verification uses the same extension-free identity as auto-matching",()=>{
+  const name="Aviva Concept K Series 1";
+  const filename="Aviva Concept K Series 1.pdf";
+  assert.equal(pdfFilenameFundKey(filename),workbookNameKey(name));
+  assert.equal(pdfFilenameFundKey("Aviva Concept K Series 1.PDF"),workbookNameKey(name));
+  assert.notEqual(pdfFilenameFundKey("Aviva Concept K Series 2.pdf"),workbookNameKey(name));
+  const result=reconcilePdfOnly(
+    {id:"aviva-concept",provider:"Aviva",name},
+    [{importId:"existing-pdf",filename,title:"Some other title",providerHint:null} as FactSheetData]
+  );
+  assert.equal(result.status,"auto_approved");
+  assert.equal(result.factsheet?.importId,"existing-pdf");
+});
+test("Every selected user screenshot fund can be matched by its current exact PDF filename",()=>{
+  const names=[
+    "Standard Life Ireland MyFolio Active V","Zurich International Equity",
+    "New Ireland Ethical Equity","Standard Life Ireland MyFolio Market V",
+    "New Ireland Goodbody Small Companies","New Ireland PRIME 4",
+    "Aviva Concept K Series 1","Aviva Cantor Fitzgerald Multi Asset 30",
+    "Aviva L&G Multi-Index V B"
+  ];
+  for(const name of names){
+    const filename=name+".pdf";
+    assert.equal(pdfFilenameFundKey(filename),workbookNameKey(name),
+      "A matching PDF must not fail the proposal's filename validation: "+name);
+  }
 });
