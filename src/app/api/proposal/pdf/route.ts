@@ -171,7 +171,7 @@ export async function POST(request:Request){
     return new Response(new Uint8Array(pdf),{
       status:200,headers:{...noCache,
         "Content-Type":"application/pdf",
-        "Content-Disposition":"attachment; filename=\"Omega-Investment-Bond-Proposal-Draft.pdf\"",
+        "Content-Disposition":"attachment; filename=\"Omega-Investment-Bond-Proposal.pdf\"",
         "Content-Length":String(pdf.byteLength)
       }
     });
