@@ -3,7 +3,7 @@ import {z} from "zod";
 import {auth,ADMIN_EMAIL,isLoginConfigured} from "@/auth";
 import {getNeonSql} from "@/lib/server/neon";
 import {getActiveFunds} from "@/lib/server/active-funds";
-import {matchWorkbookReturn,workbookNameKey} from "@/lib/reconciliation/workbook-source";
+import {matchWorkbookReturn,workbookNameKey,pdfFilenameFundKey} from "@/lib/reconciliation/workbook-source";
 import type {WorkbookEntry,ReportedReturns,FactSheetData} from "@/lib/reconciliation/engine";
 import WorkbookProposalPDF, {
   type WorkbookProposalData,type WorkbookProposalFund,type WorkbookReturnPeriods
@@ -117,7 +117,7 @@ export async function POST(request:Request){
           const proof=doc?.evidence as {matchBasis?:string}|null;
           const pdfFilename=doc?.source_filename?String(doc.source_filename):null;
           if(!pdfFilename || proof?.matchBasis!=="unique_provider_qualified_filename" ||
-             workbookNameKey(pdfFilename.replace(/\\.pdf$/i,""))!==workbookNameKey(fund.name))
+             pdfFilenameFundKey(pdfFilename)!==workbookNameKey(fund.name))
             throw new Error("A current matching PDF filename is missing for "+fund.name);
           const pdf=doc?.source_data as FactSheetData|null;
           const short=(v:unknown,max=600)=>typeof v==="string"?v.trim().slice(0,max)||null:null;
