@@ -74,7 +74,7 @@ export default function ProposalPdfViewer({input}:{input:WorkbookProposalInput})
     if(!url || busy)return;
     const a=document.createElement("a");
     a.href=url;
-    a.download="Omega-Investment-Bond-Proposal-Draft.pdf";
+    a.download="Omega-Investment-Bond-Proposal.pdf";
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -106,6 +106,6 @@ export default function ProposalPdfViewer({input}:{input:WorkbookProposalInput})
       title="Omega investment bond proposal live A4 PDF preview"
       src={url+"#toolbar=0&navpanes=0&view=FitH"}/>}
     <p className="pdf-document-note"><ShieldCheck size={15} aria-hidden="true"/>
-      Generated privately for this signed-in session. Source data remains draft for adviser review.</p>
+      Prepared privately for this signed-in session.</p>
   </section>;
 }
