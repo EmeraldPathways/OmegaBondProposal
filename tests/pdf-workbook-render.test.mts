@@ -42,4 +42,11 @@ test("A4 PDF can render uploaded-workbook returns and PDF factsheet metadata wit
   const bytes=await renderToBuffer(WorkbookProposalPDF({data}));
   assert.ok(bytes.byteLength>3000,"PDF must contain a real rendered document");
   assert.equal(Buffer.from(bytes).subarray(0,4).toString("ascii"),"%PDF");
+  const serialized=Buffer.from(bytes).toString("latin1");
+  const pageCount=(serialized.match(/\/Type\s*\/Page(?!s)\b/g)??[]).length;
+  // One cover, ONE portfolio overview with all three requested elements,
+  // and one provider details page. Previously these took five pages.
+  assert.equal(pageCount,3,"Three-fund portfolio must fit one A4 overview page");
+  assert.ok(serialized.includes("/Type /Page"));
+
 });
