@@ -153,6 +153,7 @@ async function reconcile(){
         workbookReturnsUsed:approved,
         publishedPerformance:approved?{
           source:"uploaded_workbook",importId:stored.id,row:exact!.rowNumber,
+          returnConvention:"cumulative",
           asOf:null,feeBasis:"not_stated"
         }:null,
         candidatePerformanceRows:candidates,
@@ -161,7 +162,7 @@ async function reconcile(){
         factsheetIdentityApproved:r.factsheetIdentityApproved,
         seriesIdentityApproved:approved,
         identityOnly:!r.factsheetIdentityApproved,
-        performanceSourceBasis:approved?"workbook_returns_fee_basis_not_confirmed":"not_confirmed",
+        performanceSourceBasis:approved?"workbook_returns_cumulative_fee_basis_not_confirmed":"not_confirmed",
         workbookAsOf:null
       }
     };
@@ -240,7 +241,7 @@ export async function GET(){
             displayedReturnsSource:validWorkbook?"uploaded_workbook":null,
             workbookReturnsUsed:validWorkbook,
             publishedPerformance:validWorkbook?{source:"uploaded_workbook",
-              importId:selectedWorkbook!.id,row:m.manual_performance_row,
+              returnConvention:"cumulative",importId:selectedWorkbook!.id,row:m.manual_performance_row,
               asOf:null,feeBasis:"not_stated"}:null},
           reason:validWorkbook?
             "Manually confirmed fund identity and current workbook return row. Client fee/date validation remains required.":
