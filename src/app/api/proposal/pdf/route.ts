@@ -5,6 +5,7 @@ import {getNeonSql} from "@/lib/server/neon";
 import {getActiveFunds} from "@/lib/server/active-funds";
 import {matchWorkbookReturn,workbookNameKey,pdfFilenameFundKey} from "@/lib/reconciliation/workbook-source";
 import type {WorkbookEntry,ReportedReturns,FactSheetData} from "@/lib/reconciliation/engine";
+import type {SourceGrowthSeries} from "@/lib/reconciliation/chart-digitize";
 import WorkbookProposalPDF, {
   type WorkbookProposalData,type WorkbookProposalFund,type WorkbookReturnPeriods
 } from "@/lib/pdf/workbook-proposal";
@@ -89,7 +90,10 @@ export async function POST(request:Request){
 
     // Do not trust returns or fund metadata from the browser. Resolve every
     // selected series independently against the most recent workbook import.
-    const [rows,activeSources,linkedDocs]=await Promise.all([
+    await sql.query("CREATE TABLE IF NOT EXISTS fund_chart_series ("+
+      "fund_id text PRIMARY KEY,factsheet_import_id uuid NOT NULL REFERENCES imports(id) ON DELETE CASCADE,"+
+      "status text NOT NULL,series jsonb,error_message text,processed_at timestamptz NOT NULL DEFAULT now())");
+    const [rows,activeSources,linkedDocs,charts]=await Promise.all([
       sql.query("SELECT provider,row_number,source_name,reported_returns "+
         "FROM fund_source_performance WHERE import_id=$1::uuid",[sourceId]),
       sql.query("SELECT DISTINCT workbook_import_id::text AS id FROM fund_active_names"),
@@ -97,7 +101,9 @@ export async function POST(request:Request){
         "i.filename AS source_filename,s.data AS source_data "+
         "FROM fund_reconciliations r "+
         "LEFT JOIN imports i ON i.id=r.factsheet_import_id "+
-        "LEFT JOIN fund_source_factsheets s ON s.import_id=r.factsheet_import_id")
+        "LEFT JOIN fund_source_factsheets s ON s.import_id=r.factsheet_import_id"),
+      sql.query("SELECT fund_id,factsheet_import_id::text AS pdf_id,series "+
+        "FROM fund_chart_series WHERE status='digitized' AND series IS NOT NULL")
     ]);
     if(activeSources.length!==1||String(activeSources[0].id)!==sourceId)
       return validationError("The workbook has been uploaded but not imported. Run workbook matching first.");
@@ -106,6 +112,7 @@ export async function POST(request:Request){
       sourceName:String(row.source_name),returns:row.reported_returns as ReportedReturns
     }));
     const pdfMap=new Map(linkedDocs.map(row=>[String(row.fund_id),row]));
+    const chartMap=new Map(charts.map(row=>[String(row.fund_id),row]));
     const portfolioReports=data.portfolios.map(p=>{
       const funds:WorkbookProposalFund[]=Object.entries(p.weights)
         .filter(([,weight])=>weight>0)
@@ -120,12 +127,24 @@ export async function POST(request:Request){
              pdfFilenameFundKey(pdfFilename)!==workbookNameKey(fund.name))
             throw new Error("A current matching PDF filename is missing for "+fund.name);
           const pdf=doc?.source_data as FactSheetData|null;
+          const cached=chartMap.get(id);
+          const candidate=cached && String(cached.pdf_id)===String(doc?.factsheet_import_id)
+            ?cached.series as SourceGrowthSeries:null;
+          const growthChart=candidate?.source==="digitized_pdf_graph" &&
+              candidate.estimated===true && candidate.currency==="EUR" &&
+              Array.isArray(candidate.observations) &&
+              candidate.observations.length>=9 &&
+              candidate.observations.length<=400 &&
+              candidate.observations.every(p=>/^20\d{2}-\d{2}-01$/.test(p.date)&&
+                Number.isFinite(p.value)&&p.value>0)
+            ?candidate:null;
           const short=(v:unknown,max=600)=>typeof v==="string"?v.trim().slice(0,max)||null:null;
           const numeric=(v:unknown)=>typeof v==="number"&&Number.isFinite(v)&&v>=0&&v<=100?v:null;
           return {
             id,name:fund.name,provider:fund.provider,
             weight,allocatedAmount:data.investment*weight/100,
             returns:safeReturns(row.returns),
+            growthChart,
             factsheet:{
               filename:pdfFilename,title:short(pdf?.title,160),date:short(pdf?.asOf,50),
               objective:short(pdf?.objective,1200),strategy:short(pdf?.strategy,1200),
