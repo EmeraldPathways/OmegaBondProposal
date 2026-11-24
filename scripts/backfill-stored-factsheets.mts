@@ -7,6 +7,7 @@ import {extractFundFactsheet} from "../src/lib/reconciliation/factsheet.ts";
 import {CONTENT_METADATA_VERSION} from "../src/lib/reconciliation/factsheet-content.ts";
 import {workbookNameKey,pdfFilenameFundKey} from "../src/lib/reconciliation/workbook-source.ts";
 import type {FactSheetData} from "../src/lib/reconciliation/engine.ts";
+import {createUserConfirmedSource} from "../src/lib/reconciliation/user-confirmed-source.ts";
 
 const prefix="[Omega factsheet content backfill]";
 if(process.env.VERCEL_ENV!=="production"){
@@ -55,8 +56,14 @@ if(process.env.VERCEL_ENV!=="production"){
         extracted=await extractFundFactsheet({
           importId:id,filename,data:bytes,ocrFallback:true
         });
+        // The account owner explicitly approved these two exact Zurich files.
+        // Keep the printed provider evidence unchanged and record the override.
+        const approval=createUserConfirmedSource(String(fund?.name),
+          String(fund?.provider),filename,extracted.providerHint);
+        if(approval)extracted.confirmedSourceAssociation=approval;
         const narrative=(extracted.description??extracted.objective??"").trim();
-        if(extracted.providerHint!==String(fund?.provider))
+        if(extracted.providerHint!==String(fund?.provider)&&
+          !extracted.confirmedSourceAssociation)
           problem="Provider mismatch between document and exact workbook fund";
         else if(!narrative||narrative.length<18)
           problem="No sufficiently readable source description";

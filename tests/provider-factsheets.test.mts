@@ -194,3 +194,27 @@ Asset Mix: Equities`);
   assert.equal(doc.description,"A fund seeks capital growth.");
   assert.ok(!doc.description?.includes("Managed By:"));
 });
+
+
+test("only the two owner-confirmed Zurich filenames are eligible for explicit source approval",async()=>{
+  const {createUserConfirmedSource,hasUserConfirmedSource}=
+    await import("../src/lib/reconciliation/user-confirmed-source.ts");
+  for(const filename of [
+    "Zurich Global Select Growth.pdf",
+    "Zurich Indexed Emerging Mkts Equity.pdf",
+  ]){
+    const fundName=filename.slice(0,-4);
+    const approval=createUserConfirmedSource(fundName,"Zurich",filename,"Unknown");
+    assert.ok(approval);
+    assert.equal(approval.detectedProvider,"Unknown");
+    assert.equal(approval.basis,"user_confirmed_exact_filename");
+    const doc={filename,providerHint:"Unknown",
+      confirmedSourceAssociation:approval} as ReturnType<typeof parse>;
+    assert.equal(hasUserConfirmedSource(doc,fundName,"Zurich",filename),true);
+    assert.equal(hasUserConfirmedSource(doc,"Zurich Indexed Global Equity","Zurich",filename),false);
+  }
+  assert.equal(createUserConfirmedSource("Zurich Prisma 3","Zurich",
+    "Zurich Prisma 3.pdf","Unknown"),null);
+  assert.equal(createUserConfirmedSource("Zurich Global Select Growth",
+    "New Ireland","Zurich Global Select Growth.pdf","Unknown"),null);
+});

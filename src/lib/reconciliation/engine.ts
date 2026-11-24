@@ -1,3 +1,4 @@
+import type {ConfirmedSourceAssociation} from "./user-confirmed-source";
 import type { ApprovedFund } from "@/lib/approved-funds";
 import type { PdfPerformance } from "./pdf-performance";
 
@@ -12,6 +13,7 @@ export type FactSheetData = {
   managementStyle?:string|null; assetMix?:string|null; taxStatus?:string|null;
   expenseRatioPct?:number|null; equityRange?:string|null; sfdrClass?:string|null;
   metadataVersion?:number;
+  confirmedSourceAssociation?:ConfirmedSourceAssociation;
   sourceText?:string|null;extractionMethod?:"pdf_text"|"ocr_first_page";
   description?:string|null; riskFactors?:string[]; riskDisclosure?:string|null;
   chargesDisclosure?:string|null; fieldPages?:Record<string,number[]>;

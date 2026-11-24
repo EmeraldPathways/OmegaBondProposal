@@ -7,6 +7,7 @@ import {extractFundFactsheet} from "@/lib/reconciliation/factsheet";
 import {CONTENT_METADATA_VERSION} from "@/lib/reconciliation/factsheet-content";
 import {pdfFilenameFundKey,workbookNameKey} from "@/lib/reconciliation/workbook-source";
 import type {FactSheetData} from "@/lib/reconciliation/engine";
+import {createUserConfirmedSource,hasUserConfirmedSource} from "@/lib/reconciliation/user-confirmed-source";
 
 export const runtime="nodejs";
 export const dynamic="force-dynamic";
@@ -27,7 +28,8 @@ async function ensureVersionColumn(){
 }
 function nameIssue(fund:string,provider:string,doc:FactSheetData|null):string|null{
   if(!doc)return null;
-  if(doc.providerHint&&doc.providerHint!==provider)
+  if(doc.providerHint&&doc.providerHint!==provider&&
+     !hasUserConfirmedSource(doc,fund,provider,doc.filename))
     return "PDF issuer is "+doc.providerHint+"; the workbook fund is "+provider+".";
   // The user-approved exact PDF filename establishes the fund identity.
   // Printed titles may be abbreviated or missing in OCR-only documents.
@@ -167,6 +169,11 @@ export async function POST(request:Request){
           Buffer.from(bytes.subarray(0,5)).toString("ascii")!=="%PDF-")
           throw new Error("Invalid or oversized PDF.");
         data=await extractFundFactsheet({importId:id,filename,data:bytes,ocrFallback:true});
+        if(fund){
+          const approval=createUserConfirmedSource(fund.name,fund.provider,
+            filename,data.providerHint);
+          if(approval)data.confirmedSourceAssociation=approval;
+        }
         error=fund?nameIssue(fund.name,fund.provider,data):"No unique fund was found for this filename.";
         if(!data.description&&!data.objective)
           error=error??"Fund description was not recovered from this PDF.";
@@ -189,7 +196,9 @@ export async function POST(request:Request){
         [id,status,data&&status==="parsed"?JSON.stringify(data):null,error,CONTENT_METADATA_VERSION]
       );
       // Update only matching linked fund content; never modify workbook return rows.
-      if(status==="parsed"&&data&&fund&&data.providerHint===fund.provider)
+      if(status==="parsed"&&data&&fund&&
+        (data.providerHint===fund.provider||
+          hasUserConfirmedSource(data,fund.name,fund.provider,filename)))
         await sql.query(
           "UPDATE fund_reconciliations SET extracted_factsheet=$1::jsonb,updated_at=now() "+
           "WHERE fund_id=$2 AND factsheet_import_id=$3::uuid",
