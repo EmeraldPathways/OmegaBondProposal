@@ -34,7 +34,7 @@ function nameIssue(fund:string,provider:string,doc:FactSheetData|null,filename:s
   // Multi-Index IV Series B underlying title. Retain its printed title, but
   // do not call this particular workbook-to-PDF association incorrect.
   if(provider==="Aviva" &&
-    /^Aviva - Fix Alloc ESG 80 Ser 1\\.pdf$/i.test(filename.trim()) &&
+    /^Aviva - Fix Alloc ESG 80 Ser 1\.pdf$/i.test(filename.trim()) &&
     /^L&G Multi-Index IV Fund Series B$/i.test(doc.title.trim()))
     return null;
   if(normalName(fund)===normalName(doc.title))return null;
