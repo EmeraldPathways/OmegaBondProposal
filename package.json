@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "npm test && node scripts/audit-production-sources.mjs && next build && node scripts/verify-pdfkit-trace.mjs",
+    "build": "npm test && node scripts/audit-production-sources.mjs && node --import tsx scripts/repair-new-ireland-factsheets.mts && next build && node scripts/verify-pdfkit-trace.mjs",
     "start": "next start",
     "lint": "tsc --noEmit",
     "test": "node --test tests/*.test.mjs && node --import tsx --test tests/reconciliation-engine.test.mts tests/reconciliation-ocr.test.mts tests/pdf-performance.test.mts tests/pdf-only.test.mts tests/pdf-performance-export.test.mts tests/workbook-primary.test.mts tests/pdf-workbook-render.test.mts tests/historical-growth.test.mts tests/chart-axis-fragments.test.mts tests/cumulative-return-line-chart.test.mts tests/provider-factsheets.test.mts",
@@ -26,7 +26,11 @@
     "@react-pdf/renderer": "^4.9.0",
     "zod": "^3.25.76",
     "exceljs": "^4.4.0",
-    "unpdf": "2.2.1"
+    "unpdf": "2.2.1",
+    "@tesseract.js-data/eng": "1.0.0",
+    "tesseract.js": "^7.0.0",
+    "@napi-rs/canvas": "^1.0.10",
+    "pdfjs-dist": "^6.2.108"
   },
   "devDependencies": {
     "@types/node": "^22.13.0",
@@ -34,10 +38,7 @@
     "@types/react-dom": "^19.0.3",
     "@types/pg": "^8.11.0",
     "typescript": "^5.8.0",
-    "tsx": "^4.20.6",
-    "tesseract.js": "^7.0.0",
-    "@napi-rs/canvas": "^1.0.10",
-    "pdfjs-dist": "^6.2.108"
+    "tsx": "^4.20.6"
   },
   "overrides": {
     "@react-pdf/hyphenate": "0.1.0"
