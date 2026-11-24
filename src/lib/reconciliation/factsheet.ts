@@ -218,6 +218,9 @@ export function parseFactsheetText(params:{
 export async function extractFundFactsheet(params:{
   importId:string;filename:string;data:Uint8Array;ocrFallback?:boolean
 }):Promise<FactSheetData>{
+  // PDF.js may transfer/detach its input ArrayBuffer during normal text parsing.
+  // OCR needs an independent copy before getDocumentProxy sees the bytes.
+  const ocrBytes=params.ocrFallback?new Uint8Array(params.data):null;
   // Parsing is limited to 12 pages; reject encrypted/oversized documents in caller.
   const doc=await getDocumentProxy(params.data,{maxImageSize:16_777_216});
   try{
@@ -235,7 +238,7 @@ export async function extractFundFactsheet(params:{
     )){
       try{
         const {readScannedFactsheetPage}=await import("./factsheet-ocr");
-        const recovered=await readScannedFactsheetPage(params.data);
+        const recovered=await readScannedFactsheetPage(ocrBytes!);
         if(recovered&&recovered.replace(/\s/g,"").length>=180){
           pages=[recovered,...pages.slice(1)];
           usedOcr=true;
