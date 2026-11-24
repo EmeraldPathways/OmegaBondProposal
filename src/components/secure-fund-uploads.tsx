@@ -3,6 +3,7 @@
  import { useCallback, useEffect, useRef, useState } from "react";
 import FundPerformanceReview from "@/components/fund-performance-review";
 import FundSourceAudit from "@/components/fund-source-audit";
+import FundEnrichmentAudit from "@/components/fund-enrichment-audit";
 import {
   ArrowDownToLine, CheckCircle2, FileSpreadsheet, FileText, FolderLock,
   LoaderCircle, RefreshCw, ShieldAlert, UploadCloud
@@ -191,6 +192,7 @@ export default function SecureFundUploads() {
     </section>
 
     <FundSourceAudit/>
+    <FundEnrichmentAudit key={resetSequence}/>
     <FundPerformanceReview key={resetSequence} />
 
     <div className="notice neutral" style={{ marginBottom: 22 }}>
