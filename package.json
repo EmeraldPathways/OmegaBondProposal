@@ -39,5 +39,8 @@
     "@napi-rs/canvas": "^1.0.10",
     "pdfjs-dist": "^6.2.108"
   },
-  "type": "module"
+  "type": "module",
+  "overrides": {
+    "@react-pdf/hyphenate": "0.1.0"
+  }
 }
