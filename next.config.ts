@@ -14,6 +14,11 @@ const nextConfig: NextConfig = {
       "./node_modules/pdfkit/js/standard-fonts/**/*",
       "./node_modules/pdfkit/js/data/**/*",
     ],
+    "/api/fund-enrichment": [
+      "./node_modules/@tesseract.js-data/eng/4.0.0_best_int/eng.traineddata.gz",
+      "./node_modules/tesseract.js/src/worker-script/node/**/*",
+      "./node_modules/tesseract.js-core/**/*",
+    ],
   },
 };
 
