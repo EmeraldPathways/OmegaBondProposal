@@ -20,7 +20,7 @@ Medium to High Risk
 Performance as at 09 November 2026
 `,"New Ireland Assurance Company plc is regulated by the Central Bank of Ireland.");
   assert.equal(f.providerHint,"New Ireland");
-  assert.equal(f.metadataVersion,3);
+  assert.equal(f.metadataVersion,4);
   assert.match(f.objective??"",/long-term capital growth/);
   assert.equal(f.riskProfile,"Medium to High Risk");
   assert.match(f.managedBy??"",/State Street/);
@@ -48,6 +48,7 @@ SFDR Class Article 8
   assert.equal(f.providerHint,"Zurich");
   assert.equal(f.riskRating,5);
   assert.equal(f.equityRange,"80% - 100%");
+  assert.equal(f.managedBy,"Zurich Life");
   assert.match(f.objective??"",/^The International Equity Fund/);
   assert.equal(f.asOf,"30/09/2026");
   assert.equal(f.sfdrClass,"Article 8");

@@ -118,7 +118,7 @@ export async function POST(request:Request){
           fund?.provider==="Standard Life") &&
         doc.factsheet_import_id && doc.source_path && doc.source_filename &&
         pdfFilenameFundKey(String(doc.source_filename))===workbookNameKey(fund.name) &&
-        (pdf?.metadataVersion??0)<3;
+        (pdf?.metadataVersion??0)<4;
     });
     for(let i=0;i<sourceUpgrade.length;i+=4){
       await Promise.all(sourceUpgrade.slice(i,i+4).map(async doc=>{
@@ -132,7 +132,7 @@ export async function POST(request:Request){
             throw new Error("Invalid private PDF");
           const extracted=await extractFundFactsheet({
             importId:String(doc.factsheet_import_id),
-            filename:String(doc.source_filename),data:bytes
+            filename:String(doc.source_filename),data:bytes,ocrFallback:true
           });
           if(extracted.providerHint!==fund.provider)
             throw new Error("Issuer mismatch");

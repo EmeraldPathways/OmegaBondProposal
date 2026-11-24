@@ -145,7 +145,7 @@ export function parseFactsheetText(params:{
   // official name. Provider-specific titles come from PDF page content only.
   const firstPage=pages[0]??"";
   return {
-    importId,filename,providerHint:provider,title,metadataVersion:3,
+    importId,filename,providerHint:provider,title,metadataVersion:4,
     moneyMateId:first(/MoneyMate\s*ID\s*[:\s]*(\d{5,12})/i,text),
     asOf:provider==="New Ireland"
       ?first(/\bPerformance\s+as\s+at\s+(\d{1,2}\s+[A-Za-z]+\s+20\d{2})\b/i,text)
@@ -172,7 +172,9 @@ export function parseFactsheetText(params:{
     managedBy:provider==="New Ireland"
       ?section(text,/\bManaged\s+By\s*:\s*/i,/\bStyle\s*:/i,230)
       :provider==="Standard Life"
-      ?section(text,/\bFund\s+Manager\(s\)\s*/i,/\bSFDR\s+Product\s+Category\b/i,240):null,
+      ?section(text,/\bFund\s+Manager\(s\)\s*/i,/\bSFDR\s+Product\s+Category\b/i,240)
+      :provider==="Zurich"
+      ?first(/\bThis\s+fund\s+is\s+managed\s+by\s+(Zurich Life)\b/i,text):null,
     managementStyle:provider==="New Ireland"
       ?section(text,/\bStyle\s*:\s*/i,/\bAsset\s+Mix\s*:/i,230)
       :provider==="Standard Life"
@@ -205,13 +207,27 @@ export function parseFactsheetText(params:{
     titleEvidence:title?"PDF page 1: "+title:null,
   };
 }
-export async function extractFundFactsheet(params:{importId:string;filename:string;data:Uint8Array}):Promise<FactSheetData>{
+export async function extractFundFactsheet(params:{
+  importId:string;filename:string;data:Uint8Array;ocrFallback?:boolean
+}):Promise<FactSheetData>{
   // Parsing is limited to 12 pages; reject encrypted/oversized documents in caller.
   const doc=await getDocumentProxy(params.data,{maxImageSize:16_777_216});
   try{
     if(doc.numPages>12)throw new Error("Factsheet has more than 12 pages and requires manual review.");
     const extracted=await extractText(doc);
-    const pages=Array.isArray(extracted.text)?extracted.text:[extracted.text];
+    let pages=Array.isArray(extracted.text)?extracted.text:[extracted.text];
+    // Some official New Ireland factsheets contain only rasterized text.
+    // Try the actual first-page pixels when the native PDF text is empty.
+    if(params.ocrFallback && pages.join("").replace(/\s/g,"").length<220){
+      try{
+        const {readScannedFactsheetPage}=await import("./factsheet-ocr");
+        const recovered=await readScannedFactsheetPage(params.data);
+        if(recovered&&recovered.replace(/\s/g,"").length>=180)
+          pages=[recovered,...pages];
+      }catch{
+        // OCR is optional; never fill unreadable details from guessed values.
+      }
+    }
     return parseFactsheetText({importId:params.importId,filename:params.filename,pages});
   }finally{
     const disposable=doc as unknown as { destroy?:()=>Promise<void> };
