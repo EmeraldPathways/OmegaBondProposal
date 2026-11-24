@@ -131,7 +131,7 @@ export async function POST(request:Request){
       "LEFT JOIN fund_source_factsheets f ON f.import_id=i.id "+
       "WHERE i.storage_key LIKE 'funds/factsheets/%' AND i.filename ILIKE '%.pdf' "+
       "AND COALESCE(f.content_attempted_version,0)<$1 "+
-      "ORDER BY i.uploaded_at,i.id LIMIT 2",[CONTENT_METADATA_VERSION]
+      "ORDER BY i.uploaded_at,i.id LIMIT 1",[CONTENT_METADATA_VERSION]
     );
     const results:{filename:string;status:string;message:string|null}[]=[];
     for(const file of files){
@@ -181,10 +181,14 @@ export async function POST(request:Request){
       "AND i.filename ILIKE '%.pdf' AND COALESCE(f.content_attempted_version,0)<$1",
       [CONTENT_METADATA_VERSION]
     );
+    console.info("Fund enrichment progress: batch="+results.length+
+      " remaining="+Number(left[0].n)+" review="+results.filter(r=>r.status==="needs_review").length);
     return NextResponse.json({processed:results.length,remaining:Number(left[0].n),
       results,done:Number(left[0].n)===0},{headers});
-  }catch{
-    console.error("Fund enrichment batch failed.");
-    return NextResponse.json({error:"Unable to process this PDF batch."},{status:500,headers});
+  }catch(error){
+    const message=error instanceof Error?error.message:"Unknown enrichment failure";
+    console.error("Fund enrichment batch failed:",message.slice(0,200));
+    return NextResponse.json({error:"Unable to process this PDF batch. Check the audit, then retry."},
+      {status:500,headers});
   }
 }
