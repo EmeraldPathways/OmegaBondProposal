@@ -6,7 +6,7 @@ export async function readScannedFactsheetPage(bytes:Uint8Array):Promise<string|
     DOMMatrix:canvas.DOMMatrix,ImageData:canvas.ImageData,Path2D:canvas.Path2D
   });
   const pdfjs=await import("pdfjs-dist/legacy/build/pdf.mjs");
-  const {createWorker}=await import("tesseract.js");
+  const {createWorker,PSM}=await import("tesseract.js");
   const task=pdfjs.getDocument({data:new Uint8Array(bytes),
     useSystemFonts:true,disableFontFace:true,maxImageSize:16_777_216});
   let worker:Awaited<ReturnType<typeof createWorker>>|null=null;
@@ -29,7 +29,7 @@ export async function readScannedFactsheetPage(bytes:Uint8Array):Promise<string|
       image,0,0,image.width,cropHeight,0,0,image.width,cropHeight
     );
     worker=await createWorker("eng");
-    await worker.setParameters({tessedit_pageseg_mode:"4"});
+    await worker.setParameters({tessedit_pageseg_mode:PSM.SINGLE_COLUMN});
     const result=await worker.recognize(await crop.encode("png"));
     const text=(result.data.text??"").trim();
     if(text.replace(/\s/g,"").length<170||
