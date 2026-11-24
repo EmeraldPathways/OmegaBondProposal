@@ -27,4 +27,21 @@
     "zod": "^3.25.76",
     "exceljs": "^4.4.0",
     "unpdf": "2.2.1",
-    "@tesseract¶»§q«^
+    "@tesseract.js-data/eng": "1.0.0",
+    "tesseract.js": "^7.0.0",
+    "@napi-rs/canvas": "^1.0.10",
+    "pdfjs-dist": "^6.2.108"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.0",
+    "@types/react": "^19.0.8",
+    "@types/react-dom": "^19.0.3",
+    "@types/pg": "^8.11.0",
+    "typescript": "^5.8.0",
+    "tsx": "^4.20.6"
+  },
+  "overrides": {
+    "@react-pdf/hyphenate": "0.1.0"
+  },
+  "type": "module"
+}
