@@ -161,7 +161,9 @@ export async function POST(request:Request){
         "(import_id,status,data,error_message,content_attempted_version) "+
         "VALUES ($1::uuid,$2,$3::jsonb,$4,$5) ON CONFLICT(import_id) DO UPDATE SET "+
         "status=EXCLUDED.status,"+
-        "data=COALESCE(EXCLUDED.data,fund_source_factsheets.data),"+
+        "data=CASE WHEN EXCLUDED.data IS NULL THEN fund_source_factsheets.data "+
+        "WHEN fund_source_factsheets.data IS NULL THEN EXCLUDED.data "+
+        "ELSE fund_source_factsheets.data || jsonb_strip_nulls(EXCLUDED.data) END,"+
         "error_message=EXCLUDED.error_message,"+
         "content_attempted_version=EXCLUDED.content_attempted_version,processed_at=now()",
         [id,status,data?JSON.stringify(data):null,error,CONTENT_METADATA_VERSION]
