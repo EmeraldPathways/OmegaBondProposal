@@ -16,6 +16,8 @@ export type WorkbookProposalFund = {
   factsheet:{
     filename:string|null; title:string|null; date:string|null;
     objective:string|null;strategy:string|null;moneyMateId:string|null;
+    description?:string|null;riskDisclosure?:string|null;
+    chargesDisclosure?:string|null;riskFactors?:string[];
     baseCurrency:string|null;riskRating:number|null;amcPct:number|null;
     civPct:number|null;chartPages:string[];
     riskProfile?:string|null;managedBy?:string|null;
@@ -477,7 +479,7 @@ export default function WorkbookProposalPDF({data}:{data:WorkbookProposalData}){
       <Text style={style.eyebrow}>FUND INFORMATION</Text>
       <Text style={style.heading}>{p.title} · Fund details</Text>
       
-      {p.funds.map(f=><View key={f.id+"-source"} style={style.sourceCard} wrap={false}>
+      {p.funds.map(f=><View key={f.id+"-source"} style={style.sourceCard}>
         <Text style={style.sourceTitle}>{f.name}</Text>
         <Text style={style.meta}>{f.provider}{f.factsheet.date?" · As at "+f.factsheet.date:""}</Text>
         
@@ -524,11 +526,21 @@ export default function WorkbookProposalPDF({data}:{data:WorkbookProposalData}){
         <Text style={style.meta}>
           {f.provider==="New Ireland"||f.provider==="Zurich"?
             "Fund description":"Investment objective"}:
-          {" "+(f.factsheet.objective??"Information unavailable")}
+          {" "+(f.factsheet.objective??f.factsheet.description??"Information unavailable")}
         </Text>
+        {f.factsheet.description&&f.factsheet.objective&&
+          f.factsheet.description.trim()!==f.factsheet.objective.trim()?
+          <Text style={style.meta}>Additional fund description: {f.factsheet.description}</Text>:null}
         {f.factsheet.strategy?<Text style={style.meta}>
           Strategy: {f.factsheet.strategy}
         </Text>:null}
+        {f.factsheet.riskFactors?.length?
+          <Text style={style.meta}>Key risk factors: {f.factsheet.riskFactors.join("; ")}</Text>:null}
+        {f.factsheet.riskDisclosure&&
+          f.factsheet.riskDisclosure.trim()!==f.factsheet.riskProfile?.trim()?
+          <Text style={style.meta}>Risk information: {f.factsheet.riskDisclosure}</Text>:null}
+        {f.factsheet.chargesDisclosure?
+          <Text style={style.meta}>Charges information: {f.factsheet.chargesDisclosure}</Text>:null}
 
       </View>)}
 
