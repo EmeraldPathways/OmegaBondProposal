@@ -18,6 +18,10 @@ export type WorkbookProposalFund = {
     objective:string|null;strategy:string|null;moneyMateId:string|null;
     baseCurrency:string|null;riskRating:number|null;amcPct:number|null;
     civPct:number|null;chartPages:string[];
+    riskProfile?:string|null;managedBy?:string|null;
+    managementStyle?:string|null;assetMix?:string|null;taxStatus?:string|null;
+    equityRange?:string|null;sfdrClass?:string|null;
+    expenseRatioPct?:number|null;
   };
 };
 export type WorkbookProposalPortfolio = {
@@ -477,10 +481,54 @@ export default function WorkbookProposalPDF({data}:{data:WorkbookProposalData}){
         <Text style={style.sourceTitle}>{f.name}</Text>
         <Text style={style.meta}>{f.provider}{f.factsheet.date?" · As at "+f.factsheet.date:""}</Text>
         
-        <Text style={style.meta}>MoneyMate ID: {f.factsheet.moneyMateId??"Not stated"} · Currency: {f.factsheet.baseCurrency??"Not stated"} · Numeric risk rating: {f.factsheet.riskRating==null?"Not stated":f.factsheet.riskRating+"/7"}</Text>
-        <Text style={style.meta}>AMC: {percentage(f.factsheet.amcPct)} · CIV charge: {percentage(f.factsheet.civPct)}</Text>
-        <Text style={style.meta}>Objective: {f.factsheet.objective??"Information unavailable"}</Text>
-        {f.factsheet.strategy?<Text style={style.meta}>Strategy: {f.factsheet.strategy}</Text>:null}
+        {f.factsheet.moneyMateId?<Text style={style.meta}>
+          MoneyMate ID: {f.factsheet.moneyMateId}
+        </Text>:null}
+        {f.factsheet.baseCurrency?<Text style={style.meta}>
+          Base currency: {f.factsheet.baseCurrency}
+        </Text>:null}
+        {f.factsheet.riskProfile?<Text style={style.meta}>
+          Risk profile: {f.factsheet.riskProfile}
+        </Text>:f.factsheet.riskRating!=null?<Text style={style.meta}>
+          {f.provider==="Standard Life"?"Volatility rating":"Risk rating"}:
+          {" "+f.factsheet.riskRating}/7
+        </Text>:null}
+        {f.factsheet.managedBy?<Text style={style.meta}>
+          {f.provider==="Standard Life"?"Fund manager":"Managed by"}:
+          {" "+f.factsheet.managedBy}
+        </Text>:null}
+        {f.factsheet.managementStyle?<Text style={style.meta}>
+          Investment style: {f.factsheet.managementStyle}
+        </Text>:null}
+        {f.factsheet.assetMix?<Text style={style.meta}>
+          Asset mix: {f.factsheet.assetMix}
+        </Text>:null}
+        {f.factsheet.equityRange?<Text style={style.meta}>
+          Indicative equity range: {f.factsheet.equityRange}
+        </Text>:null}
+        {f.factsheet.sfdrClass?<Text style={style.meta}>
+          SFDR class: {f.factsheet.sfdrClass}
+        </Text>:null}
+        {f.factsheet.taxStatus?<Text style={style.meta}>
+          Tax basis: {f.factsheet.taxStatus}
+        </Text>:null}
+        {f.factsheet.amcPct!=null?<Text style={style.meta}>
+          Annual management charge: {percentage(f.factsheet.amcPct)}
+        </Text>:null}
+        {f.provider==="Aviva"&&f.factsheet.civPct!=null?
+          <Text style={style.meta}>CIV charge: {percentage(f.factsheet.civPct)}</Text>:null}
+        {f.provider==="Standard Life"&&f.factsheet.expenseRatioPct!=null?
+          <Text style={style.meta}>
+            Total expense ratio: {percentage(f.factsheet.expenseRatioPct)}
+          </Text>:null}
+        <Text style={style.meta}>
+          {f.provider==="New Ireland"||f.provider==="Zurich"?
+            "Fund description":"Investment objective"}:
+          {" "+(f.factsheet.objective??"Information unavailable")}
+        </Text>
+        {f.factsheet.strategy?<Text style={style.meta}>
+          Strategy: {f.factsheet.strategy}
+        </Text>:null}
 
       </View>)}
 

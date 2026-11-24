@@ -10,6 +10,8 @@ export type FactSheetData = {
   asOf:string|null; launchDate:string|null; baseCurrency:string|null; amcPct:number|null;
   civPct:number|null; riskRating:number|null; riskProfile?:string|null; managedBy?:string|null;
   managementStyle?:string|null; assetMix?:string|null; taxStatus?:string|null;
+  expenseRatioPct?:number|null; equityRange?:string|null; sfdrClass?:string|null;
+  metadataVersion?:number;
   objective:string|null; strategy:string|null;
   holdings:{name:string;percentage:number}[]; allocations:{name:string;percentage:number}[];
   chartReferences:{page:number;label:string;source:"original_pdf"}[];

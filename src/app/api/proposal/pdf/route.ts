@@ -108,35 +108,34 @@ export async function POST(request:Request){
       provider:String(row.provider),rowNumber:Number(row.row_number),
       sourceName:String(row.source_name),returns:row.reported_returns as ReportedReturns
     }));
-    // Older New Ireland PDFs were previously classified as "unknown" because
-    // the provider appears on page 2, not the first 2500 characters. Reparse
-    // only selected, still-linked sources with missing metadata, and cache the
-    // corrected extraction for subsequent client proposals. Performance rows
-    // and all workbook values remain untouched.
-    const newIrelandMissing=linkedDocs.filter(doc=>{
+    // Reparse only selected, already-linked provider PDFs once per parser
+    // revision. Do not reupload files or change workbook returns.
+    const sourceUpgrade=linkedDocs.filter(doc=>{
       const fund=idMap.get(String(doc.fund_id));
       const pdf=doc.source_data as FactSheetData|null;
       return requestedIds.has(String(doc.fund_id)) &&
-        fund?.provider==="New Ireland" &&
+        (fund?.provider==="New Ireland" || fund?.provider==="Zurich" ||
+          fund?.provider==="Standard Life") &&
         doc.factsheet_import_id && doc.source_path && doc.source_filename &&
         pdfFilenameFundKey(String(doc.source_filename))===workbookNameKey(fund.name) &&
-        (!pdf?.objective || !pdf?.riskProfile);
+        (pdf?.metadataVersion??0)<3;
     });
-    for(let i=0;i<newIrelandMissing.length;i+=3){
-      await Promise.all(newIrelandMissing.slice(i,i+3).map(async doc=>{
+    for(let i=0;i<sourceUpgrade.length;i+=4){
+      await Promise.all(sourceUpgrade.slice(i,i+4).map(async doc=>{
         try{
+          const fund=idMap.get(String(doc.fund_id))!;
           const blob=await get(String(doc.source_path),{access:"private"});
-          if(!blob||blob.statusCode!==200)throw new Error("PDF not in private storage");
+          if(!blob||blob.statusCode!==200)throw new Error("Source PDF unavailable");
           const bytes=new Uint8Array(await new Response(blob.stream).arrayBuffer());
           if(bytes.byteLength>3_500_000 || bytes.byteLength<100 ||
              Buffer.from(bytes.subarray(0,5)).toString("ascii")!=="%PDF-")
-            throw new Error("Invalid source PDF");
+            throw new Error("Invalid private PDF");
           const extracted=await extractFundFactsheet({
             importId:String(doc.factsheet_import_id),
             filename:String(doc.source_filename),data:bytes
           });
-          if(extracted.providerHint!=="New Ireland" || !extracted.objective)
-            throw new Error("New Ireland fund description not found");
+          if(extracted.providerHint!==fund.provider)
+            throw new Error("Issuer mismatch");
           await Promise.all([
             sql.query(
               "UPDATE fund_source_factsheets SET data=$2::jsonb,"+
@@ -152,9 +151,8 @@ export async function POST(request:Request){
           ]);
           doc.source_data=extracted;
         }catch{
-          // A malformed source cannot be filled with guessed information.
-          // Keep the existing parsed data and preserve proposal export.
-          console.warn("New Ireland factsheet metadata enrichment unavailable.");
+          // The proposal must not invent fields when a document is unreadable.
+          console.warn("Factsheet enrichment unavailable for a linked document.");
         }
       }));
     }
@@ -188,6 +186,9 @@ export async function POST(request:Request){
               managementStyle:short(pdf?.managementStyle,240),
               assetMix:short(pdf?.assetMix,300),
               taxStatus:short(pdf?.taxStatus,40),
+              equityRange:short(pdf?.equityRange,80),
+              sfdrClass:short(pdf?.sfdrClass,40),
+              expenseRatioPct:numeric(pdf?.expenseRatioPct),
               riskRating:typeof pdf?.riskRating==="number"&&Number.isInteger(pdf.riskRating)&&
                 pdf.riskRating>=1&&pdf.riskRating<=7?pdf.riskRating:null,
               amcPct:numeric(pdf?.amcPct),civPct:numeric(pdf?.civPct),
