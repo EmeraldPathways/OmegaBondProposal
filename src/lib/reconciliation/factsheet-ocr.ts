@@ -29,7 +29,8 @@ export async function readScannedFactsheetPage(bytes:Uint8Array):Promise<string|
     context.fillRect(0,0,image.width,cropHeight);
     context.drawImage(image,0,0,image.width,cropHeight,0,0,image.width,cropHeight);
     worker=await createWorker("eng");
-    await worker.setParameters({tessedit_pageseg_mode:"6"});
+    // PSM 4 preserves the left text column instead of reading through the risk chart.
+    await worker.setParameters({tessedit_pageseg_mode:"4"});
     const result=await worker.recognize(await crop.encode("png"));
     const raw=(result.data.text??"").trim();
     // The source metadata labels, not an arbitrary average OCR confidence,

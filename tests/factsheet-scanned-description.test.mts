@@ -15,7 +15,7 @@ Asset Mix: Equities
 Performance as at 18 November 2026`;
   const item=parseFactsheetText({importId:"kbi",filename:"New Ireland KBI Alternate Energy.pdf",pages:[text]});
   assert.equal(item.providerHint,"New Ireland");
-  assert.equal(item.metadataVersion,5);
+  assert.equal(item.metadataVersion,6);
   assert.ok(item.objective?.includes("KBI Global Energy Transition Fund"));
   assert.ok(item.objective?.includes("low carbon solutions"));
   assert.ok(!item.objective?.startsWith("Risk Profile:"));
@@ -26,4 +26,12 @@ Performance as at 18 November 2026`;
 test("a missing or too-short source description cannot be fabricated",()=>{
   assert.equal(cleanSourceDescription(null,"New Ireland"),null);
   assert.equal(cleanSourceDescription("Risk Profile:","New Ireland"),null);
+});
+
+test("full extracted factsheet text is kept with metadata for reuse",()=>{
+  const original="Fund Description: Our fund invests in international equity securities to seek capital appreciation. Managed By: XYZ Capital.";
+  const result=parseFactsheetText({importId:"test",filename:"New Ireland Example.pdf",pages:[original]});
+  assert.equal(result.sourceText,original);
+  assert.equal(result.extractionMethod,"pdf_text");
+  assert.equal(result.metadataVersion,6);
 });

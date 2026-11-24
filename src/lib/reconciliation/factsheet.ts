@@ -157,7 +157,7 @@ export function parseFactsheetText(params:{
   // official name. Provider-specific titles come from PDF page content only.
   const firstPage=pages[0]??"";
   return {
-    importId,filename,providerHint:provider,title,metadataVersion:5,
+    importId,filename,providerHint:provider,title,metadataVersion:6,
     moneyMateId:first(/MoneyMate\s*ID\s*[:\s]*(\d{5,12})/i,text),
     asOf:provider==="New Ireland"
       ?first(/\bPerformance\s+as\s+at\s+(\d{1,2}\s+[A-Za-z]+\s+20\d{2})\b/i,text)
@@ -223,6 +223,8 @@ export function parseFactsheetText(params:{
     pageCount:pages.length,
     extractionWarnings:warnings,
     titleEvidence:title?"PDF page 1: "+title:null,
+    sourceText:text.slice(0,55000),
+    extractionMethod:"pdf_text",
   };
 }
 export async function extractFundFactsheet(params:{
@@ -234,19 +236,23 @@ export async function extractFundFactsheet(params:{
     if(doc.numPages>12)throw new Error("Factsheet has more than 12 pages and requires manual review.");
     const extracted=await extractText(doc);
     let pages=Array.isArray(extracted.text)?extracted.text:[extracted.text];
+    let ocrUsed=false;
     // Some official New Ireland factsheets contain only rasterized text.
     // Try the actual first-page pixels when the native PDF text is empty.
     if(params.ocrFallback && pages.join("").replace(/\s/g,"").length<220){
       try{
         const {readScannedFactsheetPage}=await import("./factsheet-ocr");
         const recovered=await readScannedFactsheetPage(params.data);
-        if(recovered&&recovered.replace(/\s/g,"").length>=180)
-          pages=[recovered,...pages];
+        if(recovered&&recovered.replace(/\s/g,"").length>=180){
+          pages=[recovered,...pages.slice(1)];
+          ocrUsed=true;
+        }
       }catch{
         // OCR is optional; never fill unreadable details from guessed values.
       }
     }
     const parsed=parseFactsheetText({importId:params.importId,filename:params.filename,pages});
+    parsed.extractionMethod=ocrUsed?"ocr_first_page":"pdf_text";
     // Zurich writes its description in the left-hand column beside a graph.
     // PDF text extraction can interleave performance-chart ticks and returns.
     if(parsed.providerHint==="Zurich"){

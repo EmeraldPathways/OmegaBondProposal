@@ -85,7 +85,7 @@ async function factsheets(){
     try{
       const raw=await privateBytes(item.storage_key);
       if(raw.subarray(0,5).toString("ascii")!=="%PDF-")throw new Error("Document is not a PDF.");
-      data=await extractFundFactsheet({importId:item.id,filename:item.filename,data:new Uint8Array(raw)});
+      data=await extractFundFactsheet({importId:item.id,filename:item.filename,data:new Uint8Array(raw),ocrFallback:true});
     }catch(error){
       err=error instanceof Error?error.message.slice(0,350):"Could not extract PDF text.";
     }

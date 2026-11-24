@@ -129,11 +129,15 @@ export async function POST(request:Request){
   try{
     await schema();
     const body=await request.json().catch(()=>({}));
-    const retryIssues=body?.retryIssues===true;
+    if(body?.retryIssues===true){
+      const sql=getNeonSql();
+      await sql.query("DELETE FROM fund_metadata_checks WHERE parser_version=$1 "+
+        "AND status<>'saved'",[PARSER_VERSION]);
+      return NextResponse.json({...summary(await readSources()),completed:[]},{headers});
+    }
     const current=await readSources();
     // One OCR job per request fits Vercel's 60-second function budget.
-    const candidates=current.filter(x=>!currentCheck(x) ||
-      (retryIssues&&x.processedStatus!=="saved"));
+    const candidates=current.filter(x=>!currentCheck(x));
     if(candidates.length===0)
       return NextResponse.json({...summary(current),completed:[]},{headers});
     const row=candidates[0];

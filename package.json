@@ -42,8 +42,5 @@
   "overrides": {
     "@react-pdf/hyphenate": "0.1.0"
   },
-  "type": "module",
-  "overrides": {
-    "@react-pdf/hyphenate": "0.1.0"
-  }
+  "type": "module"
 }
