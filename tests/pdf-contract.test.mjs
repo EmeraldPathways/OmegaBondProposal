@@ -98,3 +98,15 @@ test("each portfolio combines line chart, compact donut, invested amounts and cu
   assert.doesNotMatch(pdf,/p\.id\+"-history"/);
   assert.match(pdf,/chartFundGroups\(p\.funds,8\)/);
 });
+
+test("cover contains compact horizontal investment details and allocation doughnut; portfolio intro is shortened",()=>{
+  const pdf=read("src/lib/pdf/workbook-proposal.tsx");
+  assert.match(pdf,/CoverPortfolioAllocation/);
+  assert.match(pdf,/data\.portfolios\.map\(p=><CoverPortfolioAllocation/);
+  assert.match(pdf,/marginTop:8,paddingHorizontal:12,paddingVertical:7/);
+  assert.match(pdf,/flexDirection:"row",alignItems:"center",gap:13/);
+  assert.doesNotMatch(pdf,/INVESTMENT BOND PROPOSAL\s*\n\s*<\/Text>\s*\n\s*<Text style=\{\[style\.heading/);
+  assert.match(pdf,/marginTop:11,marginBottom:4/);
+  assert.match(pdf,/FundAllocationReturnsTable/);
+  assert.match(pdf,/CumulativeReturnLineChart/);
+});
