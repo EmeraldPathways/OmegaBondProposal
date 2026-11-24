@@ -101,7 +101,7 @@ export async function GET(){
           pending:values.filter(r=>r.status==="pending").length}];
       })
     );
-    const pendingFiles=files.filter(f=>f.attempted_version<CONTENT_METADATA_VERSION).length;
+    const pendingFiles=files.filter(f=>(f.attempted_version??0)<CONTENT_METADATA_VERSION).length;
     const issues=records.filter(r=>r.status!=="extracted"||
       r.missing.length>0||r.identityIssue);
     return NextResponse.json({
