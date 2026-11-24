@@ -1,7 +1,7 @@
 "use client";
 
 import {useCallback,useEffect,useRef,useState} from "react";
-import {FileText,RefreshCw,ShieldAlert,CheckCircle2} from "lucide-react";
+import {FileText,RefreshCw,ShieldAlert,PauseCircle} from "lucide-react";
 
 type Report={
   expected:number;uploaded:number;attempted:number;pending:number;
@@ -18,6 +18,9 @@ export default function FundEnrichmentAudit(){
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState("");
   const [message,setMessage]=useState("");
+  const [runCount,setRunCount]=useState(0);
+  const [isPaused,setIsPaused]=useState(false);
+  const pauseAfterCurrent=useRef(false);
   const working=useRef(false),stopped=useRef(false),started=useRef(false);
   const refresh=useCallback(async()=>{
     const response=await fetch("/api/fund-enrichment",{credentials:"same-origin",cache:"no-store"});
@@ -40,33 +43,52 @@ export default function FundEnrichmentAudit(){
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[refresh]);
   async function run(){
-    if(working.current)return;
-    working.current=true;stopped.current=false;
-    setBusy(true);setError("");setMessage("");
-    let checked=0,completed=false;
+    if(busy)return;
+    pauseAfterCurrent.current=false;
+    setBusy(true);setIsPaused(false);setError("");setRunCount(0);
+    setMessage("Starting PDF extraction. Keep this page open; progress is saved after each PDF.");
+    let checked=0,completed=false,paused=false;
     try{
-      // Each call processes two PDFs, resuming from the saved parser-version cursor.
-      for(let batch=0;batch<160&&!stopped.current;batch++){
+      // One document per request makes scanned New Ireland sheets less likely
+      // to exceed the Vercel function duration. Every batch commits to Neon.
+      for(let batch=0;batch<160;batch++){
+        if(pauseAfterCurrent.current){paused=true;break;}
         const response=await fetch("/api/fund-enrichment",{
           method:"POST",credentials:"same-origin",cache:"no-store",
           headers:{"Content-Type":"application/json"},body:"{}"
         });
-        const data=await response.json() as Batch;
-        if(!response.ok)throw new Error(data.error??"PDF extraction failed.");
+        const data=await response.json().catch(()=>null) as Batch|null;
+        if(!response.ok||!data)
+          throw new Error(data?.error??(
+            "Extraction request failed (HTTP "+response.status+"). Progress already saved. Select Resume to retry."));
         checked+=data.processed;
-        setMessage("Processed "+checked+" PDFs in this run. "+data.remaining+" still to check.");
+        setRunCount(checked);
+        setReport(previous=>previous?{
+          ...previous,pending:data.remaining,
+          attempted:Math.max(previous.attempted,previous.uploaded-data.remaining)
+        }:previous);
+        const reviewed=data.results.filter(item=>item.status==="needs_review").length;
+        const detail=reviewed?" "+reviewed+" item(s) flagged for review.":"";
+        setMessage("Saved "+checked+" document(s) during this run; "+
+          data.remaining+" remaining."+detail);
         if(data.done){completed=true;break;}
-        if(data.processed===0)throw new Error("No documents processed; check the stored PDF sources.");
+        if(data.processed===0)throw new Error(
+          "The server did not process a document. Refresh the audit and retry.");
       }
       const latest=await refresh();
-      if(completed)setMessage("PDF processing finished. "+latest.extracted+
-        " matched records extracted; "+latest.review+
-        " need manual review. New proposals use these saved factsheet records.");
-      else setMessage("Batch limit reached. Select Resume to continue from the saved progress.");
+      if(completed)setMessage("Extraction complete: "+latest.attempted+
+        " PDF(s) processed and saved in Neon. "+latest.review+
+        " fund(s) need review; "+latest.incompleteFields+
+        " have unavailable fields. Future proposal PDFs use these saved records.");
+      else if(paused){
+        setIsPaused(true);
+        setMessage("Paused. Progress is saved in the database ("+
+          latest.attempted+"/"+latest.uploaded+"). Select Resume extraction to continue.");
+      }else setMessage("Batch limit reached. Select Resume extraction to finish remaining documents.");
     }catch(e){
       setError(e instanceof Error?e.message:"PDF processing was interrupted.");
       await refresh().catch(()=>{});
-    }finally{working.current=false;setBusy(false);}
+    }finally{setBusy(false);}
   }
   return <section className="panel padded" style={{marginTop:20,marginBottom:20}}>
     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:16,flexWrap:"wrap"}}>
@@ -80,13 +102,33 @@ export default function FundEnrichmentAudit(){
           void refresh().catch(e=>setError(e instanceof Error?e.message:"Could not refresh."))}>
           <RefreshCw size={15}/>Refresh audit
         </button>
-        <button className="btn primary" type="button" disabled={busy||!report?.uploaded} onClick={()=>void run()}>
-          <FileText size={15}/>{busy?"Processing PDFs…":report?.pending===0?"Recheck completed":"Extract and save PDF details"}
+        {busy?
+          <button className="btn quiet" type="button" onClick={()=>{pauseAfterCurrent.current=true;setMessage(
+            "Pausing after the current PDF. Saved progress will be retained.");}}>
+            <PauseCircle size={15}/>Pause after current PDF
+          </button>:null}
+        <button className="btn primary" type="button"
+          disabled={busy||report?.uploaded===0}
+          onClick={()=>void run()}>
+          <FileText size={15}/>{busy?"Saving PDF data…":
+            report?.pending===0?"All PDFs checked":
+            isPaused?"Resume extraction":"Extract and save PDF details"}
         </button>
       </div>
     </div>
     {error&&<div className="notice error" role="alert"><ShieldAlert size={16}/>{error}</div>}
-    {message&&<div className="notice neutral" role="status">{message}</div>}
+    {message&&<div className="notice neutral" role="status" aria-live="polite">{message}</div>}
+    {(busy||runCount>0)&&report? <div style={{marginTop:12,marginBottom:12}}>
+      <div style={{display:"flex",justifyContent:"space-between",gap:8,marginBottom:6}}>
+        <strong>Saved to database: {report.attempted}/{report.uploaded} PDFs</strong>
+        <span className="muted">{report.uploaded?
+          Math.round(report.attempted/report.uploaded*100):0}%</span>
+      </div>
+      <progress max={report.uploaded||1} value={Math.min(report.attempted,report.uploaded)}
+        style={{width:"100%",height:12}} aria-label="Saved factsheet extraction progress"/>
+      {busy?<p className="fineprint">The current file is being processed.
+        Scanned New Ireland PDFs can take longer; leave this page open or pause after the current file.</p>:null}
+    </div>:null}
     {report&&<>
       <div className="stats-grid" style={{marginTop:15}}>
         <div className="stat"><span>PDF sources</span><strong>{report.uploaded}/{report.expected}</strong></div>
