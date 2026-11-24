@@ -23,7 +23,7 @@ test("the import screen resumes extraction and shows provider-level completion",
   const component=read("src/components/fund-metadata-audit.tsx");
   assert.match(component,/Saved descriptions/);
   assert.match(component,/data\.byProvider/);
-  assert.match(component,/data\.hasMore/);
+  assert.match(component,/snapshot\.hasMore/);
   assert.match(component,/void run\(\)/);
   const uploads=read("src/components/secure-fund-uploads.tsx");
   assert.match(uploads,/FundMetadataAudit/);
