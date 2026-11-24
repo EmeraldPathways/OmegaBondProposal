@@ -45,13 +45,12 @@ test("A4 PDF can render uploaded-workbook returns and PDF factsheet metadata wit
   assert.equal(Buffer.from(bytes).subarray(0,4).toString("ascii"),"%PDF");
   const serialized=Buffer.from(bytes).toString("latin1");
   const pageCount=(serialized.match(/\/Type\s*\/Page(?!s)\b/g)??[]).length;
-  // One cover, ONE portfolio overview with all three requested elements,
-  // and one provider details page. Previously these took five pages.
-  assert.equal(pageCount,3,"Three-fund portfolio must fit one A4 overview page");
+  // Fund allocations appear on the cover; the next page contains details.
+  assert.equal(pageCount,2,"Three-fund proposal should have no redundant overview page");
   assert.ok(serialized.includes("/Type /Page"));
   const pdfDocument=await getDocumentProxy(new Uint8Array(bytes));
   try{
-    assert.equal(pdfDocument.numPages,3);
+    assert.equal(pdfDocument.numPages,2);
     const coverPage=await pdfDocument.getPage(1);
     const coverText=await coverPage.getTextContent();
     const cover=coverText.items.map(item=>"str" in item?item.str:"").join(" ");
@@ -73,25 +72,14 @@ test("A4 PDF can render uploaded-workbook returns and PDF factsheet metadata wit
     // the investment amount rather than a large vertical hero.
     assert.ok(labelY("Initial investment")-labelY("Selected funds")<50,
       "Initial investment panel must be vertically compact");
-    const overviewPage=await pdfDocument.getPage(2);
-    const extracted=await overviewPage.getTextContent();
-    const overview=extracted.items.map(item=>"str" in item?item.str:"").join(" ");
-    const duplicatedHeading=extracted.items.some(item=>
-      "str" in item && "transform" in item &&
-      item.str==="INVESTMENT BOND PROPOSAL" &&
-      item.transform[5]>80
-    );
-    assert.equal(duplicatedHeading,false,
-      "Portfolio overview must not repeat the proposal eyebrow above the chart");
-
+    const detailsPage=await pdfDocument.getPage(2);
+    const extracted=await detailsPage.getTextContent();
+    const details=extracted.items.map(item=>"str" in item?item.str:"").join(" ");
     for(const heading of [
-      "Cumulative fund performance",
-      "Portfolio allocation",
-      "Initial investment breakdown",
-      "Aviva Fixed ESG 60 Series 1",
-      "Zurich International Equity"
-    ])assert.ok(overview.includes(heading),
-      "Portfolio overview page must contain "+heading);
+      "Fund details","Aviva Fixed ESG 60 Series 1","Zurich International Equity"
+    ])assert.ok(details.includes(heading),"Fund-details page must contain "+heading);
+    assert.ok(!details.includes("Cumulative fund performance"),
+      "There must be no redundant portfolio overview chart page");
   }finally{
     const disposable=pdfDocument as unknown as {destroy?:()=>Promise<void>};
     if(typeof disposable.destroy==="function")await disposable.destroy();
@@ -99,7 +87,7 @@ test("A4 PDF can render uploaded-workbook returns and PDF factsheet metadata wit
 
 });
 
-test("cover displays each selected portfolio allocation table and preserves portfolio overview pages",async()=>{
+test("multi-portfolio PDF has one cover and one detail page per three-fund portfolio",async()=>{
   const details={
     filename:null,title:null,date:null,objective:null,strategy:null,
     moneyMateId:null,baseCurrency:null,riskRating:null,
@@ -125,8 +113,8 @@ test("cover displays each selected portfolio allocation table and preserves port
   const bytes=await renderToBuffer(WorkbookProposalPDF({data}));
   const document=await getDocumentProxy(new Uint8Array(bytes));
   try{
-    assert.equal(document.numPages,7,
-      "Three portfolios must keep one cover, three overviews and three fund-details pages");
+    assert.equal(document.numPages,4,
+      "Three portfolios must have one cover and three fund-details pages");
     const coverPage=await document.getPage(1);
     const text=await coverPage.getTextContent();
     const cover=text.items.map(item=>"str" in item?item.str:"").join(" ");
@@ -223,9 +211,9 @@ test("five funds are laid out as three standardized fund cards then two, without
   }}));
   const doc=await getDocumentProxy(new Uint8Array(bytes));
   try{
-    assert.equal(doc.numPages,4,"cover, overview, 3-card details, 2-card details");
+    assert.equal(doc.numPages,3,"cover, 3-card details, 2-card details");
     const texts:string[]=[];
-    for(let i=1;i<=4;i++){
+    for(let i=1;i<=3;i++){
       const page=await doc.getPage(i);
       const t=await page.getTextContent();
       texts.push(t.items.map(item=>"str" in item?item.str:"").join(" "));
@@ -233,15 +221,52 @@ test("five funds are laid out as three standardized fund cards then two, without
     assert.ok(texts[0].includes("Fund allocations and reported cumulative returns"));
     for(const fund of funds)assert.ok(texts[0].includes(fund.name),
       "Fund must appear in page-one allocations: "+fund.name);
-    for(let i=1;i<=3;i++)assert.ok(texts[2].includes("Example Fund "+i),
+    for(let i=1;i<=3;i++)assert.ok(texts[1].includes("Example Fund "+i),
       "Missing details card for fund "+i);
     for(let i=4;i<=5;i++){
-      assert.ok(!texts[2].includes("Example Fund "+i),"Fourth fund spilled onto first detail page");
-      assert.ok(texts[3].includes("Example Fund "+i),"Missing next-page card "+i);
+      assert.ok(!texts[1].includes("Example Fund "+i),"Fourth fund spilled onto first detail page");
+      assert.ok(texts[2].includes("Example Fund "+i),"Missing next-page card "+i);
     }
-    assert.ok(!texts[3].includes("Example Fund 1"));
-    assert.ok(!texts[2].includes("documented190"),
+    assert.ok(!texts[2].includes("Example Fund 1"));
+    assert.ok(!texts[1].includes("documented190"),
       "Fund detail descriptions must not print their unabridged source narrative");
+  }finally{
+    const disposable=doc as unknown as {destroy?:()=>Promise<void>};
+    if(typeof disposable.destroy==="function")await disposable.destroy();
+  }
+});
+
+
+test("allocation continuation appears only for funds that cannot fit the cover",async()=>{
+  const returns={ytd:10,oneMonth:1,threeMonth:3,sixMonth:6,oneYear:8,
+    threeYear:20,fiveYear:32,tenYear:null,sinceLaunch:45};
+  const factsheet={filename:null,title:null,date:null,objective:"Long-term growth.",
+    description:null,strategy:null,moneyMateId:null,baseCurrency:null,
+    riskRating:null,amcPct:null,civPct:null,chartPages:[]};
+  const funds=Array.from({length:11},(_,i)=>({
+    id:"id-"+i,name:"Overflow Fund "+(i+1),provider:"Zurich",
+    weight:i===10?10:9,allocatedAmount:(i===10?10:9)*1000,
+    returns,factsheet
+  }));
+  const bytes=await renderToBuffer(WorkbookProposalPDF({data:{
+    client:"Test Client",adviser:"Omega Financial Management",
+    objective:"Income and growth",investment:100000,
+    workbookFilename:"Current workbook",preparedDate:"24 November 2026",
+    portfolios:[{id:"a",title:"Allocation Test",description:"11 funds",funds}]
+  }}));
+  const doc=await getDocumentProxy(new Uint8Array(bytes));
+  try{
+    assert.equal(doc.numPages,6,
+      "One cover, one allocation continuation and four fund-detail pages");
+    const read=async(index:number)=>{
+      const text=await (await doc.getPage(index)).getTextContent();
+      return text.items.map(item=>"str" in item?item.str:"").join(" ");
+    };
+    const first=await read(1),second=await read(2);
+    for(let n=1;n<=8;n++)assert.ok(first.includes("Overflow Fund "+n));
+    for(let n=9;n<=11;n++)assert.ok(second.includes("Overflow Fund "+n));
+    assert.ok(second.includes("Remaining fund allocations"));
+    assert.ok(!second.includes("Cumulative fund performance"));
   }finally{
     const disposable=doc as unknown as {destroy?:()=>Promise<void>};
     if(typeof disposable.destroy==="function")await disposable.destroy();

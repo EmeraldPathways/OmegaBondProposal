@@ -459,38 +459,28 @@ export default function WorkbookProposalPDF({data}:{data:WorkbookProposalData}){
           dense={p.funds.length>4||data.portfolios.length>1}/>
         {p.funds.length>firstPageFundLimit(data.portfolios.length)?
           <Text style={{fontSize:7.5,color:color.muted,marginTop:4}}>
-            Remaining allocations continue on the following portfolio overview.
+            Remaining allocations continue on the following page.
           </Text>:null}
       </View>)}
 
       <Footer/>
     </Page>
+    {/* Add allocation-only continuation pages when the first-page table
+        cannot fit every selected fund. The redundant overview chart page is removed. */}
     {data.portfolios.flatMap((p,index)=>
-      chartFundGroups(p.funds,8).map((group,groupIndex,groups)=>{
-        const dense=group.length>4;
-        const portfolioLabel="PORTFOLIO "+String.fromCharCode(65+index);
-        return <Page key={p.id+"-overview-"+groupIndex}
+      chartFundGroups(
+        p.funds.slice(firstPageFundLimit(data.portfolios.length)),12
+      ).map((group,groupIndex)=>
+        <Page key={p.id+"-allocation-continuation-"+groupIndex}
           size="A4" style={style.page} wrap={false}>
-          <Banner label={portfolioLabel+" · INVESTMENT OVERVIEW"}/>
+          <Banner label={"PORTFOLIO "+String.fromCharCode(65+index)+" · ALLOCATIONS"}/>
           <Text style={[style.heading,{marginTop:11,marginBottom:4}]}>
-            {p.title}
+            {p.title} · Remaining fund allocations
           </Text>
-          <Text style={style.subtitle}>
-            {p.description}{groups.length>1?
-              " · Funds "+(groupIndex*8+1)+"–"+(groupIndex*8+group.length)+
-              " of "+p.funds.length:""}
-          </Text>
-          <CumulativeReturnLineChart funds={group} dense={dense}/>
-          <CompactPortfolioAllocationAndBreakdown
-            funds={group} allFunds={p.funds}
-            totalInvestment={data.investment} dense={dense}/>
-          {group.some(f=>p.funds.indexOf(f)>=firstPageFundLimit(data.portfolios.length))?
-            <FundAllocationReturnsTable
-              funds={group.filter(f=>p.funds.indexOf(f)>=firstPageFundLimit(data.portfolios.length))}
-              dense={dense}/>:null}
+          <FundAllocationReturnsTable funds={group} dense={group.length>4}/>
           <Footer/>
-        </Page>;
-      })
+        </Page>
+      )
     )}
     {data.portfolios.flatMap((p,index)=>
       paginateFundDetails(p.funds).map((group,pageIndex,pages)=>

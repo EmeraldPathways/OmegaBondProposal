@@ -3,21 +3,19 @@
 import { useEffect, useMemo, useState } from "react";
 import { signOut } from "next-auth/react";
 import {
-  ArrowRight, BookOpen, CheckCircle2, ChevronDown, Database,
-  FileText, FolderOpen, LayoutDashboard, LogOut,
+  ArrowRight, BookOpen, ChevronDown, Database,
+  FileText, LogOut,
   Menu, Plus, Search, ShieldAlert, SlidersHorizontal, UploadCloud, X
 } from "lucide-react";
 import OmegaLogo from "@/components/omega-logo";
 import SecureFundUploads from "@/components/secure-fund-uploads";
 import ProposalPdfViewer from "@/components/proposal-pdf-viewer";
-import FundSourceAudit from "@/components/fund-source-audit";
 import { APPROVED_FUND_GROUPS, type ApprovedFund } from "@/lib/approved-funds";
 import type { Portfolio } from "@/lib/types";
 import { fmtEuro, sumWeights } from "@/lib/analytics";
 
-type View = "overview" | "funds" | "imports" | "builder" | "compare" | "proposal";
+type View = "funds" | "imports" | "builder" | "compare" | "proposal";
 const NAV: { key: View; label: string; icon: typeof Database }[] = [
-  { key: "overview", label: "Overview", icon: LayoutDashboard },
   { key: "funds", label: "Fund library", icon: Database },
   { key: "imports", label: "Fund uploads", icon: UploadCloud },
   { key: "builder", label: "Portfolio builder", icon: SlidersHorizontal },
@@ -73,13 +71,13 @@ function MoneyInput({ value, onChange }: { value: number; onChange: (v: number) 
 }
 
 export default function Workspace() {
-  const [view, setView] = useState<View>("overview");
+  const [view, setView] = useState<View>("funds");
   const [funds,setFunds]=useState<ApprovedFund[]>([]);
   const names=useMemo(()=>new Map(funds.map(f=>[f.id,f.name])),[funds]);
   const [mobile, setMobile] = useState(false);
   const [published,setPublished] = useState<Record<string,ReconciledFund>>({});
   useEffect(()=>{
-    if(!["funds","builder","overview","compare","proposal"].includes(view))return;
+    if(!["funds","builder","compare","proposal"].includes(view))return;
     let active=true;
     fetch("/api/fund-reconciliation",{credentials:"same-origin",cache:"no-store"})
       .then(async response=>{if(!response.ok)return null;return response.json() as Promise<{reviews?:ReconciledFund[];funds?:ApprovedFund[]}>})
@@ -153,9 +151,6 @@ export default function Workspace() {
           onClick={() => go(item.key)}><item.icon size={18}/>{item.label}</button>
       )}</nav>
       <div className="sidebar-bottom">
-        <div className="sidebar-help"><CheckCircle2 size={19}/><b>Approved fund shortlist</b>
-          <p>{funds.length} selected funds. Published returns come from the latest uploaded workbook. Missing periods remain unavailable.</p>
-        </div>
         <p className="side-footer">OFM Financial Ltd T/A Omega Financial Management, regulated by the Central Bank of Ireland.</p>
       </div>
     </aside>
@@ -173,40 +168,6 @@ export default function Workspace() {
         </div>
       </header>
       <main className="content">
-        <div className="notice neutral" style={{marginBottom:24}}>
-          <ShieldAlert size={18}/><span><strong>Workbook-backed workflow.</strong> Fund names and cumulative returns come from the current workbook; exact PDF filenames link supporting documents. Investment advice, factsheet content, return-date and charge checks remain separate. No monthly price history is fabricated.</span>
-        </div>
-
-        {view === "overview" && <>
-          <section className="page-heading hero-heading">
-            <div><span className="eyebrow">OMEGA FUND UNIVERSE</span><h1>Your approved investment funds.</h1>
-              <p>A controlled list of the funds Omega uses for bond proposals. Each fund will be linked to its factsheet and published performance figures following verification.</p>
-              <div className="button-row">
-                <button className="btn primary" onClick={() => go("funds")}><Database size={16}/> Explore funds</button>
-                <button className="btn quiet" onClick={() => go("imports")}><UploadCloud size={16}/> Uploaded documents</button>
-              </div>
-            </div>
-            <div className="hero-art"><span className="orbit orbit-a"/><span className="orbit orbit-b"/><span className="orbit orbit-c"/><span className="hero-initial">Ω</span></div>
-          </section>
-          <div className="stats-grid">
-            <Stat label="Approved funds" value={String(funds.length)} sub="From the active workbook"/>
-            <Stat label="Aviva" value={String(funds.filter(f=>f.provider==="Aviva").length)} sub="Fund shortlist"/>
-            <Stat label="Zurich" value={String(funds.filter(f=>f.provider==="Zurich").length)} sub="Fund shortlist"/>
-            <Stat label="New Ireland / Standard Life" value={funds.filter(f=>f.provider==="New Ireland").length+" / "+funds.filter(f=>f.provider==="Standard Life").length} sub="Fund shortlist"/>
-          </div>
-          <div className="two-col">
-            <section className="panel padded"><span className="eyebrow">DATA QUALITY</span><h2>Source verification</h2>
-              <p className="muted">Different providers and fund series use different document styles. Abbreviated names must be reconciled against the precise share class before returns are enabled.</p>
-              <div className="notice neutral"><FolderOpen size={18}/> Original files remain available in private Vercel Blob. Source matching and approval are the next steps.</div>
-            </section>
-            <section className="panel action-panel"><span className="eyebrow">QUICK ACCESS</span><h2>Working with your fund list</h2>
-              <button onClick={() => go("funds")}><span className="action-icon"><Database size={19}/></span><span><b>Fund library</b><small>All {funds.length} approved funds</small></span><ArrowRight size={17}/></button>
-              <button onClick={() => go("builder")}><span className="action-icon"><SlidersHorizontal size={19}/></span><span><b>Portfolio builder</b><small>Draft allocations using approved funds only</small></span><ArrowRight size={17}/></button>
-              <button onClick={() => go("imports")}><span className="action-icon"><UploadCloud size={19}/></span><span><b>Source files</b><small>Factsheets and the November performance workbook</small></span><ArrowRight size={17}/></button>
-            </section>
-          </div>
-        </>}
-
         {view === "funds" && <>
           <div className="page-heading"><div><span className="eyebrow">CONTROLLED FUND LIBRARY</span><h1>Fund library</h1>
             <p>{funds.length} Omega-selected funds. The corrected workbook controls fund display names and percentage returns; new PDFs are linked as supporting evidence.</p></div>
@@ -243,7 +204,7 @@ export default function Workspace() {
 
         {view === "builder" && <>
           <div className="page-heading"><div><span className="eyebrow">PORTFOLIO CONSTRUCTION</span><h1>Portfolio builder</h1>
-            <p>Build up to three draft portfolios using only the approved Omega funds. No investment performance is estimated without verified return data.</p></div>
+</div>
             <button className="btn primary" onClick={()=>go("compare")}>Compare allocations <ArrowRight size={16}/></button>
           </div>
           <div className="portfolio-tabs">{portfolios.map((p,i)=><button key={p.id} className={i===activePortfolio?"active":""} onClick={()=>setActivePortfolio(i)}>
@@ -285,14 +246,13 @@ export default function Workspace() {
                   </div>
                 </div>;
               })}
-              <div className="notice neutral"><ShieldAlert size={17}/> Allocations must total 100%. Drafts currently remain in your browser session; no performance or volatility is simulated.</div>
+
             </section>
             <section className="panel padded"><span className="eyebrow">PORTFOLIO SUMMARY</span><h2>{current.title}</h2>
               <div className="mini-stats">
                 <Stat label="Initial investment" value={fmtEuro(investment)}/>
                 <Stat label="Allocated funds" value={String(allocated.length)}/>
                 <Stat label="Allocation total" value={total.toFixed(1)+"%"}/>
-                <Stat label="Historical portfolio return" value="Not calculated"/>
               </div>
               <div className="separator"/>
               <h3>Selected funds</h3>
@@ -367,12 +327,6 @@ export default function Workspace() {
                 </label>;
               })}
             </div>
-            <div className="notice neutral" style={{marginTop:17}}>
-              <ShieldAlert size={18}/><span>This PDF uses the workbook for all fund names and cumulative return percentages. The linked PDFs supply objectives, strategy, risk rating, charges, factsheet date and source references where extractable. Missing PDF fields are labelled unavailable. The PDF contains an allocation chart and a cumulative-return line chart with the reported 1-, 3-, 5- and 10-year figures; missing periods are left blank.</span>
-            </div>
-            <div className="notice neutral">
-              <ShieldAlert size={18}/><span>The export is marked <strong>draft for adviser review</strong> because PDF contents, share classes, return reporting dates and charges have not been independently verified for client distribution. A matched filename does not constitute this sign-off.</span>
-            </div>
             <div className="button-row" style={{marginTop:14}}>
               <button className="btn quiet" type="button" onClick={()=>go("builder")}>
                 <SlidersHorizontal size={16}/> Edit portfolio allocations
@@ -383,7 +337,6 @@ export default function Workspace() {
           {readyForProposal&&<ProposalPdfViewer input={{
             client,adviser,objective,investment,portfolios:proposalPortfolios
           }}/>}
-          <FundSourceAudit/>
         </>}
       </main>
     </div>
@@ -412,7 +365,6 @@ export default function Workspace() {
             {published[selectedFund.id].factsheet_import_id && <a target="_blank" rel="noopener noreferrer" href={"/api/fund-uploads/"+published[selectedFund.id].factsheet_import_id+"/download?view=1"}>View original factsheet and charts</a>}
           </>}
         </>:<div className="notice neutral"><ShieldAlert size={17}/> No matched current workbook return row and new PDF yet. Upload both sources, then run automatic matching.</div>}
-        <p className="fineprint">Workbook returns and supporting PDF filenames have been linked where shown. PDF contents, share class, reporting dates and fee treatment still require adviser verification before client distribution.</p>
         <button className="btn quiet" onClick={()=>setSelectedFund(null)}>Close details</button>
       </div>
     </div>}

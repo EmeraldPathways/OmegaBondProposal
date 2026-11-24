@@ -3,7 +3,6 @@
  import { useCallback, useEffect, useRef, useState } from "react";
 import FundPerformanceReview from "@/components/fund-performance-review";
 import FundSourceAudit from "@/components/fund-source-audit";
-import FundEnrichmentAudit from "@/components/fund-enrichment-audit";
 import {
   ArrowDownToLine, CheckCircle2, FileSpreadsheet, FileText, FolderLock,
   LoaderCircle, RefreshCw, ShieldAlert, UploadCloud
@@ -192,12 +191,8 @@ export default function SecureFundUploads() {
     </section>
 
     <FundSourceAudit/>
-    <FundEnrichmentAudit key={resetSequence}/>
     <FundPerformanceReview key={resetSequence} />
 
-    <div className="notice neutral" style={{ marginBottom: 22 }}>
-      <ShieldAlert size={18} />
-      <span><strong>Source intake only.</strong> New PDFs are automatically matched to the latest workbook fund names. Returns are sourced exclusively from that workbook. Mismatches remain in manual review; client-facing reports remain gated on reporting-date, share-class and fee validation. No client personal information should be uploaded.</span>
-    </div>
+
   </>;
 }

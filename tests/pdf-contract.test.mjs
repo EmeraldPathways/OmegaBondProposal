@@ -91,21 +91,16 @@ test("client PDF omits internal upload provenance, validation notices and review
   assert.match(viewer,/Omega-Investment-Bond-Proposal\.pdf/);
 });
 
-test("portfolio overview retains the charts and investment breakdown; returns table starts on page one",()=>{
+test("portfolio PDF skips the redundant overview and preserves overflow allocations",()=>{
   const pdf=read("src/lib/pdf/workbook-proposal.tsx");
-  assert.match(pdf,/CompactPortfolioAllocationAndBreakdown/);
-  assert.match(pdf,/CumulativeReturnLineChart funds=\{group\}/);
   assert.match(pdf,/FundAllocationReturnsTable/);
   assert.match(pdf,/p\.funds\.slice\(0,firstPageFundLimit\(data\.portfolios\.length\)\)/);
-  assert.match(pdf,/p\.funds\.indexOf\(f\)>=firstPageFundLimit/);
-  assert.match(pdf,/INVESTMENT OVERVIEW/);
-  assert.match(pdf,/totalInvestment=\{data\.investment\}/);
-  assert.doesNotMatch(pdf,/p\.id\+"-visual"/);
-  assert.doesNotMatch(pdf,/p\.id\+"-cumulative-"/);
-  assert.doesNotMatch(pdf,/p\.id\+"-history"/);
-  assert.match(pdf,/chartFundGroups\(p\.funds,8\)/);
+  assert.match(pdf,/allocation-continuation/);
+  assert.match(pdf,/p\.funds\.slice\(firstPageFundLimit\(data\.portfolios\.length\)\)/);
+  assert.doesNotMatch(pdf,/INVESTMENT OVERVIEW/);
+  assert.doesNotMatch(pdf,/p\.id\+"-overview-"/);
+  assert.doesNotMatch(pdf,/<CumulativeReturnLineChart funds=\{group\}/);
 });
-
 test("cover contains investment details and the allocation-return table; single portfolio preserves its doughnut",()=>{
   const pdf=read("src/lib/pdf/workbook-proposal.tsx");
   assert.match(pdf,/CoverPortfolioAllocation/);
