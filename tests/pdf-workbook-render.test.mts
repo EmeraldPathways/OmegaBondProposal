@@ -139,3 +139,51 @@ test("cover displays all selected allocation charts without changing portfolio o
     if(typeof disposable.destroy==="function")await disposable.destroy();
   }
 });
+
+test("New Ireland saved factsheet data appears in the generated client PDF",async()=>{
+  const returns={ytd:4,oneMonth:1,threeMonth:2,sixMonth:3,
+    oneYear:5,threeYear:15,fiveYear:20,tenYear:null,sinceLaunch:30};
+  const data:WorkbookProposalData={
+    client:"Sample Client",adviser:"Omega Financial Management",
+    objective:"Compare balanced growth funds.",investment:80000,
+    workbookFilename:"Omega Fund Performance.xlsx",preparedDate:"24 November 2026",
+    portfolios:[{id:"ni",title:"New Ireland option",description:"Balanced approach",
+      funds:[{id:"new-ireland-prime",name:"PRIME 5",provider:"New Ireland",
+        weight:100,allocatedAmount:80000,returns,
+        factsheet:{filename:"New Ireland PRIME 5.pdf",title:"PRIME 5",
+          date:"09 November 2026",
+          objective:"The PRIME 5 fund seeks long-term capital growth.",
+          description:"The PRIME 5 fund seeks long-term capital growth.",
+          strategy:null,riskRating:null,riskProfile:"Medium to High Risk",
+          managedBy:"State Street Investment Management",
+          managementStyle:"Passively managed",assetMix:"Equities and bonds",
+          taxStatus:"Gross",sfdrClass:"Article 8",
+          riskFactors:["Currency Risk","Liquidity Risk"],
+          riskDisclosure:"Investment capital is not guaranteed.",
+          chargesDisclosure:"Charges may reduce your investment return.",
+          moneyMateId:null,baseCurrency:null,amcPct:null,civPct:null,chartPages:[]}
+      }]}]
+  };
+  const bytes=await renderToBuffer(WorkbookProposalPDF({data}));
+  const doc=await getDocumentProxy(new Uint8Array(bytes));
+  try{
+    const parts:string[]=[];
+    for(let i=1;i<=doc.numPages;i++){
+      const page=await doc.getPage(i);
+      const text=await page.getTextContent();
+      parts.push(text.items.map(item=>"str" in item?item.str:"").join(" "));
+    }
+    const full=parts.join(" ");
+    for(const expected of [
+      "The PRIME 5 fund seeks long-term capital growth",
+      "Medium to High Risk","State Street Investment Management",
+      "Passively managed","Equities and bonds","Article 8",
+      "Currency Risk","Liquidity Risk",
+      "Investment capital is not guaranteed",
+      "Charges may reduce your investment return"
+    ])assert.ok(full.includes(expected),"New Ireland PDF detail missing: "+expected);
+  }finally{
+    const disposable=doc as unknown as {destroy?:()=>Promise<void>};
+    if(typeof disposable.destroy==="function")await disposable.destroy();
+  }
+});
