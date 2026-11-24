@@ -8,7 +8,7 @@ import {extractFundFactsheet} from "../src/lib/reconciliation/factsheet.ts";
 import {workbookNameKey,pdfFilenameFundKey} from "../src/lib/reconciliation/workbook-source.ts";
 import type {FactSheetData} from "../src/lib/reconciliation/engine.ts";
 
-const REPAIR_VERSION=2;
+const REPAIR_VERSION=3;
 const prefix="[Omega New Ireland OCR repair]";
 if(process.env.VERCEL_ENV!=="production"){
   console.log(prefix,"Skipped outside production build.");
