@@ -44,7 +44,7 @@ export async function readScannedFactsheetPage(bytes:Uint8Array):Promise<string|
     });
     const read=async(png:Uint8Array,mode:typeof PSM[keyof typeof PSM])=>{
       await worker!.setParameters({tessedit_pageseg_mode:mode});
-      const result=await worker!.recognize(png);
+      const result=await worker!.recognize(Buffer.from(png));
       return result.data.text?.replace(/\u00a0/g," ").trim()??"";
     };
     const full=await read(await zone(0,0,1,.76),PSM.AUTO);
