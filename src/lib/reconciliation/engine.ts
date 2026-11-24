@@ -12,6 +12,8 @@ export type FactSheetData = {
   managementStyle?:string|null; assetMix?:string|null; taxStatus?:string|null;
   expenseRatioPct?:number|null; equityRange?:string|null; sfdrClass?:string|null;
   metadataVersion?:number;
+  description?:string|null; riskFactors?:string[]; riskDisclosure?:string|null;
+  chargesDisclosure?:string|null; fieldPages?:Record<string,number[]>;
   objective:string|null; strategy:string|null;
   holdings:{name:string;percentage:number}[]; allocations:{name:string;percentage:number}[];
   chartReferences:{page:number;label:string;source:"original_pdf"}[];
