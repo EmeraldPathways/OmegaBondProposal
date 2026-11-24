@@ -25,18 +25,11 @@ async function ensureVersionColumn(){
   const sql=getNeonSql();
   await sql.query("ALTER TABLE fund_source_factsheets ADD COLUMN IF NOT EXISTS content_attempted_version integer NOT NULL DEFAULT 0");
 }
-function nameIssue(fund:string,provider:string,doc:FactSheetData|null,filename:string):string|null{
+function nameIssue(fund:string,provider:string,doc:FactSheetData|null):string|null{
   if(!doc)return null;
   if(doc.providerHint&&doc.providerHint!==provider)
     return "PDF issuer is "+doc.providerHint+"; the workbook fund is "+provider+".";
   if(!doc.title)return "No printed fund title could be verified.";
-  // Confirmed by the user: this Aviva-wrapped factsheet carries the L&G
-  // Multi-Index IV Series B underlying title. Retain its printed title, but
-  // do not call this particular workbook-to-PDF association incorrect.
-  if(provider==="Aviva" &&
-    /^Aviva - Fix Alloc ESG 80 Ser 1\.pdf$/i.test(filename.trim()) &&
-    /^L&G Multi-Index IV Fund Series B$/i.test(doc.title.trim()))
-    return null;
   if(normalName(fund)===normalName(doc.title))return null;
   // Low similarity is a review flag, not a forced filename-based replacement.
   if(similarity(fund,doc.title)<0.42)
@@ -88,7 +81,7 @@ export async function GET(){
       const doc=file?.data??null;
       const issue=matched.length===0?"No PDF filename matches this fund":
         matched.length>1?"More than one PDF matches this fund":
-        nameIssue(fund.name,fund.provider,doc,file?.filename??"");
+        nameIssue(fund.name,fund.provider,doc);
       const stale=!file||file.attempted_version<CONTENT_METADATA_VERSION ||
         (doc?.metadataVersion??0)<CONTENT_METADATA_VERSION;
       return {fund:fund.name,provider:fund.provider,filename:file?.filename??null,
@@ -156,7 +149,7 @@ export async function POST(request:Request){
           Buffer.from(bytes.subarray(0,5)).toString("ascii")!=="%PDF-")
           throw new Error("Invalid or oversized PDF.");
         data=await extractFundFactsheet({importId:id,filename,data:bytes,ocrFallback:true});
-        error=fund?nameIssue(fund.name,fund.provider,data,filename):"No unique fund was found for this filename.";
+        error=fund?nameIssue(fund.name,fund.provider,data):"No unique fund was found for this filename.";
         if(!data.title || data.extractionWarnings.some(w=>w.includes("insufficient extractable text")))
           error=error??"Printed fund identity or content was not reliably extractable.";
       }catch(e){
