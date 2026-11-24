@@ -8,7 +8,7 @@ import {extractFundFactsheet} from "../src/lib/reconciliation/factsheet.ts";
 import {workbookNameKey,pdfFilenameFundKey} from "../src/lib/reconciliation/workbook-source.ts";
 import type {FactSheetData} from "../src/lib/reconciliation/engine.ts";
 
-const REPAIR_VERSION=1;
+const REPAIR_VERSION=2;
 const prefix="[Omega New Ireland OCR repair]";
 if(process.env.VERCEL_ENV!=="production"){
   console.log(prefix,"Skipped outside production build.");
@@ -18,6 +18,7 @@ if(process.env.VERCEL_ENV!=="production"){
   const sql=neon(process.env.DATABASE_URL);
   const errors:Record<string,number>={};
   let repaired=0,unreadable=0,skipped=0,selected=0;
+  const extractionMethods:Record<string,number>={};
   try{
     await sql.query("ALTER TABLE fund_source_factsheets "+
       "ADD COLUMN IF NOT EXISTS ocr_repair_attempted_version integer NOT NULL DEFAULT 0");
@@ -51,6 +52,13 @@ if(process.env.VERCEL_ENV!=="production"){
           Buffer.from(bytes.subarray(0,5)).toString("ascii")!=="%PDF-")
           throw new Error("PDF validation failed");
         parsed=await extractFundFactsheet({importId:id,filename,data:bytes,ocrFallback:true});
+        const method=parsed.extractionMethod??"unknown";
+        extractionMethods[method]=(extractionMethods[method]??0)+1;
+        const lastOcrWarning=parsed.extractionWarnings.find(x=>x.startsWith("OCR failed:"));
+        if(lastOcrWarning){
+          const warning=lastOcrWarning.slice(0,180);
+          errors[warning]=(errors[warning]??0)+1;
+        }
         if(parsed.providerHint!=="New Ireland")
           issue="Provider could not be verified from PDF";
         else if(!parsed.description&&!parsed.objective)
@@ -88,7 +96,7 @@ if(process.env.VERCEL_ENV!=="production"){
       "WHERE i.filename ILIKE 'New Ireland%.pdf' AND f.status='needs_review'");
     console.log(prefix,JSON.stringify({
       selected,repaired,unreadable,skipped,remainingForReview:Number(after[0]?.n??0),
-      failureTypes:errors
+      extractionMethods,failureTypes:errors
     }));
   }catch(error){
     // Never block deployment or rewrite workbook returns because optional OCR
