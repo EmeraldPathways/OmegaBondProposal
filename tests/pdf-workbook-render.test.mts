@@ -58,8 +58,9 @@ test("A4 PDF can render uploaded-workbook returns and PDF factsheet metadata wit
     for(const heading of [
       "Initial investment","Prepared for","Prepared by",
       "Portfolio options","Selected funds","Investment objective",
-      "Portfolio allocation","Aviva Fixed ESG 60 Series 1",
-      "Zurich International Equity"
+      "Portfolio allocation",
+      "Fund allocations and reported cumulative returns","10 YEARS",
+      "Aviva Fixed ESG 60 Series 1","Zurich International Equity"
     ])assert.ok(cover.includes(heading),
       "First A4 page must contain "+heading);
     const labelY=(label:string)=>{
@@ -87,10 +88,8 @@ test("A4 PDF can render uploaded-workbook returns and PDF factsheet metadata wit
       "Cumulative fund performance",
       "Portfolio allocation",
       "Initial investment breakdown",
-      "Fund allocations and reported cumulative returns",
       "Aviva Fixed ESG 60 Series 1",
-      "Zurich International Equity",
-      "10 YEARS"
+      "Zurich International Equity"
     ])assert.ok(overview.includes(heading),
       "Portfolio overview page must contain "+heading);
   }finally{
@@ -100,7 +99,7 @@ test("A4 PDF can render uploaded-workbook returns and PDF factsheet metadata wit
 
 });
 
-test("cover displays all selected allocation charts without changing portfolio overview and fund-detail pages",async()=>{
+test("cover displays each selected portfolio allocation table and preserves portfolio overview pages",async()=>{
   const details={
     filename:null,title:null,date:null,objective:null,strategy:null,
     moneyMateId:null,baseCurrency:null,riskRating:null,
@@ -132,7 +131,7 @@ test("cover displays all selected allocation charts without changing portfolio o
     const text=await coverPage.getTextContent();
     const cover=text.items.map(item=>"str" in item?item.str:"").join(" ");
     for(const label of ["Portfolio A","Portfolio B","Portfolio C",
-      "Initial investment","Portfolio allocation"])
+      "Initial investment","Fund allocations and reported cumulative returns"])
       assert.ok(cover.includes(label),"Cover is missing "+label);
   }finally{
     const disposable=document as unknown as {destroy?:()=>Promise<void>};
@@ -182,6 +181,67 @@ test("New Ireland saved factsheet data appears in the generated client PDF",asyn
       "Investment capital is not guaranteed",
       "Charges may reduce your investment return"
     ])assert.ok(full.includes(expected),"New Ireland PDF detail missing: "+expected);
+  }finally{
+    const disposable=doc as unknown as {destroy?:()=>Promise<void>};
+    if(typeof disposable.destroy==="function")await disposable.destroy();
+  }
+});
+
+test("five funds are laid out as three standardized fund cards then two, without losing page-one returns",async()=>{
+  const {fundCardNarrative,FUND_CARD_NARRATIVE_WORDS,paginateFundDetails}=
+    await import("../src/lib/pdf/fund-detail-layout.ts");
+  const longDescription=Array.from({length:210},(_,i)=>
+    "documented"+String(i)).join(" ");
+  const abbreviated=fundCardNarrative({
+    description:longDescription,
+    strategy:"A global portfolio with diversified investment objectives.",
+    riskFactors:["Foreign-exchange exposure","Equity volatility"]
+  });
+  assert.ok(abbreviated.length>0);
+  assert.ok(abbreviated[0].text.includes("…"));
+  assert.ok(abbreviated.flatMap(f=>f.text.split(/\s+/)).length<=FUND_CARD_NARRATIVE_WORDS);
+  const factsheet={
+    filename:"Official.pdf",title:"Official Fund",date:"24 November 2026",
+    moneyMateId:null,baseCurrency:"EUR",riskRating:3,riskProfile:null,
+    objective:null,description:longDescription,
+    strategy:"A global investment approach.",managedBy:"Example Fund Manager",
+    riskFactors:["Currency risk"],riskDisclosure:null,chargesDisclosure:null,
+    amcPct:0.5,civPct:0.1,chartPages:[]
+  };
+  const returns={ytd:4,oneMonth:2,threeMonth:4,sixMonth:7,
+    oneYear:11,threeYear:20,fiveYear:null,tenYear:null,sinceLaunch:30};
+  const funds=Array.from({length:5},(_,i)=>({
+    id:"fund-"+(i+1),name:"Example Fund "+(i+1),provider:"Zurich",
+    weight:20,allocatedAmount:20000,returns,factsheet
+  }));
+  assert.deepEqual(paginateFundDetails(funds).map(group=>group.length),[3,2]);
+  const bytes=await renderToBuffer(WorkbookProposalPDF({data:{
+    client:"Test Client",adviser:"Omega Financial Management",
+    objective:"Conservative growth",investment:100000,
+    workbookFilename:"Current workbook",preparedDate:"24 November 2026",
+    portfolios:[{id:"a",title:"Balanced Portfolio",description:"Five-fund selection",funds}]
+  }}));
+  const doc=await getDocumentProxy(new Uint8Array(bytes));
+  try{
+    assert.equal(doc.numPages,4,"cover, overview, 3-card details, 2-card details");
+    const texts:string[]=[];
+    for(let i=1;i<=4;i++){
+      const page=await doc.getPage(i);
+      const t=await page.getTextContent();
+      texts.push(t.items.map(item=>"str" in item?item.str:"").join(" "));
+    }
+    assert.ok(texts[0].includes("Fund allocations and reported cumulative returns"));
+    for(const fund of funds)assert.ok(texts[0].includes(fund.name),
+      "Fund must appear in page-one allocations: "+fund.name);
+    for(let i=1;i<=3;i++)assert.ok(texts[2].includes("Example Fund "+i),
+      "Missing details card for fund "+i);
+    for(let i=4;i<=5;i++){
+      assert.ok(!texts[2].includes("Example Fund "+i),"Fourth fund spilled onto first detail page");
+      assert.ok(texts[3].includes("Example Fund "+i),"Missing next-page card "+i);
+    }
+    assert.ok(!texts[3].includes("Example Fund 1"));
+    assert.ok(!texts[2].includes("documented190"),
+      "Fund detail descriptions must not print their unabridged source narrative");
   }finally{
     const disposable=doc as unknown as {destroy?:()=>Promise<void>};
     if(typeof disposable.destroy==="function")await disposable.destroy();

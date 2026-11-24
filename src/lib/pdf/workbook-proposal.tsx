@@ -1,6 +1,7 @@
 import React from "react";
 import {Document,Page,View,Text,StyleSheet,Svg,Path,Circle,Rect,Line} from "@react-pdf/renderer";
 import {OMEGA_LOGO_PATHS} from "@/lib/branding/omega-logo-paths";
+import {firstPageFundLimit,paginateFundDetails,fundCardNarrative,abbreviateWords} from "@/lib/pdf/fund-detail-layout";
 import {
   CUMULATIVE_PERIODS,cumulativeReturnValues,contiguousReturnSegments,
   cumulativeChartDomain,chartFundGroups
@@ -69,9 +70,11 @@ const style=StyleSheet.create({
   chartValue:{fontSize:8.4,fontFamily:"Helvetica-Bold",color:color.ink,
     textAlign:"right",width:"15%"},
   legendText:{fontSize:8.1,color:color.ink,lineHeight:1.3,flex:1},
-  sourceCard:{borderWidth:.7,borderColor:color.border,borderRadius:7,padding:12,marginTop:11},
-  sourceTitle:{fontFamily:"Helvetica-Bold",fontSize:9.6,color:color.wine,marginBottom:5},
-  meta:{fontSize:7.9,color:color.ink,lineHeight:1.55,marginBottom:5},
+  sourceCard:{borderWidth:.7,borderColor:color.border,borderRadius:7,
+    paddingHorizontal:11,paddingVertical:9,marginTop:9,height:194,
+    backgroundColor:"#FDFDFC"},
+  sourceTitle:{fontFamily:"Helvetica-Bold",fontSize:9.6,color:color.wine,marginBottom:4},
+  meta:{fontSize:7.65,color:color.ink,lineHeight:1.38,marginBottom:4},
   alert:{backgroundColor:"#FAF4F2",padding:12,borderRadius:6,marginTop:19},
   alertTitle:{fontFamily:"Helvetica-Bold",fontSize:9,color:color.wine,marginBottom:6},
   divider:{height:1,backgroundColor:color.border,marginTop:15,marginBottom:15},
@@ -445,8 +448,20 @@ export default function WorkbookProposalPDF({data}:{data:WorkbookProposalData}){
         <Text style={style.section}>Investment objective</Text>
         <Text style={style.p}>{data.objective}</Text>
       </View>
-      {data.portfolios.map(p=><CoverPortfolioAllocation
-        key={p.id} portfolio={p} multiple={data.portfolios.length>1}/>)}
+      {data.portfolios.length===1?<CoverPortfolioAllocation
+        portfolio={data.portfolios[0]} multiple={false}/>:null}
+      {data.portfolios.map(p=><View key={p.id+"-cover-returns"} wrap={false}>
+        {data.portfolios.length>1?<Text style={{
+          fontFamily:"Helvetica-Bold",fontSize:9,color:color.wine,marginTop:9
+        }}>{p.title}</Text>:null}
+        <FundAllocationReturnsTable
+          funds={p.funds.slice(0,firstPageFundLimit(data.portfolios.length))}
+          dense={p.funds.length>4||data.portfolios.length>1}/>
+        {p.funds.length>firstPageFundLimit(data.portfolios.length)?
+          <Text style={{fontSize:7.5,color:color.muted,marginTop:4}}>
+            Remaining allocations continue on the following portfolio overview.
+          </Text>:null}
+      </View>)}
 
       <Footer/>
     </Page>
@@ -469,82 +484,58 @@ export default function WorkbookProposalPDF({data}:{data:WorkbookProposalData}){
           <CompactPortfolioAllocationAndBreakdown
             funds={group} allFunds={p.funds}
             totalInvestment={data.investment} dense={dense}/>
-          <FundAllocationReturnsTable funds={group} dense={dense}/>
+          {group.some(f=>p.funds.indexOf(f)>=firstPageFundLimit(data.portfolios.length))?
+            <FundAllocationReturnsTable
+              funds={group.filter(f=>p.funds.indexOf(f)>=firstPageFundLimit(data.portfolios.length))}
+              dense={dense}/>:null}
           <Footer/>
         </Page>;
       })
     )}
-    {data.portfolios.map((p,index)=><Page key={p.id+"-factsheets"} size="A4" style={style.page} wrap>
-      <Banner label={"PORTFOLIO "+String.fromCharCode(65+index)+" · FUND DETAILS"}/>
-      <Text style={style.eyebrow}>FUND INFORMATION</Text>
-      <Text style={style.heading}>{p.title} · Fund details</Text>
-      
-      {p.funds.map(f=><View key={f.id+"-source"} style={style.sourceCard}>
-        <Text style={style.sourceTitle}>{f.name}</Text>
-        <Text style={style.meta}>{f.provider}{f.factsheet.date?" · As at "+f.factsheet.date:""}</Text>
-        
-        {f.factsheet.moneyMateId?<Text style={style.meta}>
-          MoneyMate ID: {f.factsheet.moneyMateId}
-        </Text>:null}
-        {f.factsheet.baseCurrency?<Text style={style.meta}>
-          Base currency: {f.factsheet.baseCurrency}
-        </Text>:null}
-        {f.factsheet.riskProfile?<Text style={style.meta}>
-          Risk profile: {f.factsheet.riskProfile}
-        </Text>:f.factsheet.riskRating!=null?<Text style={style.meta}>
-          {f.provider==="Standard Life"?"Volatility rating":"Risk rating"}:
-          {" "+f.factsheet.riskRating}/7
-        </Text>:null}
-        {f.factsheet.managedBy?<Text style={style.meta}>
-          {f.provider==="Standard Life"?"Fund manager":"Managed by"}:
-          {" "+f.factsheet.managedBy}
-        </Text>:null}
-        {f.factsheet.managementStyle?<Text style={style.meta}>
-          Investment style: {f.factsheet.managementStyle}
-        </Text>:null}
-        {f.factsheet.assetMix?<Text style={style.meta}>
-          Asset mix: {f.factsheet.assetMix}
-        </Text>:null}
-        {f.factsheet.equityRange?<Text style={style.meta}>
-          Indicative equity range: {f.factsheet.equityRange}
-        </Text>:null}
-        {f.factsheet.sfdrClass?<Text style={style.meta}>
-          SFDR class: {f.factsheet.sfdrClass}
-        </Text>:null}
-        {f.factsheet.taxStatus?<Text style={style.meta}>
-          Tax basis: {f.factsheet.taxStatus}
-        </Text>:null}
-        {f.factsheet.amcPct!=null?<Text style={style.meta}>
-          Annual management charge: {percentage(f.factsheet.amcPct)}
-        </Text>:null}
-        {f.provider==="Aviva"&&f.factsheet.civPct!=null?
-          <Text style={style.meta}>CIV charge: {percentage(f.factsheet.civPct)}</Text>:null}
-        {f.provider==="Standard Life"&&f.factsheet.expenseRatioPct!=null?
-          <Text style={style.meta}>
-            Total expense ratio: {percentage(f.factsheet.expenseRatioPct)}
-          </Text>:null}
-        <Text style={style.meta}>
-          {f.provider==="New Ireland"||f.provider==="Zurich"?
-            "Fund description":"Investment objective"}:
-          {" "+(f.factsheet.objective??f.factsheet.description??"Information unavailable")}
+    {data.portfolios.flatMap((p,index)=>
+      paginateFundDetails(p.funds).map((group,pageIndex,pages)=>
+      <Page key={p.id+"-factsheets-"+pageIndex} size="A4"
+        style={style.page} wrap={false}>
+        <Banner label={"PORTFOLIO "+String.fromCharCode(65+index)+" · FUND DETAILS"}/>
+        <Text style={[style.eyebrow,{marginTop:9}]}>FUND INFORMATION</Text>
+        <Text style={[style.heading,{marginBottom:3,fontSize:16}]}>
+          {p.title} · Fund details
         </Text>
-        {f.factsheet.description&&f.factsheet.objective&&
-          f.factsheet.description.trim()!==f.factsheet.objective.trim()?
-          <Text style={style.meta}>Additional fund description: {f.factsheet.description}</Text>:null}
-        {f.factsheet.strategy?<Text style={style.meta}>
-          Strategy: {f.factsheet.strategy}
-        </Text>:null}
-        {f.factsheet.riskFactors?.length?
-          <Text style={style.meta}>Key risk factors: {f.factsheet.riskFactors.join("; ")}</Text>:null}
-        {f.factsheet.riskDisclosure&&
-          f.factsheet.riskDisclosure.trim()!==f.factsheet.riskProfile?.trim()?
-          <Text style={style.meta}>Risk information: {f.factsheet.riskDisclosure}</Text>:null}
-        {f.factsheet.chargesDisclosure?
-          <Text style={style.meta}>Charges information: {f.factsheet.chargesDisclosure}</Text>:null}
-
-      </View>)}
-
-      <Footer/>
-    </Page>)}
+        {pages.length>1?<Text style={{
+          fontSize:7.5,color:color.muted,marginBottom:2
+        }}>Funds {pageIndex*3+1}–{pageIndex*3+group.length} of {p.funds.length}</Text>:null}
+        {group.map(f=><View key={f.id+"-source"} style={style.sourceCard} wrap={false}>
+          <Text style={style.sourceTitle}>{f.name}</Text>
+          <Text style={style.meta}>
+            {f.provider}{f.factsheet.date?" · As at "+f.factsheet.date:""}
+          </Text>
+          <Text style={style.meta}>
+            {abbreviateWords([
+              f.factsheet.riskProfile?"Risk profile: "+f.factsheet.riskProfile:
+                f.factsheet.riskRating!=null?
+                  (f.provider==="Standard Life"?"Volatility rating: ":"Risk rating: ")+
+                  f.factsheet.riskRating+"/7":null,
+              f.factsheet.managedBy?
+                (f.provider==="Standard Life"?"Fund manager: ":"Managed by: ")+
+                f.factsheet.managedBy:null,
+              f.factsheet.managementStyle?"Investment style: "+f.factsheet.managementStyle:null,
+              f.factsheet.assetMix?"Asset mix: "+f.factsheet.assetMix:null,
+              f.factsheet.equityRange?"Equity range: "+f.factsheet.equityRange:null,
+              f.factsheet.sfdrClass?"SFDR class: "+f.factsheet.sfdrClass:null,
+              f.factsheet.amcPct!=null?"AMC: "+percentage(f.factsheet.amcPct):null,
+              f.factsheet.civPct!=null?"CIV: "+percentage(f.factsheet.civPct):null,
+              f.factsheet.expenseRatioPct!=null?"Total expense ratio: "+percentage(f.factsheet.expenseRatioPct):null,
+              f.factsheet.taxStatus?"Tax basis: "+f.factsheet.taxStatus:null,
+              f.factsheet.moneyMateId?"MoneyMate ID: "+f.factsheet.moneyMateId:null,
+              f.factsheet.baseCurrency?"Currency: "+f.factsheet.baseCurrency:null
+            ].filter(Boolean).map(String).join(" · "),58)}
+          </Text>
+          {fundCardNarrative(f.factsheet).map((item,i)=>
+            <Text key={i} style={[style.meta,{marginBottom:3}]}>
+              {item.label}: {item.text}
+            </Text>)}
+        </View>)}
+        <Footer/>
+      </Page>))}
   </Document>;
 }

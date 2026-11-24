@@ -32,7 +32,8 @@ test("new A4 Omega PDF displays actual workbook fund charts and PDF metadata wit
   assert.match(pdf,/OMEGA_LOGO_PATHS/);
   assert.match(pdf,/size="A4"/);
   assert.match(pdf,/f\.returns\.threeYear/);
-  assert.match(pdf,/f\.factsheet\.objective/);
+  assert.match(pdf,/fundCardNarrative\(f\.factsheet\)/);
+  assert.match(read("src/lib/pdf/fund-detail-layout.ts"),/fields\.objective/);
   assert.match(pdf,/f\.factsheet\.riskRating/);
   assert.match(pdf,/f\.factsheet\.amcPct/);
   assert.match(pdf,/f\.factsheet\.riskProfile/);
@@ -81,7 +82,8 @@ test("client PDF omits internal upload provenance, validation notices and review
     /Original PDF graphics/,
     /PDF: \{f\.factsheet\.filename/,
   ])assert.doesNotMatch(pdf,expression);
-  assert.match(pdf,/f\.factsheet\.objective/);
+  assert.match(pdf,/fundCardNarrative\(f\.factsheet\)/);
+  assert.match(read("src/lib/pdf/fund-detail-layout.ts"),/fields\.objective/);
   assert.match(pdf,/f\.returns\.oneYear/);
   assert.match(pdf,/CompactPortfolioAllocationAndBreakdown/);
   assert.match(pdf,/Cumulative returns, not annualised/);
@@ -89,11 +91,13 @@ test("client PDF omits internal upload provenance, validation notices and review
   assert.match(viewer,/Omega-Investment-Bond-Proposal\.pdf/);
 });
 
-test("each portfolio combines line chart, compact donut, invested amounts and cumulative-return table on one A4 overview page",()=>{
+test("portfolio overview retains the charts and investment breakdown; returns table starts on page one",()=>{
   const pdf=read("src/lib/pdf/workbook-proposal.tsx");
   assert.match(pdf,/CompactPortfolioAllocationAndBreakdown/);
   assert.match(pdf,/CumulativeReturnLineChart funds=\{group\}/);
-  assert.match(pdf,/FundAllocationReturnsTable funds=\{group\}/);
+  assert.match(pdf,/FundAllocationReturnsTable/);
+  assert.match(pdf,/p\.funds\.slice\(0,firstPageFundLimit\(data\.portfolios\.length\)\)/);
+  assert.match(pdf,/p\.funds\.indexOf\(f\)>=firstPageFundLimit/);
   assert.match(pdf,/INVESTMENT OVERVIEW/);
   assert.match(pdf,/totalInvestment=\{data\.investment\}/);
   assert.doesNotMatch(pdf,/p\.id\+"-visual"/);
@@ -102,10 +106,10 @@ test("each portfolio combines line chart, compact donut, invested amounts and cu
   assert.match(pdf,/chartFundGroups\(p\.funds,8\)/);
 });
 
-test("cover contains compact horizontal investment details and allocation doughnut; portfolio intro is shortened",()=>{
+test("cover contains investment details and the allocation-return table; single portfolio preserves its doughnut",()=>{
   const pdf=read("src/lib/pdf/workbook-proposal.tsx");
   assert.match(pdf,/CoverPortfolioAllocation/);
-  assert.match(pdf,/data\.portfolios\.map\(p=><CoverPortfolioAllocation/);
+  assert.match(pdf,/data\.portfolios\.length===1\?<CoverPortfolioAllocation/);
   assert.match(pdf,/marginTop:8,paddingHorizontal:12,paddingVertical:7/);
   assert.match(pdf,/flexDirection:"row",alignItems:"center",gap:13/);
   assert.doesNotMatch(pdf,/INVESTMENT BOND PROPOSAL\s*\n\s*<\/Text>\s*\n\s*<Text style=\{\[style\.heading/);
