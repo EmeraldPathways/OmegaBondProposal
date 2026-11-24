@@ -39,7 +39,10 @@ function detectProvider(text:string,filename:string):string|null{
   // The upload filename is at most a provider-folder fallback; never use it
   // to establish the fund identity or selected share class.
   if(/\bzurich life\b|\bzurich\s+fund\s+factsheet\b/.test(intro))return "Zurich";
-  if(/\bnew ireland assurance\b|\bnew ireland\b/.test(intro))return "New Ireland";
+  if(/\bnew ireland assurance\b|\bnew ireland\b/.test(intro)||
+     /\bnew ireland assurance company\b/i.test(text) ||
+     /^new\s+ireland(?:[\s_-]|$)/i.test(filename))
+    return "New Ireland";
   if(/\bstandard life\b/.test(intro))return "Standard Life";
   if(/\baviva\b/.test(intro))return "Aviva";
   // Some Aviva white-label sheets show only the Aviva-style wrapper and
@@ -143,8 +146,10 @@ export function parseFactsheetText(params:{
   const firstPage=pages[0]??"";
   return {
     importId,filename,providerHint:provider,title,moneyMateId:first(/MoneyMate\s*ID\s*[:\s]*(\d{5,12})/i,text),
-    asOf:(firstPage.match(DATE)?.[0])??
-      (provider==="Standard Life"?first(/\b((?:January|February|March|April|May|June|July|August|September|October|November|December)\s+20\d{2})\b/i,firstPage):null),
+    asOf:provider==="New Ireland"
+      ?first(/\bPerformance\s+as\s+at\s+(\d{1,2}\s+[A-Za-z]+\s+20\d{2})\b/i,text)
+      :((firstPage.match(DATE)?.[0])??
+        (provider==="Standard Life"?first(/\b((?:January|February|March|April|May|June|July|August|September|October|November|December)\s+20\d{2})\b/i,firstPage):null)),
     launchDate:first(/Fund Launch Date\s*[:\s]*([A-Za-z]{3,9}\s+20\d{2})/i,text),
     baseCurrency:first(/Base Currency\s*[:\s]*([A-Z]{3})/i,text),
     amcPct:number(/\bAMC\s*:?\s*(\d+(?:\.\d+)?)\s*%/i,text),
@@ -152,8 +157,19 @@ export function parseFactsheetText(params:{
     // The Aviva 1–7 graphic is a scale, not an identifiable selected rating;
     // do not derive risk just from the 1 2 3 4 5 6 7 labels.
     riskRating:number(/\bThe Fund has a risk rating of\s+([1-7])\b/i,text)??number(/\b(?:SRI|SRRI|Risk rating|Risk indicator)\s*[:=]\s*([1-7])\s*(?:\/\s*7)?\b/i,text),
+    // New Ireland publishes named categories (e.g. Low to Medium Risk),
+    // not an equivalent provider-confirmed 1–7 numeric score.
+    riskProfile:provider==="New Ireland"
+      ?first(/\bRisk\s+Profile\s*:\s*(Low\s+to\s+Medium\s+Risk|Medium\s+to\s+High\s+Risk|Low\s+Risk|Medium\s+Risk|High\s+Risk|Very\s+High\s+Risk|Very\s+Low\s+Risk)\b/i,text):null,
+    managedBy:provider==="New Ireland"
+      ?section(text,/\bManaged\s+By\s*:\s*/i,/\bStyle\s*:/i,230):null,
+    managementStyle:provider==="New Ireland"
+      ?section(text,/\bStyle\s*:\s*/i,/\bAsset\s+Mix\s*:/i,230):null,
+    assetMix:provider==="New Ireland"
+      ?section(text,/\bAsset\s+Mix\s*:\s*/i,/\b(?:SFDR(?:\*\s*Classification)?|Tax|Risk\s+Profile)\s*:/i,300):null,
+    taxStatus:provider==="New Ireland"?first(/\bTax\s*:\s*(Gross|Net)\b/i,text):null,
     objective:provider==="New Ireland"
-      ?section(text,/\bFund Description:\s*/i,/\bManaged By:\b|\bStyle:\b|\bAsset Mix:\b/i,1600)
+      ?section(text,/\bFund\s+Description\s*:\s*/i,/\b(?:Managed\s+By|Style|Asset\s+Mix)\s*:/i,1600)
       :provider==="Zurich"
       ?section(text,/\bFund Description\b/i,/\bFund Performance\b|\bSector Average\b|\bPerformance Table\b/i,1300)
       :provider==="Standard Life"
