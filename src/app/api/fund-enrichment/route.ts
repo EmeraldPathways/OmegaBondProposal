@@ -15,7 +15,7 @@ const headers={"Cache-Control":"private, no-store","X-Content-Type-Options":"nos
 type PdfRow={id:string;filename:string;storage_key:string;
   status:string|null;data:FactSheetData|null;error_message:string|null;attempted_version:number|null};
 type AuditRow={fund:string;provider:string;filename:string|null;status:string;
-  missing:string[];identityIssue:string|null;warnings:string[]};
+  missing:string[];notStated:string[];identityIssue:string|null;warnings:string[]};
 
 async function permitted(){
   return isLoginConfigured() &&
@@ -33,17 +33,31 @@ function nameIssue(fund:string,provider:string,doc:FactSheetData|null):string|nu
   // Printed titles may be abbreviated or missing in OCR-only documents.
   return null;
 }
-function missingContent(doc:FactSheetData|null):string[]{
-  if(!doc)return ["description/objective","strategy","risk information","charges","factsheet date"];
-  const missing:string[]=[];
+/** Source completeness does not imply every provider publishes every field. */
+function contentHealth(doc:FactSheetData|null,provider:string){
+  const missing:string[]=[],notStated:string[]=[];
+  if(!doc){
+    missing.push("description/objective","risk information","factsheet date");
+    if(provider!=="Zurich")missing.push("strategy / investment style");
+    if(provider==="Aviva"||provider==="Standard Life")missing.push("charges");
+    else notStated.push("charges not stated in source PDF");
+    return {missing,notStated};
+  }
   if(!doc.description&&!doc.objective)missing.push("description/objective");
-  if(!doc.strategy&&!doc.managementStyle)missing.push("strategy");
+  if(!doc.strategy&&!doc.managementStyle){
+    if(provider==="Zurich"&&doc.objective)
+      notStated.push("strategy included in fund description");
+    else if(provider!=="Zurich")missing.push("strategy / investment style");
+  }
   if(doc.riskRating==null&&!doc.riskProfile&&!doc.riskFactors?.length&&!doc.riskDisclosure)
     missing.push("risk information");
-  if(doc.amcPct==null&&doc.civPct==null&&doc.expenseRatioPct==null&&!doc.chargesDisclosure)
-    missing.push("charges");
+  if(doc.amcPct==null&&doc.civPct==null&&doc.expenseRatioPct==null&&!doc.chargesDisclosure){
+    if(provider==="Zurich"||provider==="New Ireland")
+      notStated.push("charges not stated in source PDF");
+    else missing.push("charges");
+  }
   if(!doc.asOf)missing.push("factsheet date");
-  return missing;
+  return {missing,notStated};
 }
 async function pdfs():Promise<PdfRow[]>{
   const sql=getNeonSql();
@@ -81,12 +95,13 @@ export async function GET(){
         nameIssue(fund.name,fund.provider,doc);
       const stale=!file||(file?.attempted_version??0)<CONTENT_METADATA_VERSION ||
         (doc?.metadataVersion??0)<CONTENT_METADATA_VERSION;
+      const fields=contentHealth(doc,fund.provider);
       return {fund:fund.name,provider:fund.provider,filename:file?.filename??null,
         status:!file?"missing_pdf":stale?
           ((file?.attempted_version??0)>=CONTENT_METADATA_VERSION?"needs_review":"pending"):
           file.status==="parsed"&&!issue&&(doc?.description||doc?.objective)?
             "extracted":"needs_review",
-        missing:missingContent(doc),identityIssue:issue,
+        missing:fields.missing,notStated:fields.notStated,identityIssue:issue,
         warnings:[...(doc?.extractionWarnings??[]),
           ...(file?.error_message?[file.error_message]:[])]};
     });
@@ -108,9 +123,10 @@ export async function GET(){
       review:records.filter(r=>r.status==="needs_review").length,
       identityConflicts:records.filter(r=>Boolean(r.identityIssue)).length,
       incompleteFields:records.filter(r=>r.missing.length>0).length,
+      notStatedFields:records.reduce((count,r)=>count+r.notStated.length,0),
       byProvider,issues,complete:pendingFiles===0&&files.length===funds.length,
       contentVersion:CONTENT_METADATA_VERSION,
-      note:"Missing means not reliably extractable from the stored PDF. Workbook returns are unaffected."
+      note:"Missing means source content could not be reliably extracted. Not stated means the separate field was not found in the uploaded PDF; charges are never inferred. Workbook returns are unaffected."
     },{headers});
   }catch{
     console.error("Fund enrichment audit failed.");
