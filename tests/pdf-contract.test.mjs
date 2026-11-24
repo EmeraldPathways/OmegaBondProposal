@@ -114,17 +114,25 @@ test("cover contains compact horizontal investment details and allocation doughn
   assert.match(pdf,/CumulativeReturnLineChart/);
 });
 
-test("New Ireland, Zurich and Standard Life factsheets are refreshed once per parser version without reuploading",()=>{
+test("fund enrichment persists source data and proposal reads saved records without reparsing PDFs",()=>{
   const route=read("src/app/api/proposal/pdf/route.ts");
-  assert.match(route,/metadataVersion\?\?0/);
-  for(const provider of ["New Ireland","Zurich","Standard Life"])
-    assert.ok(route.includes('fund?.provider==="'+provider+'"'));
-  assert.match(route,/extractFundFactsheet/);
-  assert.match(route,/UPDATE fund_source_factsheets/);
+  assert.match(route,/fund_source_factsheets/);
+  assert.match(route,/source_data/);
+  assert.match(route,/description:short\(pdf\?\.description/);
+  assert.match(route,/riskDisclosure:short\(pdf\?\.riskDisclosure/);
+  assert.match(route,/chargesDisclosure:short\(pdf\?\.chargesDisclosure/);
+  assert.doesNotMatch(route,/extractFundFactsheet|get\(String\(doc\.source_path\)/);
   assert.doesNotMatch(route,/DELETE FROM fund_source_performance/);
+  const enrichment=read("src/app/api/fund-enrichment/route.ts");
+  assert.match(enrichment,/content_attempted_version/);
+  assert.match(enrichment,/INSERT INTO fund_source_factsheets/);
+  assert.match(enrichment,/UPDATE fund_reconciliations/);
+  assert.match(enrichment,/extractFundFactsheet/);
   const pdf=read("src/lib/pdf/workbook-proposal.tsx");
   assert.match(pdf,/Volatility rating/);
   assert.match(pdf,/Total expense ratio/);
   assert.match(pdf,/Risk profile/);
-  assert.doesNotMatch(pdf,/MoneyMate ID: \{f\.factsheet\.moneyMateId\?\?"Not stated"/);
+  assert.match(pdf,/riskDisclosure/);
+  assert.match(pdf,/chargesDisclosure/);
+  assert.doesNotMatch(pdf,/MoneyMate ID: \\{f\\.factsheet\\.moneyMateId\\?\\?"Not stated"/);
 });
