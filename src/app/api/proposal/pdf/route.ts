@@ -1,17 +1,19 @@
 import {renderToBuffer} from "@react-pdf/renderer";
+import {get} from "@vercel/blob";
 import {z} from "zod";
 import {auth,ADMIN_EMAIL,isLoginConfigured} from "@/auth";
 import {getNeonSql} from "@/lib/server/neon";
 import {getActiveFunds} from "@/lib/server/active-funds";
 import {matchWorkbookReturn,workbookNameKey,pdfFilenameFundKey} from "@/lib/reconciliation/workbook-source";
 import type {WorkbookEntry,ReportedReturns,FactSheetData} from "@/lib/reconciliation/engine";
+import {extractFundFactsheet} from "@/lib/reconciliation/factsheet";
 import WorkbookProposalPDF, {
   type WorkbookProposalData,type WorkbookProposalFund,type WorkbookReturnPeriods
 } from "@/lib/pdf/workbook-proposal";
 
 export const runtime="nodejs";
 export const dynamic="force-dynamic";
-export const maxDuration=30;
+export const maxDuration=60;
 
 const noCache={"Cache-Control":"private, no-store","X-Content-Type-Options":"nosniff"};
 const portfolio=z.object({
@@ -94,7 +96,8 @@ export async function POST(request:Request){
         "FROM fund_source_performance WHERE import_id=$1::uuid",[sourceId]),
       sql.query("SELECT DISTINCT workbook_import_id::text AS id FROM fund_active_names"),
       sql.query("SELECT r.fund_id,r.factsheet_import_id::text,r.status,r.evidence,"+
-        "i.filename AS source_filename,s.data AS source_data "+
+        "i.filename AS source_filename,i.storage_key AS source_path,"+
+        "s.data AS source_data "+
         "FROM fund_reconciliations r "+
         "LEFT JOIN imports i ON i.id=r.factsheet_import_id "+
         "LEFT JOIN fund_source_factsheets s ON s.import_id=r.factsheet_import_id")
@@ -105,6 +108,56 @@ export async function POST(request:Request){
       provider:String(row.provider),rowNumber:Number(row.row_number),
       sourceName:String(row.source_name),returns:row.reported_returns as ReportedReturns
     }));
+    // Older New Ireland PDFs were previously classified as "unknown" because
+    // the provider appears on page 2, not the first 2500 characters. Reparse
+    // only selected, still-linked sources with missing metadata, and cache the
+    // corrected extraction for subsequent client proposals. Performance rows
+    // and all workbook values remain untouched.
+    const newIrelandMissing=linkedDocs.filter(doc=>{
+      const fund=idMap.get(String(doc.fund_id));
+      const pdf=doc.source_data as FactSheetData|null;
+      return requestedIds.has(String(doc.fund_id)) &&
+        fund?.provider==="New Ireland" &&
+        doc.factsheet_import_id && doc.source_path && doc.source_filename &&
+        pdfFilenameFundKey(String(doc.source_filename))===workbookNameKey(fund.name) &&
+        (!pdf?.objective || !pdf?.riskProfile);
+    });
+    for(let i=0;i<newIrelandMissing.length;i+=3){
+      await Promise.all(newIrelandMissing.slice(i,i+3).map(async doc=>{
+        try{
+          const blob=await get(String(doc.source_path),{access:"private"});
+          if(!blob||blob.statusCode!==200)throw new Error("PDF not in private storage");
+          const bytes=new Uint8Array(await new Response(blob.stream).arrayBuffer());
+          if(bytes.byteLength>3_500_000 || bytes.byteLength<100 ||
+             Buffer.from(bytes.subarray(0,5)).toString("ascii")!=="%PDF-")
+            throw new Error("Invalid source PDF");
+          const extracted=await extractFundFactsheet({
+            importId:String(doc.factsheet_import_id),
+            filename:String(doc.source_filename),data:bytes
+          });
+          if(extracted.providerHint!=="New Ireland" || !extracted.objective)
+            throw new Error("New Ireland fund description not found");
+          await Promise.all([
+            sql.query(
+              "UPDATE fund_source_factsheets SET data=$2::jsonb,"+
+              "status='parsed',error_message=NULL,processed_at=now() "+
+              "WHERE import_id=$1::uuid",
+              [doc.factsheet_import_id,JSON.stringify(extracted)]
+            ),
+            sql.query(
+              "UPDATE fund_reconciliations SET extracted_factsheet=$3::jsonb "+
+              "WHERE fund_id=$1 AND factsheet_import_id=$2::uuid",
+              [doc.fund_id,doc.factsheet_import_id,JSON.stringify(extracted)]
+            )
+          ]);
+          doc.source_data=extracted;
+        }catch{
+          // A malformed source cannot be filled with guessed information.
+          // Keep the existing parsed data and preserve proposal export.
+          console.warn("New Ireland factsheet metadata enrichment unavailable.");
+        }
+      }));
+    }
     const pdfMap=new Map(linkedDocs.map(row=>[String(row.fund_id),row]));
     const portfolioReports=data.portfolios.map(p=>{
       const funds:WorkbookProposalFund[]=Object.entries(p.weights)
@@ -130,6 +183,11 @@ export async function POST(request:Request){
               filename:pdfFilename,title:short(pdf?.title,160),date:short(pdf?.asOf,50),
               objective:short(pdf?.objective,1200),strategy:short(pdf?.strategy,1200),
               moneyMateId:short(pdf?.moneyMateId,40),baseCurrency:short(pdf?.baseCurrency,8),
+              riskProfile:short(pdf?.riskProfile,80),
+              managedBy:short(pdf?.managedBy,240),
+              managementStyle:short(pdf?.managementStyle,240),
+              assetMix:short(pdf?.assetMix,300),
+              taxStatus:short(pdf?.taxStatus,40),
               riskRating:typeof pdf?.riskRating==="number"&&Number.isInteger(pdf.riskRating)&&
                 pdf.riskRating>=1&&pdf.riskRating<=7?pdf.riskRating:null,
               amcPct:numeric(pdf?.amcPct),civPct:numeric(pdf?.civPct),
