@@ -127,7 +127,7 @@ Standard Charges
 Charges may apply and may reduce the return on your investment.
 ADDITIONAL INFORMATION`
   ]});
-  assert.equal(f.metadataVersion,5);
+  assert.equal(f.metadataVersion,6);
   assert.equal(f.providerHint,"New Ireland");
   assert.equal(f.riskProfile,"Medium Risk");
   assert.equal(f.sfdrClass,"Article 8");
