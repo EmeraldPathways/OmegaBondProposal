@@ -1,6 +1,6 @@
 "use client";
 
-import {useCallback,useEffect,useState} from "react";
+import {useCallback,useEffect,useRef,useState} from "react";
 import {FileText,RefreshCw,ShieldAlert,CheckCircle2} from "lucide-react";
 
 type Report={
@@ -18,6 +18,7 @@ export default function FundEnrichmentAudit(){
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState("");
   const [message,setMessage]=useState("");
+  const working=useRef(false),stopped=useRef(false),started=useRef(false);
   const refresh=useCallback(async()=>{
     const response=await fetch("/api/fund-enrichment",{credentials:"same-origin",cache:"no-store"});
     const payload=await response.json() as Report&{error?:string};
@@ -25,15 +26,27 @@ export default function FundEnrichmentAudit(){
     setReport(payload);
     return payload;
   },[]);
-  useEffect(()=>{void refresh().catch(error=>
-    setError(error instanceof Error?error.message:"Extraction audit unavailable."))},[refresh]);
+  useEffect(()=>{
+    stopped.current=false;
+    void refresh().then(status=>{
+      if(status.pending>0&&!started.current){
+        started.current=true;
+        void run();
+      }
+    }).catch(error=>
+      setError(error instanceof Error?error.message:"Extraction audit unavailable."));
+    return ()=>{stopped.current=true};
+  // This is a one-time mount/start check; run() is stable in this closure.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[refresh]);
   async function run(){
-    if(busy)return;
+    if(working.current)return;
+    working.current=true;stopped.current=false;
     setBusy(true);setError("");setMessage("");
     let checked=0,completed=false;
     try{
       // Each call processes two PDFs, resuming from the saved parser-version cursor.
-      for(let batch=0;batch<160;batch++){
+      for(let batch=0;batch<160&&!stopped.current;batch++){
         const response=await fetch("/api/fund-enrichment",{
           method:"POST",credentials:"same-origin",cache:"no-store",
           headers:{"Content-Type":"application/json"},body:"{}"
@@ -53,7 +66,7 @@ export default function FundEnrichmentAudit(){
     }catch(e){
       setError(e instanceof Error?e.message:"PDF processing was interrupted.");
       await refresh().catch(()=>{});
-    }finally{setBusy(false);}
+    }finally{working.current=false;setBusy(false);}
   }
   return <section className="panel padded" style={{marginTop:20,marginBottom:20}}>
     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:16,flexWrap:"wrap"}}>

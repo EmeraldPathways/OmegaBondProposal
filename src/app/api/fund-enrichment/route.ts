@@ -6,7 +6,7 @@ import {getActiveFunds} from "@/lib/server/active-funds";
 import {extractFundFactsheet} from "@/lib/reconciliation/factsheet";
 import {CONTENT_METADATA_VERSION} from "@/lib/reconciliation/factsheet-content";
 import {pdfFilenameFundKey,workbookNameKey} from "@/lib/reconciliation/workbook-source";
-import {normalName,similarity,type FactSheetData} from "@/lib/reconciliation/engine";
+import type {FactSheetData} from "@/lib/reconciliation/engine";
 
 export const runtime="nodejs";
 export const dynamic="force-dynamic";
@@ -29,11 +29,8 @@ function nameIssue(fund:string,provider:string,doc:FactSheetData|null):string|nu
   if(!doc)return null;
   if(doc.providerHint&&doc.providerHint!==provider)
     return "PDF issuer is "+doc.providerHint+"; the workbook fund is "+provider+".";
-  if(!doc.title)return "No printed fund title could be verified.";
-  if(normalName(fund)===normalName(doc.title))return null;
-  // Low similarity is a review flag, not a forced filename-based replacement.
-  if(similarity(fund,doc.title)<0.42)
-    return "Printed PDF title is \""+doc.title+"\"; it does not reliably match \""+fund+"\".";
+  // The user-approved exact PDF filename establishes the fund identity.
+  // Printed titles may be abbreviated or missing in OCR-only documents.
   return null;
 }
 function missingContent(doc:FactSheetData|null):string[]{
@@ -87,7 +84,8 @@ export async function GET(){
       return {fund:fund.name,provider:fund.provider,filename:file?.filename??null,
         status:!file?"missing_pdf":stale?
           ((file?.attempted_version??0)>=CONTENT_METADATA_VERSION?"needs_review":"pending"):
-          file.status==="parsed"&&!issue?"extracted":"needs_review",
+          file.status==="parsed"&&!issue&&(doc?.description||doc?.objective)?
+            "extracted":"needs_review",
         missing:missingContent(doc),identityIssue:issue,
         warnings:[...(doc?.extractionWarnings??[]),
           ...(file?.error_message?[file.error_message]:[])]};
@@ -150,8 +148,8 @@ export async function POST(request:Request){
           throw new Error("Invalid or oversized PDF.");
         data=await extractFundFactsheet({importId:id,filename,data:bytes,ocrFallback:true});
         error=fund?nameIssue(fund.name,fund.provider,data):"No unique fund was found for this filename.";
-        if(!data.title || data.extractionWarnings.some(w=>w.includes("insufficient extractable text")))
-          error=error??"Printed fund identity or content was not reliably extractable.";
+        if(!data.description&&!data.objective)
+          error=error??"Fund description was not recovered from this PDF.";
       }catch(e){
         error=e instanceof Error?e.message.slice(0,220):"Extraction failed.";
       }
@@ -169,7 +167,7 @@ export async function POST(request:Request){
         [id,status,data?JSON.stringify(data):null,error,CONTENT_METADATA_VERSION]
       );
       // Update only matching linked fund content; never modify workbook return rows.
-      if(data&&status==="parsed"&&fund)
+      if(data&&fund&&data.providerHint===fund.provider)
         await sql.query(
           "UPDATE fund_reconciliations SET extracted_factsheet=$1::jsonb,updated_at=now() "+
           "WHERE fund_id=$2 AND factsheet_import_id=$3::uuid",
