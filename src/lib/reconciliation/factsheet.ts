@@ -1,6 +1,7 @@
 import { extractText, getDocumentProxy } from "unpdf";
 import type { FactSheetData } from "./engine";
 import { parsePdfPerformance } from "./pdf-performance";
+import {extractFundContent,CONTENT_METADATA_VERSION} from "./factsheet-content";
 
 const DATE = /(?:\b\d{1,2}\s+(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+20\d{2}\b)/i;
 function first(pattern:RegExp,text:string):string|null {
@@ -144,8 +145,10 @@ export function parseFactsheetText(params:{
   // The archive filename is never used to determine or validate the fund's
   // official name. Provider-specific titles come from PDF page content only.
   const firstPage=pages[0]??"";
+  const content=extractFundContent(pages,provider);
   return {
-    importId,filename,providerHint:provider,title,metadataVersion:4,
+    importId,filename,providerHint:provider,title,metadataVersion:CONTENT_METADATA_VERSION,
+    ...content,
     moneyMateId:first(/MoneyMate\s*ID\s*[:\s]*(\d{5,12})/i,text),
     asOf:provider==="New Ireland"
       ?first(/\bPerformance\s+as\s+at\s+(\d{1,2}\s+[A-Za-z]+\s+20\d{2})\b/i,text)
@@ -223,7 +226,7 @@ export async function extractFundFactsheet(params:{
         const {readScannedFactsheetPage}=await import("./factsheet-ocr");
         const recovered=await readScannedFactsheetPage(params.data);
         if(recovered&&recovered.replace(/\s/g,"").length>=180)
-          pages=[recovered,...pages];
+          pages=[recovered,...pages.slice(1)];
       }catch{
         // OCR is optional; never fill unreadable details from guessed values.
       }
