@@ -225,9 +225,14 @@ export async function extractFundFactsheet(params:{
     const extracted=await extractText(doc);
     let pages=Array.isArray(extracted.text)?extracted.text:[extracted.text];
     let usedOcr=false;
+    let ocrFailure:string|null=null;
     // Some New Ireland factsheets have a rasterized first page but readable
     // text on subsequent pages. Judge the first page itself for OCR fallback.
-    if(params.ocrFallback && (pages[0]??"").replace(/\s/g,"").length<220){
+    if(params.ocrFallback && (
+      (pages[0]??"").replace(/\s/g,"").length<220 ||
+      (/^new[\s_-]+ireland/i.test(params.filename) &&
+        !/Fund\s+Descrip(?:tion|t[i1]on|ton)\s*:/i.test(pages[0]??""))
+    )){
       try{
         const {readScannedFactsheetPage}=await import("./factsheet-ocr");
         const recovered=await readScannedFactsheetPage(params.data);
@@ -235,12 +240,15 @@ export async function extractFundFactsheet(params:{
           pages=[recovered,...pages.slice(1)];
           usedOcr=true;
         }
-      }catch{
-        // OCR is optional; never fill unreadable details from guessed values.
+      }catch(error){
+        // Preserve a short diagnostic in the source record rather than silently
+        // reporting this scanned PDF as an unrecognised fund.
+        ocrFailure=error instanceof Error?error.message.slice(0,170):"OCR worker failed";
       }
     }
     const parsed=parseFactsheetText({importId:params.importId,filename:params.filename,pages});
     parsed.extractionMethod=usedOcr?"ocr_first_page":"pdf_text";
+    if(ocrFailure)parsed.extractionWarnings.push("OCR failed: "+ocrFailure);
     return parsed;
   }finally{
     const disposable=doc as unknown as { destroy?:()=>Promise<void> };
