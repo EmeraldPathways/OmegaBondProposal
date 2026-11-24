@@ -82,11 +82,11 @@ export async function GET(){
       const issue=matched.length===0?"No PDF filename matches this fund":
         matched.length>1?"More than one PDF matches this fund":
         nameIssue(fund.name,fund.provider,doc);
-      const stale=!file||file.attempted_version<CONTENT_METADATA_VERSION ||
+      const stale=!file||(file?.attempted_version??0)<CONTENT_METADATA_VERSION ||
         (doc?.metadataVersion??0)<CONTENT_METADATA_VERSION;
       return {fund:fund.name,provider:fund.provider,filename:file?.filename??null,
         status:!file?"missing_pdf":stale?
-          (file.attempted_version>=CONTENT_METADATA_VERSION?"needs_review":"pending"):
+          ((file?.attempted_version??0)>=CONTENT_METADATA_VERSION?"needs_review":"pending"):
           file.status==="parsed"&&!issue?"extracted":"needs_review",
         missing:missingContent(doc),identityIssue:issue,
         warnings:[...(doc?.extractionWarnings??[]),
