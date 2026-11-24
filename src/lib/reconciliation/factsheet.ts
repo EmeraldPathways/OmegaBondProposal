@@ -192,7 +192,9 @@ export function parseFactsheetText(params:{
       provider==="New Ireland"
       ?first(/\bSFDR\s*\*?\s*Classification\s*:\s*(Article\s+[689])\b/i,text):null,
     objective:provider==="New Ireland"
-      ?section(text,/\bFund\s+Description\s*:\s*/i,/\b(?:Managed\s+By|Style|Asset\s+Mix)\s*:/i,1600)
+      ?(content.description??section(text,
+        /\bFund\s+Description\s*:\s*/i,
+        /\b(?:Managed\s+By|Style|Asset\s+Mix)\s*:/i,1600))
       :provider==="Zurich"
       ?section(text,/\bFund Description\b/i,
           /\bYearly Investment Performance\b|\bFund Performance\b|\bSector Average\b|\bPerformance Table\b/i,1300)
@@ -210,6 +212,7 @@ export function parseFactsheetText(params:{
     pageCount:pages.length,
     extractionWarnings:warnings,
     titleEvidence:title?"PDF page 1: "+title:null,
+    sourceText:text.slice(0,55000),extractionMethod:"pdf_text",
   };
 }
 export async function extractFundFactsheet(params:{
@@ -221,19 +224,24 @@ export async function extractFundFactsheet(params:{
     if(doc.numPages>12)throw new Error("Factsheet has more than 12 pages and requires manual review.");
     const extracted=await extractText(doc);
     let pages=Array.isArray(extracted.text)?extracted.text:[extracted.text];
+    let usedOcr=false;
     // Some New Ireland factsheets have a rasterized first page but readable
     // text on subsequent pages. Judge the first page itself for OCR fallback.
     if(params.ocrFallback && (pages[0]??"").replace(/\s/g,"").length<220){
       try{
         const {readScannedFactsheetPage}=await import("./factsheet-ocr");
         const recovered=await readScannedFactsheetPage(params.data);
-        if(recovered&&recovered.replace(/\s/g,"").length>=180)
+        if(recovered&&recovered.replace(/\s/g,"").length>=180){
           pages=[recovered,...pages.slice(1)];
+          usedOcr=true;
+        }
       }catch{
         // OCR is optional; never fill unreadable details from guessed values.
       }
     }
-    return parseFactsheetText({importId:params.importId,filename:params.filename,pages});
+    const parsed=parseFactsheetText({importId:params.importId,filename:params.filename,pages});
+    parsed.extractionMethod=usedOcr?"ocr_first_page":"pdf_text";
+    return parsed;
   }finally{
     const disposable=doc as unknown as { destroy?:()=>Promise<void> };
     if(typeof disposable.destroy==="function")await disposable.destroy();

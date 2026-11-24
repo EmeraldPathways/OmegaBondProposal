@@ -1,5 +1,5 @@
 /** Extract labelled, source-supported narrative fields without inferring missing values. */
-export const CONTENT_METADATA_VERSION=5;
+export const CONTENT_METADATA_VERSION=6;
 
 export type FundContent={
   description:string|null;
@@ -33,6 +33,14 @@ export function extractFundContent(pages:string[],provider:string|null):FundCont
   const description=labelled(pages,/\bFund Description\s*:\s*|\bFund Description\s*\n/i,
     /\b(?:Managed By\s*:|Style\s*:|Asset Mix\s*:|Yearly Investment Performance|Fund Performance|Sector Average)\b/i,1500);
   result.description=add("description",description);
+  if(provider==="New Ireland"&&result.description){
+    // Side-by-side PDF columns can leave the risk-profile label immediately
+    // after the Fund Description heading. Retain the real fund narrative.
+    result.description=result.description
+      .replace(/^Risk\s+Profile\s*:\s*/i,"")
+      .replace(/\s+(?:Medium\s+to\s+High|Low\s+to\s+Medium|Very\s+High|High|Medium|Low)\s+Risk\s*$/i,"")
+      .trim()||null;
+  }
 
   // Aviva's one-to-seven colour bar often has no text-based selected value.
   // Record only printed risk wording and factors, never guess the highlighted score.

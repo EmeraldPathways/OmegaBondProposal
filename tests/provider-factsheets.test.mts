@@ -20,7 +20,7 @@ Medium to High Risk
 Performance as at 09 November 2026
 `,"New Ireland Assurance Company plc is regulated by the Central Bank of Ireland.");
   assert.equal(f.providerHint,"New Ireland");
-  assert.equal(f.metadataVersion,5);
+  assert.equal(f.metadataVersion,6);
   assert.match(f.description??"",/long-term capital growth/);
   assert.equal(f.sfdrClass,"Article 8");
   assert.match(f.objective??"",/long-term capital growth/);
@@ -127,7 +127,7 @@ Standard Charges
 Charges may apply and may reduce the return on your investment.
 ADDITIONAL INFORMATION`
   ]});
-  assert.equal(f.metadataVersion,5);
+  assert.equal(f.metadataVersion,6);
   assert.equal(f.providerHint,"New Ireland");
   assert.equal(f.riskProfile,"Medium Risk");
   assert.equal(f.sfdrClass,"Article 8");
@@ -136,4 +136,23 @@ ADDITIONAL INFORMATION`
   assert.ok(f.riskFactors?.includes("Liquidity Risk"));
   assert.match(f.chargesDisclosure??"",/Charges may apply/);
   assert.deepEqual(f.fieldPages?.chargesDisclosure,[2]);
+});
+
+test("image-only New Ireland PDF narrative with adjacent risk header remains a description",()=>{
+  const f=parse("New Ireland KBI Alternate Energy.pdf",`KBI Alternative Energy Fund (6)
+NEW IRELAND Performance Factsheet
+Fund Description: Risk Profile:
+Our fund invests in the KBI Global Energy Transition Fund. The fund provides access to
+international companies supplying low carbon solutions through an actively managed
+equity investment strategy. High Risk
+Managed By: Underlying fund is managed by KBI Global Investors
+Style: Actively managed
+Asset Mix: Equities
+Performance as at 18 November 2026`);
+  assert.equal(f.providerHint,"New Ireland");
+  assert.ok(f.description?.startsWith("Our fund invests in the KBI Global Energy Transition Fund"));
+  assert.ok(f.objective?.startsWith("Our fund invests in the KBI Global Energy Transition Fund"));
+  assert.equal(f.metadataVersion,6);
+  assert.match(f.sourceText??"",/KBI Global Energy Transition Fund/);
+  assert.equal(f.extractionMethod,"pdf_text");
 });
