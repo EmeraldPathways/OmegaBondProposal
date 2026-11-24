@@ -4,12 +4,12 @@ import {useCallback,useEffect,useRef,useState} from "react";
 import {FileText,RefreshCw,ShieldAlert,PauseCircle} from "lucide-react";
 
 type Report={
-  expected:number;uploaded:number;attempted:number;pending:number;
+  expected:number;uploaded:number;attempted:number;pending:number;notStatedFields:number;
   extracted:number;review:number;identityConflicts:number;incompleteFields:number;
   complete:boolean;
   byProvider:Record<string,{total:number;extracted:number;needsReview:number;pending:number}>;
   issues:{fund:string;provider:string;filename:string|null;status:string;
-    missing:string[];identityIssue:string|null;warnings:string[]}[];
+    missing:string[];notStated?:string[];identityIssue:string|null;warnings:string[]}[];
 };
 type Batch={processed:number;remaining:number;done:boolean;
   results:{filename:string;status:string;message:string|null}[];error?:string};
@@ -100,10 +100,10 @@ export default function FundEnrichmentAudit(){
             <PauseCircle size={15}/>Pause after current PDF
           </button>:null}
         <button className="btn primary" type="button"
-          disabled={busy||report?.uploaded===0}
+          disabled={busy||!report?.uploaded||report.pending===0}
           onClick={()=>void run()}>
           <FileText size={15}/>{busy?"Saving PDF data…":
-            report?.pending===0?"All PDFs checked":
+            report?.pending===0?"Extraction complete":
             isPaused?"Resume extraction":"Extract and save PDF details"}
         </button>
       </div>
@@ -128,14 +128,15 @@ export default function FundEnrichmentAudit(){
         <div className="stat"><span>Matched and extracted</span><strong>{report.extracted}</strong></div>
         <div className="stat"><span>Needs review</span><strong>{report.review}</strong></div>
         <div className="stat"><span>Incomplete fields</span><strong>{report.incompleteFields}</strong></div>
+        <div className="stat"><span>Not separately stated in source</span><strong>{report.notStatedFields??0}</strong></div>
         <div className="stat"><span>Identity warnings</span><strong>{report.identityConflicts}</strong></div>
       </div>
       <p className="fineprint">New Ireland: {report.byProvider["New Ireland"]?.extracted??0}/
-        {report.byProvider["New Ireland"]?.total??0} extracted. Blank fields remain unavailable rather than being filled with inferred values.
+        {report.byProvider["New Ireland"]?.total??0} extracted. Source fields not published in an individual PDF are counted separately from unreadable information; no amounts are inferred.
         {report.pending>0?" "+report.pending+" PDFs remain to be processed.":""}
       </p>
       {report.issues.length>0&&<details style={{marginTop:15}}>
-        <summary style={{cursor:"pointer",fontWeight:600}}>Review extraction issues ({report.issues.length})</summary>
+        <summary style={{cursor:"pointer",fontWeight:600}}>Review missing or unreadable source information ({report.issues.length})</summary>
         <div className="table-scroll" style={{marginTop:12}}>
           <table className="data-table">
             <thead><tr><th>FUND</th><th>STATUS</th><th>MISSING / WARNING</th></tr></thead>
@@ -147,6 +148,7 @@ export default function FundEnrichmentAudit(){
           </table>
         </div>
       </details>}
+      <p className="fineprint" style={{marginTop:12}}>Charges and strategy fields not separately published in a factsheet are not extraction failures. Their values remain blank in the database and PDF proposal; no estimates are inserted.</p>
       <p className="fineprint" style={{marginTop:12}}>The extraction audit is separate from workbook performance and proposal suitability approval. No workbook values are changed during PDF processing.</p>
     </>}
   </section>;
