@@ -188,7 +188,9 @@ export function parseFactsheetText(params:{
     equityRange:provider==="Zurich"
       ?first(/\bIndicative\s+equity\s+range\s*:\s*(\d{1,3}%\s*[-–]\s*\d{1,3}%)/i,text):null,
     sfdrClass:provider==="Zurich"
-      ?first(/\bSFDR\s+Class\s+(Article\s+[689])\b/i,text):null,
+      ?first(/\bSFDR\s+Class\s+(Article\s+[689])\b/i,text):
+      provider==="New Ireland"
+      ?first(/\bSFDR\s*\*?\s*Classification\s*:\s*(Article\s+[689])\b/i,text):null,
     objective:provider==="New Ireland"
       ?section(text,/\bFund\s+Description\s*:\s*/i,/\b(?:Managed\s+By|Style|Asset\s+Mix)\s*:/i,1600)
       :provider==="Zurich"
@@ -219,9 +221,9 @@ export async function extractFundFactsheet(params:{
     if(doc.numPages>12)throw new Error("Factsheet has more than 12 pages and requires manual review.");
     const extracted=await extractText(doc);
     let pages=Array.isArray(extracted.text)?extracted.text:[extracted.text];
-    // Some official New Ireland factsheets contain only rasterized text.
-    // Try the actual first-page pixels when the native PDF text is empty.
-    if(params.ocrFallback && pages.join("").replace(/\s/g,"").length<220){
+    // Some New Ireland factsheets have a rasterized first page but readable
+    // text on subsequent pages. Judge the first page itself for OCR fallback.
+    if(params.ocrFallback && (pages[0]??"").replace(/\s/g,"").length<220){
       try{
         const {readScannedFactsheetPage}=await import("./factsheet-ocr");
         const recovered=await readScannedFactsheetPage(params.data);
