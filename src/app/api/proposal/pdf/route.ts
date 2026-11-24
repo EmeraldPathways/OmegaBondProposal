@@ -1,17 +1,19 @@
 import {renderToBuffer} from "@react-pdf/renderer";
+import {get} from "@vercel/blob";
 import {z} from "zod";
 import {auth,ADMIN_EMAIL,isLoginConfigured} from "@/auth";
 import {getNeonSql} from "@/lib/server/neon";
 import {getActiveFunds} from "@/lib/server/active-funds";
 import {matchWorkbookReturn,workbookNameKey,pdfFilenameFundKey} from "@/lib/reconciliation/workbook-source";
 import type {WorkbookEntry,ReportedReturns,FactSheetData} from "@/lib/reconciliation/engine";
+import {extractFundFactsheet} from "@/lib/reconciliation/factsheet";
 import WorkbookProposalPDF, {
   type WorkbookProposalData,type WorkbookProposalFund,type WorkbookReturnPeriods
 } from "@/lib/pdf/workbook-proposal";
 
 export const runtime="nodejs";
 export const dynamic="force-dynamic";
-export const maxDuration=30;
+export const maxDuration=60;
 
 const noCache={"Cache-Control":"private, no-store","X-Content-Type-Options":"nosniff"};
 const portfolio=z.object({
@@ -94,7 +96,8 @@ export async function POST(request:Request){
         "FROM fund_source_performance WHERE import_id=$1::uuid",[sourceId]),
       sql.query("SELECT DISTINCT workbook_import_id::text AS id FROM fund_active_names"),
       sql.query("SELECT r.fund_id,r.factsheet_import_id::text,r.status,r.evidence,"+
-        "i.filename AS source_filename,s.data AS source_data "+
+        "i.filename AS source_filename,i.storage_key AS source_path,"+
+        "s.data AS source_data "+
         "FROM fund_reconciliations r "+
         "LEFT JOIN imports i ON i.id=r.factsheet_import_id "+
         "LEFT JOIN fund_source_factsheets s ON s.import_id=r.factsheet_import_id")
@@ -105,6 +108,54 @@ export async function POST(request:Request){
       provider:String(row.provider),rowNumber:Number(row.row_number),
       sourceName:String(row.source_name),returns:row.reported_returns as ReportedReturns
     }));
+    // Reparse only selected, already-linked provider PDFs once per parser
+    // revision. Do not reupload files or change workbook returns.
+    const sourceUpgrade=linkedDocs.filter(doc=>{
+      const fund=idMap.get(String(doc.fund_id));
+      const pdf=doc.source_data as FactSheetData|null;
+      return requestedIds.has(String(doc.fund_id)) &&
+        (fund?.provider==="New Ireland" || fund?.provider==="Zurich" ||
+          fund?.provider==="Standard Life") &&
+        doc.factsheet_import_id && doc.source_path && doc.source_filename &&
+        pdfFilenameFundKey(String(doc.source_filename))===workbookNameKey(fund.name) &&
+        (pdf?.metadataVersion??0)<4;
+    });
+    for(let i=0;i<sourceUpgrade.length;i+=4){
+      await Promise.all(sourceUpgrade.slice(i,i+4).map(async doc=>{
+        try{
+          const fund=idMap.get(String(doc.fund_id))!;
+          const blob=await get(String(doc.source_path),{access:"private"});
+          if(!blob||blob.statusCode!==200)throw new Error("Source PDF unavailable");
+          const bytes=new Uint8Array(await new Response(blob.stream).arrayBuffer());
+          if(bytes.byteLength>3_500_000 || bytes.byteLength<100 ||
+             Buffer.from(bytes.subarray(0,5)).toString("ascii")!=="%PDF-")
+            throw new Error("Invalid private PDF");
+          const extracted=await extractFundFactsheet({
+            importId:String(doc.factsheet_import_id),
+            filename:String(doc.source_filename),data:bytes,ocrFallback:true
+          });
+          if(extracted.providerHint!==fund.provider)
+            throw new Error("Issuer mismatch");
+          await Promise.all([
+            sql.query(
+              "UPDATE fund_source_factsheets SET data=$2::jsonb,"+
+              "status='parsed',error_message=NULL,processed_at=now() "+
+              "WHERE import_id=$1::uuid",
+              [doc.factsheet_import_id,JSON.stringify(extracted)]
+            ),
+            sql.query(
+              "UPDATE fund_reconciliations SET extracted_factsheet=$3::jsonb "+
+              "WHERE fund_id=$1 AND factsheet_import_id=$2::uuid",
+              [doc.fund_id,doc.factsheet_import_id,JSON.stringify(extracted)]
+            )
+          ]);
+          doc.source_data=extracted;
+        }catch{
+          // The proposal must not invent fields when a document is unreadable.
+          console.warn("Factsheet enrichment unavailable for a linked document.");
+        }
+      }));
+    }
     const pdfMap=new Map(linkedDocs.map(row=>[String(row.fund_id),row]));
     const portfolioReports=data.portfolios.map(p=>{
       const funds:WorkbookProposalFund[]=Object.entries(p.weights)
@@ -130,6 +181,14 @@ export async function POST(request:Request){
               filename:pdfFilename,title:short(pdf?.title,160),date:short(pdf?.asOf,50),
               objective:short(pdf?.objective,1200),strategy:short(pdf?.strategy,1200),
               moneyMateId:short(pdf?.moneyMateId,40),baseCurrency:short(pdf?.baseCurrency,8),
+              riskProfile:short(pdf?.riskProfile,80),
+              managedBy:short(pdf?.managedBy,240),
+              managementStyle:short(pdf?.managementStyle,240),
+              assetMix:short(pdf?.assetMix,300),
+              taxStatus:short(pdf?.taxStatus,40),
+              equityRange:short(pdf?.equityRange,80),
+              sfdrClass:short(pdf?.sfdrClass,40),
+              expenseRatioPct:numeric(pdf?.expenseRatioPct),
               riskRating:typeof pdf?.riskRating==="number"&&Number.isInteger(pdf.riskRating)&&
                 pdf.riskRating>=1&&pdf.riskRating<=7?pdf.riskRating:null,
               amcPct:numeric(pdf?.amcPct),civPct:numeric(pdf?.civPct),

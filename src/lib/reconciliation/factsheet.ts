@@ -39,7 +39,10 @@ function detectProvider(text:string,filename:string):string|null{
   // The upload filename is at most a provider-folder fallback; never use it
   // to establish the fund identity or selected share class.
   if(/\bzurich life\b|\bzurich\s+fund\s+factsheet\b/.test(intro))return "Zurich";
-  if(/\bnew ireland assurance\b|\bnew ireland\b/.test(intro))return "New Ireland";
+  if(/\bnew ireland assurance\b|\bnew ireland\b/.test(intro)||
+     /\bnew ireland assurance company\b/i.test(text) ||
+     /^new\s+ireland(?:[\s_-]|$)/i.test(filename))
+    return "New Ireland";
   if(/\bstandard life\b/.test(intro))return "Standard Life";
   if(/\baviva\b/.test(intro))return "Aviva";
   // Some Aviva white-label sheets show only the Aviva-style wrapper and
@@ -142,22 +145,57 @@ export function parseFactsheetText(params:{
   // official name. Provider-specific titles come from PDF page content only.
   const firstPage=pages[0]??"";
   return {
-    importId,filename,providerHint:provider,title,moneyMateId:first(/MoneyMate\s*ID\s*[:\s]*(\d{5,12})/i,text),
-    asOf:(firstPage.match(DATE)?.[0])??
-      (provider==="Standard Life"?first(/\b((?:January|February|March|April|May|June|July|August|September|October|November|December)\s+20\d{2})\b/i,firstPage):null),
+    importId,filename,providerHint:provider,title,metadataVersion:4,
+    moneyMateId:first(/MoneyMate\s*ID\s*[:\s]*(\d{5,12})/i,text),
+    asOf:provider==="New Ireland"
+      ?first(/\bPerformance\s+as\s+at\s+(\d{1,2}\s+[A-Za-z]+\s+20\d{2})\b/i,text)
+      :provider==="Zurich"
+      ?first(/\bCumulative\s+Performance\s*\(to\s*(\d{1,2}\/\d{1,2}\/20\d{2})\)/i,text)
+      :((firstPage.match(DATE)?.[0])??
+        (provider==="Standard Life"?first(/\b((?:January|February|March|April|May|June|July|August|September|October|November|December)\s+20\d{2})\b/i,firstPage):null)),
     launchDate:first(/Fund Launch Date\s*[:\s]*([A-Za-z]{3,9}\s+20\d{2})/i,text),
     baseCurrency:first(/Base Currency\s*[:\s]*([A-Z]{3})/i,text),
-    amcPct:number(/\bAMC\s*:?\s*(\d+(?:\.\d+)?)\s*%/i,text),
+    amcPct:number(/\bAMC\s*:?\s*(\d+(?:\.\d+)?)\s*%/i,text)??
+      (provider==="Standard Life"?number(/\bAnnual\s+Management\s+Charge\s+(\d+(?:\.\d+)?)\s*%/i,text):null),
+    expenseRatioPct:provider==="Standard Life"?
+      number(/\bTotal\s+Expense\s+Ratio\s+(\d+(?:\.\d+)?)\s*%/i,text):null,
     civPct:number(/\bCIV\s+Charge\s*:?\s*(\d+(?:\.\d+)?)\s*%/i,text),
     // The Aviva 1–7 graphic is a scale, not an identifiable selected rating;
     // do not derive risk just from the 1 2 3 4 5 6 7 labels.
-    riskRating:number(/\bThe Fund has a risk rating of\s+([1-7])\b/i,text)??number(/\b(?:SRI|SRRI|Risk rating|Risk indicator)\s*[:=]\s*([1-7])\s*(?:\/\s*7)?\b/i,text),
-    objective:provider==="New Ireland"
-      ?section(text,/\bFund Description:\s*/i,/\bManaged By:\b|\bStyle:\b|\bAsset Mix:\b/i,1600)
-      :provider==="Zurich"
-      ?section(text,/\bFund Description\b/i,/\bFund Performance\b|\bSector Average\b|\bPerformance Table\b/i,1300)
+    riskRating:number(/\bThe Fund has a risk rating of\s+([1-7])\b/i,text)??
+      (provider==="Standard Life"?number(/\bVolatility\s+Rating\s*\(\s*1\s*[-–]\s*7\s*\)\s*([1-7])\b/i,text):null)??
+      number(/\b(?:SRI|SRRI|Risk rating|Risk indicator)\s*[:=]\s*([1-7])\s*(?:\/\s*7)?\b/i,text),
+    // New Ireland publishes named categories (e.g. Low to Medium Risk),
+    // not an equivalent provider-confirmed 1–7 numeric score.
+    riskProfile:provider==="New Ireland"
+      ?first(/\bRisk\s+Profile\s*:\s*(Low\s+to\s+Medium\s+Risk|Medium\s+to\s+High\s+Risk|Low\s+Risk|Medium\s+Risk|High\s+Risk|Very\s+High\s+Risk|Very\s+Low\s+Risk)\b/i,text):null,
+    managedBy:provider==="New Ireland"
+      ?section(text,/\bManaged\s+By\s*:\s*/i,/\bStyle\s*:/i,230)
       :provider==="Standard Life"
-      ?section(text,/\b(?:September|October|November|December|August|July|June) 2026\b/i,/\bThe value of investments\b|\bFund performance\b/i,1300)
+      ?section(text,/\bFund\s+Manager\(s\)\s*/i,/\bSFDR\s+Product\s+Category\b/i,240)
+      :provider==="Zurich"
+      ?first(/\bThis\s+fund\s+is\s+managed\s+by\s+(Zurich Life)\b/i,text):null,
+    managementStyle:provider==="New Ireland"
+      ?section(text,/\bStyle\s*:\s*/i,/\bAsset\s+Mix\s*:/i,230)
+      :provider==="Standard Life"
+      ?first(/\bInvestment\s+Style\s+(Active|Passive|Blended)\b/i,text):null,
+    assetMix:provider==="New Ireland"
+      ?section(text,/\bAsset\s+Mix\s*:\s*/i,/\b(?:SFDR(?:\*\s*Classification)?|Tax|Risk\s+Profile)\s*:/i,300):null,
+    taxStatus:provider==="New Ireland"?first(/\bTax\s*:\s*(Gross|Net)\b/i,text):null,
+    equityRange:provider==="Zurich"
+      ?first(/\bIndicative\s+equity\s+range\s*:\s*(\d{1,3}%\s*[-–]\s*\d{1,3}%)/i,text):null,
+    sfdrClass:provider==="Zurich"
+      ?first(/\bSFDR\s+Class\s+(Article\s+[689])\b/i,text):null,
+    objective:provider==="New Ireland"
+      ?section(text,/\bFund\s+Description\s*:\s*/i,/\b(?:Managed\s+By|Style|Asset\s+Mix)\s*:/i,1600)
+      :provider==="Zurich"
+      ?section(text,/\bFund Description\b/i,
+          /\bYearly Investment Performance\b|\bFund Performance\b|\bSector Average\b|\bPerformance Table\b/i,1300)
+          ?.replace(/^Indicative equity range:\s*\d{1,3}%\s*[-–]\s*\d{1,3}%\s+of the value of the fund\s*/i,"")
+          .trim()||null
+      :provider==="Standard Life"
+      ?section(text,/\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+20\d{2}\b/i,
+          /\bThe value of investments\b|\bFund performance\b/i,1300)
       :section(text,/\bFund Objective\b/i,/\bFund Strategy\b|FUND PERFORMANCE|FUND MANAGER INFORMATION/i),
     strategy:section(text,/\bFund Strategy\b/i,/FUND PERFORMANCE|FUND MANAGER INFORMATION|Annualised Return/i,1800),
     holdings:candidates(text,/\bTop 10 Holdings\b/i,/\bRegional Allocation\b|ASSET MIX|SECTOR BREAKDOWN/i),
@@ -169,13 +207,27 @@ export function parseFactsheetText(params:{
     titleEvidence:title?"PDF page 1: "+title:null,
   };
 }
-export async function extractFundFactsheet(params:{importId:string;filename:string;data:Uint8Array}):Promise<FactSheetData>{
+export async function extractFundFactsheet(params:{
+  importId:string;filename:string;data:Uint8Array;ocrFallback?:boolean
+}):Promise<FactSheetData>{
   // Parsing is limited to 12 pages; reject encrypted/oversized documents in caller.
   const doc=await getDocumentProxy(params.data,{maxImageSize:16_777_216});
   try{
     if(doc.numPages>12)throw new Error("Factsheet has more than 12 pages and requires manual review.");
     const extracted=await extractText(doc);
-    const pages=Array.isArray(extracted.text)?extracted.text:[extracted.text];
+    let pages=Array.isArray(extracted.text)?extracted.text:[extracted.text];
+    // Some official New Ireland factsheets contain only rasterized text.
+    // Try the actual first-page pixels when the native PDF text is empty.
+    if(params.ocrFallback && pages.join("").replace(/\s/g,"").length<220){
+      try{
+        const {readScannedFactsheetPage}=await import("./factsheet-ocr");
+        const recovered=await readScannedFactsheetPage(params.data);
+        if(recovered&&recovered.replace(/\s/g,"").length>=180)
+          pages=[recovered,...pages];
+      }catch{
+        // OCR is optional; never fill unreadable details from guessed values.
+      }
+    }
     return parseFactsheetText({importId:params.importId,filename:params.filename,pages});
   }finally{
     const disposable=doc as unknown as { destroy?:()=>Promise<void> };

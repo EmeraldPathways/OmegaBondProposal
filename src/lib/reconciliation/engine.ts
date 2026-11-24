@@ -8,7 +8,11 @@ export type WorkbookEntry = { provider:string; sourceName:string; rowNumber:numb
 export type FactSheetData = {
   importId:string; filename:string; providerHint:string|null; title:string|null; moneyMateId:string|null;
   asOf:string|null; launchDate:string|null; baseCurrency:string|null; amcPct:number|null;
-  civPct:number|null; riskRating:number|null; objective:string|null; strategy:string|null;
+  civPct:number|null; riskRating:number|null; riskProfile?:string|null; managedBy?:string|null;
+  managementStyle?:string|null; assetMix?:string|null; taxStatus?:string|null;
+  expenseRatioPct?:number|null; equityRange?:string|null; sfdrClass?:string|null;
+  metadataVersion?:number;
+  objective:string|null; strategy:string|null;
   holdings:{name:string;percentage:number}[]; allocations:{name:string;percentage:number}[];
   chartReferences:{page:number;label:string;source:"original_pdf"}[];
   pageCount:number; extractionWarnings:string[]; titleEvidence:string|null;

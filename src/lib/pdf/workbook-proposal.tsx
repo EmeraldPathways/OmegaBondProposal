@@ -18,6 +18,10 @@ export type WorkbookProposalFund = {
     objective:string|null;strategy:string|null;moneyMateId:string|null;
     baseCurrency:string|null;riskRating:number|null;amcPct:number|null;
     civPct:number|null;chartPages:string[];
+    riskProfile?:string|null;managedBy?:string|null;
+    managementStyle?:string|null;assetMix?:string|null;taxStatus?:string|null;
+    equityRange?:string|null;sfdrClass?:string|null;
+    expenseRatioPct?:number|null;
   };
 };
 export type WorkbookProposalPortfolio = {
@@ -38,12 +42,13 @@ const style=StyleSheet.create({
   banner:{backgroundColor:color.wine,borderRadius:7,paddingHorizontal:15,
     height:50,flexDirection:"row",justifyContent:"space-between",alignItems:"center"},
   bannerLabel:{fontFamily:"Helvetica-Bold",fontSize:8,color:color.white,letterSpacing:.7},
-  eyebrow:{fontSize:8,color:color.gold,fontFamily:"Helvetica-Bold",letterSpacing:1.4,marginTop:22},
-  title:{fontFamily:"Times-Roman",fontSize:27,color:color.wine,marginTop:9,marginBottom:8},
+  eyebrow:{fontSize:8,color:color.gold,fontFamily:"Helvetica-Bold",letterSpacing:1.4,marginTop:12},
+  title:{fontFamily:"Times-Roman",fontSize:27,color:color.wine,marginTop:5,marginBottom:4},
   heading:{fontFamily:"Times-Roman",fontSize:18,color:color.wine,marginBottom:10},
   subtitle:{fontSize:9,color:color.muted,lineHeight:1.5},
   hero:{backgroundColor:color.pale,borderWidth:1,borderColor:color.border,borderRadius:7,
-    marginTop:23,padding:16},
+    marginTop:8,paddingHorizontal:12,paddingVertical:7,
+    flexDirection:"row",alignItems:"center",gap:13},
   fieldLabel:{fontSize:8,color:color.muted,marginBottom:5},
   fieldValue:{fontFamily:"Helvetica-Bold",fontSize:11,color:color.ink,lineHeight:1.35},
   facts:{flexDirection:"row",flexWrap:"wrap",marginTop:13,gap:13},
@@ -206,6 +211,79 @@ function CompactPortfolioAllocationAndBreakdown({
     </View>
   </View>;
 }
+/** The opening page includes an allocation chart for every selected
+ * portfolio. The full-size per-portfolio overview remains unchanged. */
+function CoverPortfolioAllocation({portfolio,multiple}:{
+  portfolio:WorkbookProposalPortfolio;multiple:boolean
+}){
+  const funds=portfolio.funds;
+  const shown=funds.slice(0,multiple?6:9);
+  const size=multiple?84:109;
+  const paths:{id:string;d:string;color:string}[]=[];
+  let cumulative=0;
+  funds.forEach((fund,i)=>{
+    const start=cumulative;
+    cumulative+=fund.weight;
+    const gap=Math.min(.5,360*fund.weight/100/10);
+    paths.push({id:fund.id,color:CHART_COLORS[i%CHART_COLORS.length],
+      d:ringWedge(82,82,72,48,
+        -90+start*3.6+gap,-90+cumulative*3.6-gap)});
+  });
+  const percentageAllocated=funds.reduce((total,f)=>total+f.weight,0);
+  return <View style={{
+    borderWidth:.7,borderColor:color.border,borderRadius:7,
+    paddingHorizontal:12,paddingVertical:multiple?8:11,
+    marginTop:multiple?8:12,backgroundColor:"#FDFDFC"
+  }} wrap={false}>
+    <Text style={{fontFamily:"Times-Roman",fontSize:multiple?13.3:16,
+      color:color.wine,marginBottom:multiple?3:8}}>
+      {multiple?"Portfolio allocation · "+portfolio.title:"Portfolio allocation"}
+    </Text>
+    <View style={{flexDirection:"row",alignItems:"center",gap:15}}>
+      <View style={{width:size,height:size,position:"relative"}}>
+        <Svg width={size} height={size} viewBox="0 0 164 164">
+          {funds.length===1?<Circle cx={82} cy={82} r={60}
+            stroke={CHART_COLORS[0]} strokeWidth={24} fill="none"/>:
+            paths.map(p=><Path key={p.id} d={p.d} fill={p.color}/>)}
+          <Circle cx={82} cy={82} r={43} fill="#FFFFFF"/>
+        </Svg>
+        <View style={{
+          position:"absolute",top:multiple?31:40,left:multiple?11:16,
+          width:multiple?62:77,alignItems:"center"
+        }}>
+          <Text style={{fontFamily:"Helvetica-Bold",
+            fontSize:multiple?13:17,color:color.wine}}>
+            {percentageAllocated.toFixed(0)}%
+          </Text>
+          <Text style={{fontSize:multiple?6:7,color:color.muted}}>allocated</Text>
+        </View>
+      </View>
+      <View style={{flex:1}}>
+        {shown.map(f=>{
+          const position=funds.findIndex(item=>item.id===f.id);
+          return <View key={f.id} style={{
+            flexDirection:"row",alignItems:"flex-start",gap:7,
+            marginBottom:multiple?3:5
+          }}>
+            <View style={{width:8,height:8,borderRadius:2,marginTop:2,
+              backgroundColor:CHART_COLORS[position%CHART_COLORS.length]}}/>
+            <Text style={{
+              flex:1,fontSize:multiple?7:8.2,
+              color:color.ink,lineHeight:1.3
+            }}>{f.name}</Text>
+            <Text style={{
+              fontFamily:"Helvetica-Bold",fontSize:multiple?7:8.1,
+              textAlign:"right",width:42
+            }}>{f.weight.toFixed(1)}%</Text>
+          </View>;
+        })}
+        {funds.length>shown.length?<Text style={{
+          fontSize:7.1,color:color.muted,marginTop:3
+        }}>+ {funds.length-shown.length} further funds in the portfolio overview</Text>:null}
+      </View>
+    </View>
+  </View>;
+}
 function CumulativeReturnLineChart({funds,dense}:{
   funds:WorkbookProposalFund[];dense:boolean
 }){
@@ -333,27 +411,40 @@ export default function WorkbookProposalPDF({data}:{data:WorkbookProposalData}){
       <Text style={style.eyebrow}>INVESTMENT BOND & PORTFOLIO ALLOCATION</Text>
       <Text style={style.title}>Investment bond proposal</Text>
       <Text style={style.subtitle}>Prepared {data.preparedDate}</Text>
-      <View style={style.hero}>
-        <Text style={style.fieldLabel}>Initial investment</Text>
-        <Text style={style.investment}>{euro(data.investment)}</Text>
-        <View style={style.facts}>
-          <View style={style.fact}><Text style={style.fieldLabel}>Prepared for</Text><Text style={style.fieldValue}>{data.client||"Client name not provided"}</Text></View>
-          <View style={style.fact}><Text style={style.fieldLabel}>Prepared by</Text><Text style={style.fieldValue}>{data.adviser}</Text></View>
-          <View style={style.fact}><Text style={style.fieldLabel}>Portfolio options</Text><Text style={style.fieldValue}>{String(data.portfolios.length)}</Text></View>
-          <View style={style.fact}><Text style={style.fieldLabel}>Selected funds</Text><Text style={style.fieldValue}>{String(data.portfolios.reduce((n,p)=>n+p.funds.length,0))}</Text></View>
+      <View style={style.hero} wrap={false}>
+        <View style={{width:"31%"}}>
+          <Text style={[style.fieldLabel,{fontSize:7.3,marginBottom:3}]}>Initial investment</Text>
+          <Text style={[style.investment,{fontSize:20,marginBottom:0}]}>{euro(data.investment)}</Text>
+        </View>
+        <View style={{width:"66%",gap:7}}>
+          <View style={{flexDirection:"row",gap:9}}>
+            <View style={{width:"49%"}}>
+              <Text style={[style.fieldLabel,{fontSize:7,marginBottom:2}]}>Prepared for</Text>
+              <Text style={[style.fieldValue,{fontSize:9.1}]}>{data.client||"Client name not provided"}</Text>
+            </View>
+            <View style={{width:"49%"}}>
+              <Text style={[style.fieldLabel,{fontSize:7,marginBottom:2}]}>Prepared by</Text>
+              <Text style={[style.fieldValue,{fontSize:9.1}]}>{data.adviser}</Text>
+            </View>
+          </View>
+          <View style={{flexDirection:"row",gap:9}}>
+            <View style={{width:"49%"}}>
+              <Text style={[style.fieldLabel,{fontSize:7,marginBottom:2}]}>Portfolio options</Text>
+              <Text style={[style.fieldValue,{fontSize:9.1}]}>{String(data.portfolios.length)}</Text>
+            </View>
+            <View style={{width:"49%"}}>
+              <Text style={[style.fieldLabel,{fontSize:7,marginBottom:2}]}>Selected funds</Text>
+              <Text style={[style.fieldValue,{fontSize:9.1}]}>{String(data.portfolios.reduce((n,p)=>n+p.funds.length,0))}</Text>
+            </View>
+          </View>
         </View>
       </View>
       <View style={style.box}>
         <Text style={style.section}>Investment objective</Text>
         <Text style={style.p}>{data.objective}</Text>
       </View>
-      <View style={style.box}>
-        <Text style={style.section}>Included portfolios</Text>
-        {data.portfolios.map((p,i)=><View key={p.id} style={{marginBottom:8}}>
-          <Text style={style.p}>Portfolio {String.fromCharCode(65+i)} — {p.title} · {p.funds.length} funds · 100% allocated</Text>
-          <Text style={style.note}>{p.description}</Text>
-        </View>)}
-      </View>
+      {data.portfolios.map(p=><CoverPortfolioAllocation
+        key={p.id} portfolio={p} multiple={data.portfolios.length>1}/>)}
 
       <Footer/>
     </Page>
@@ -364,10 +455,7 @@ export default function WorkbookProposalPDF({data}:{data:WorkbookProposalData}){
         return <Page key={p.id+"-overview-"+groupIndex}
           size="A4" style={style.page} wrap={false}>
           <Banner label={portfolioLabel+" · INVESTMENT OVERVIEW"}/>
-          <Text style={[style.eyebrow,{marginTop:14}]}>
-            INVESTMENT BOND PROPOSAL
-          </Text>
-          <Text style={[style.heading,{marginTop:6,marginBottom:4}]}>
+          <Text style={[style.heading,{marginTop:11,marginBottom:4}]}>
             {p.title}
           </Text>
           <Text style={style.subtitle}>
@@ -393,10 +481,54 @@ export default function WorkbookProposalPDF({data}:{data:WorkbookProposalData}){
         <Text style={style.sourceTitle}>{f.name}</Text>
         <Text style={style.meta}>{f.provider}{f.factsheet.date?" · As at "+f.factsheet.date:""}</Text>
         
-        <Text style={style.meta}>MoneyMate ID: {f.factsheet.moneyMateId??"Not stated"} · Currency: {f.factsheet.baseCurrency??"Not stated"} · Numeric risk rating: {f.factsheet.riskRating==null?"Not stated":f.factsheet.riskRating+"/7"}</Text>
-        <Text style={style.meta}>AMC: {percentage(f.factsheet.amcPct)} · CIV charge: {percentage(f.factsheet.civPct)}</Text>
-        <Text style={style.meta}>Objective: {f.factsheet.objective??"Information unavailable"}</Text>
-        {f.factsheet.strategy?<Text style={style.meta}>Strategy: {f.factsheet.strategy}</Text>:null}
+        {f.factsheet.moneyMateId?<Text style={style.meta}>
+          MoneyMate ID: {f.factsheet.moneyMateId}
+        </Text>:null}
+        {f.factsheet.baseCurrency?<Text style={style.meta}>
+          Base currency: {f.factsheet.baseCurrency}
+        </Text>:null}
+        {f.factsheet.riskProfile?<Text style={style.meta}>
+          Risk profile: {f.factsheet.riskProfile}
+        </Text>:f.factsheet.riskRating!=null?<Text style={style.meta}>
+          {f.provider==="Standard Life"?"Volatility rating":"Risk rating"}:
+          {" "+f.factsheet.riskRating}/7
+        </Text>:null}
+        {f.factsheet.managedBy?<Text style={style.meta}>
+          {f.provider==="Standard Life"?"Fund manager":"Managed by"}:
+          {" "+f.factsheet.managedBy}
+        </Text>:null}
+        {f.factsheet.managementStyle?<Text style={style.meta}>
+          Investment style: {f.factsheet.managementStyle}
+        </Text>:null}
+        {f.factsheet.assetMix?<Text style={style.meta}>
+          Asset mix: {f.factsheet.assetMix}
+        </Text>:null}
+        {f.factsheet.equityRange?<Text style={style.meta}>
+          Indicative equity range: {f.factsheet.equityRange}
+        </Text>:null}
+        {f.factsheet.sfdrClass?<Text style={style.meta}>
+          SFDR class: {f.factsheet.sfdrClass}
+        </Text>:null}
+        {f.factsheet.taxStatus?<Text style={style.meta}>
+          Tax basis: {f.factsheet.taxStatus}
+        </Text>:null}
+        {f.factsheet.amcPct!=null?<Text style={style.meta}>
+          Annual management charge: {percentage(f.factsheet.amcPct)}
+        </Text>:null}
+        {f.provider==="Aviva"&&f.factsheet.civPct!=null?
+          <Text style={style.meta}>CIV charge: {percentage(f.factsheet.civPct)}</Text>:null}
+        {f.provider==="Standard Life"&&f.factsheet.expenseRatioPct!=null?
+          <Text style={style.meta}>
+            Total expense ratio: {percentage(f.factsheet.expenseRatioPct)}
+          </Text>:null}
+        <Text style={style.meta}>
+          {f.provider==="New Ireland"||f.provider==="Zurich"?
+            "Fund description":"Investment objective"}:
+          {" "+(f.factsheet.objective??"Information unavailable")}
+        </Text>
+        {f.factsheet.strategy?<Text style={style.meta}>
+          Strategy: {f.factsheet.strategy}
+        </Text>:null}
 
       </View>)}
 

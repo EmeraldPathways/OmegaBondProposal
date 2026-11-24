@@ -7,7 +7,7 @@
     "build": "npm test && node scripts/audit-production-sources.mjs && next build && node scripts/verify-pdfkit-trace.mjs",
     "start": "next start",
     "lint": "tsc --noEmit",
-    "test": "node --test tests/*.test.mjs && node --import tsx --test tests/reconciliation-engine.test.mts tests/reconciliation-ocr.test.mts tests/pdf-performance.test.mts tests/pdf-only.test.mts tests/pdf-performance-export.test.mts tests/workbook-primary.test.mts tests/pdf-workbook-render.test.mts tests/historical-growth.test.mts tests/chart-axis-fragments.test.mts tests/cumulative-return-line-chart.test.mts",
+    "test": "node --test tests/*.test.mjs && node --import tsx --test tests/reconciliation-engine.test.mts tests/reconciliation-ocr.test.mts tests/pdf-performance.test.mts tests/pdf-only.test.mts tests/pdf-performance-export.test.mts tests/workbook-primary.test.mts tests/pdf-workbook-render.test.mts tests/historical-growth.test.mts tests/chart-axis-fragments.test.mts tests/cumulative-return-line-chart.test.mts tests/provider-factsheets.test.mts",
     "db:migrate": "node scripts/migrate.mjs",
     "audit:db": "node scripts/audit-production-sources.mjs",
     "reconcile:run": "tsx scripts/run-production-reconciliation.mts",
@@ -39,5 +39,11 @@
     "@napi-rs/canvas": "^1.0.10",
     "pdfjs-dist": "^6.2.108"
   },
-  "type": "module"
+  "overrides": {
+    "@react-pdf/hyphenate": "0.1.0"
+  },
+  "type": "module",
+  "overrides": {
+    "@react-pdf/hyphenate": "0.1.0"
+  }
 }
