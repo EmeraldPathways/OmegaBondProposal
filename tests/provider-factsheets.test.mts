@@ -20,7 +20,7 @@ Medium to High Risk
 Performance as at 09 November 2026
 `,"New Ireland Assurance Company plc is regulated by the Central Bank of Ireland.");
   assert.equal(f.providerHint,"New Ireland");
-  assert.equal(f.metadataVersion,4);
+  assert.equal(f.metadataVersion,6);
   assert.match(f.objective??"",/long-term capital growth/);
   assert.equal(f.riskProfile,"Medium to High Risk");
   assert.match(f.managedBy??"",/State Street/);
