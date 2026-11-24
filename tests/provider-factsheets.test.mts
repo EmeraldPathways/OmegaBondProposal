@@ -20,7 +20,9 @@ Medium to High Risk
 Performance as at 09 November 2026
 `,"New Ireland Assurance Company plc is regulated by the Central Bank of Ireland.");
   assert.equal(f.providerHint,"New Ireland");
-  assert.equal(f.metadataVersion,4);
+  assert.equal(f.metadataVersion,5);
+  assert.match(f.description??"",/long-term capital growth/);
+  assert.equal(f.sfdrClass,"Article 8");
   assert.match(f.objective??"",/long-term capital growth/);
   assert.equal(f.riskProfile,"Medium to High Risk");
   assert.match(f.managedBy??"",/State Street/);
@@ -101,4 +103,37 @@ Investment Style Passive
   assert.equal(f.amcPct,0.95);
   assert.equal(f.expenseRatioPct,0.99);
   assert.equal(f.civPct,null);
+});
+
+test("New Ireland source data preserves labelled disclosures and page evidence",()=>{
+  const f=parseFactsheetText({importId:"ni",filename:"New Ireland Balanced Fund.pdf",pages:[
+    `New Ireland Balanced Fund
+Performance Factsheet
+Fund Description:
+The Balanced Fund aims to achieve medium to long-term growth.
+Managed By: New Ireland Investment Managers
+Style: Actively managed
+Asset Mix: Equities and bonds
+SFDR* Classification: Article 8 Fund
+Risk Profile: Medium Risk
+Performance as at 09 November 2026`,
+    `RISKS
+Key Risks
+Capital and returns are not guaranteed
+Currency Risk
+Liquidity Risk
+CHARGES
+Standard Charges
+Charges may apply and may reduce the return on your investment.
+ADDITIONAL INFORMATION`
+  ]});
+  assert.equal(f.metadataVersion,5);
+  assert.equal(f.providerHint,"New Ireland");
+  assert.equal(f.riskProfile,"Medium Risk");
+  assert.equal(f.sfdrClass,"Article 8");
+  assert.match(f.objective??"",/medium to long-term growth/);
+  assert.ok(f.riskFactors?.includes("Currency Risk"));
+  assert.ok(f.riskFactors?.includes("Liquidity Risk"));
+  assert.match(f.chargesDisclosure??"",/Charges may apply/);
+  assert.deepEqual(f.fieldPages?.chargesDisclosure,[2]);
 });
