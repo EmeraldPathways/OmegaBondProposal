@@ -38,12 +38,12 @@ const style=StyleSheet.create({
   banner:{backgroundColor:color.wine,borderRadius:7,paddingHorizontal:15,
     height:50,flexDirection:"row",justifyContent:"space-between",alignItems:"center"},
   bannerLabel:{fontFamily:"Helvetica-Bold",fontSize:8,color:color.white,letterSpacing:.7},
-  eyebrow:{fontSize:8,color:color.gold,fontFamily:"Helvetica-Bold",letterSpacing:1.4,marginTop:22},
-  title:{fontFamily:"Times-Roman",fontSize:27,color:color.wine,marginTop:9,marginBottom:8},
+  eyebrow:{fontSize:8,color:color.gold,fontFamily:"Helvetica-Bold",letterSpacing:1.4,marginTop:12},
+  title:{fontFamily:"Times-Roman",fontSize:27,color:color.wine,marginTop:5,marginBottom:4},
   heading:{fontFamily:"Times-Roman",fontSize:18,color:color.wine,marginBottom:10},
   subtitle:{fontSize:9,color:color.muted,lineHeight:1.5},
   hero:{backgroundColor:color.pale,borderWidth:1,borderColor:color.border,borderRadius:7,
-    marginTop:11,paddingHorizontal:12,paddingVertical:8,
+    marginTop:8,paddingHorizontal:12,paddingVertical:7,
     flexDirection:"row",alignItems:"center",gap:13},
   fieldLabel:{fontSize:8,color:color.muted,marginBottom:5},
   fieldValue:{fontFamily:"Helvetica-Bold",fontSize:11,color:color.ink,lineHeight:1.35},
@@ -451,10 +451,7 @@ export default function WorkbookProposalPDF({data}:{data:WorkbookProposalData}){
         return <Page key={p.id+"-overview-"+groupIndex}
           size="A4" style={style.page} wrap={false}>
           <Banner label={portfolioLabel+" · INVESTMENT OVERVIEW"}/>
-          <Text style={[style.eyebrow,{marginTop:14}]}>
-            INVESTMENT BOND PROPOSAL
-          </Text>
-          <Text style={[style.heading,{marginTop:6,marginBottom:4}]}>
+          <Text style={[style.heading,{marginTop:11,marginBottom:4}]}>
             {p.title}
           </Text>
           <Text style={style.subtitle}>
