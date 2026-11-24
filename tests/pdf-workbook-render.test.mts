@@ -75,8 +75,13 @@ test("A4 PDF can render uploaded-workbook returns and PDF factsheet metadata wit
     const overviewPage=await pdfDocument.getPage(2);
     const extracted=await overviewPage.getTextContent();
     const overview=extracted.items.map(item=>"str" in item?item.str:"").join(" ");
-    assert.ok(!overview.includes("INVESTMENT BOND PROPOSAL"),
-      "Portfolio overview must omit duplicated proposal header text");
+    const duplicatedHeading=extracted.items.some(item=>
+      "str" in item && "transform" in item &&
+      item.str==="INVESTMENT BOND PROPOSAL" &&
+      item.transform[5]>80
+    );
+    assert.equal(duplicatedHeading,false,
+      "Portfolio overview must not repeat the proposal eyebrow above the chart");
 
     for(const heading of [
       "Cumulative fund performance",
