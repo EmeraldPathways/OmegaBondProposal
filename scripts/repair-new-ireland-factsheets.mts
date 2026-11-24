@@ -12,8 +12,8 @@ const REPAIR_VERSION=1;
 const prefix="[Omega New Ireland OCR repair]";
 if(process.env.VERCEL_ENV!=="production"){
   console.log(prefix,"Skipped outside production build.");
-}else if(!process.env.DATABASE_URL||!process.env.BLOB_READ_WRITE_TOKEN){
-  console.log(prefix,"Skipped: database or private file access is not configured.");
+}else if(!process.env.DATABASE_URL){
+  console.log(prefix,"Skipped: database connection is not available.");
 }else{
   const sql=neon(process.env.DATABASE_URL);
   const errors:Record<string,number>={};
