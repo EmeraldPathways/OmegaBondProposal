@@ -118,7 +118,7 @@ export async function POST(request:Request){
           fund?.provider==="Standard Life") &&
         doc.factsheet_import_id && doc.source_path && doc.source_filename &&
         pdfFilenameFundKey(String(doc.source_filename))===workbookNameKey(fund.name) &&
-        (pdf?.metadataVersion??0)<4;
+        ((pdf?.metadataVersion??0)<5 || !pdf?.objective || pdf.objective.trim().length<35);
     });
     for(let i=0;i<sourceUpgrade.length;i+=4){
       await Promise.all(sourceUpgrade.slice(i,i+4).map(async doc=>{

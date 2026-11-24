@@ -173,9 +173,6 @@ export default function Workspace() {
         </div>
       </header>
       <main className="content">
-        <div className="notice neutral" style={{marginBottom:24}}>
-          <ShieldAlert size={18}/><span><strong>Workbook-backed workflow.</strong> Fund names and cumulative returns come from the current workbook; exact PDF filenames link supporting documents. Investment advice, factsheet content, return-date and charge checks remain separate. No monthly price history is fabricated.</span>
-        </div>
 
         {view === "overview" && <>
           <section className="page-heading hero-heading">
@@ -243,7 +240,7 @@ export default function Workspace() {
 
         {view === "builder" && <>
           <div className="page-heading"><div><span className="eyebrow">PORTFOLIO CONSTRUCTION</span><h1>Portfolio builder</h1>
-            <p>Build up to three draft portfolios using only the approved Omega funds. No investment performance is estimated without verified return data.</p></div>
+</div>
             <button className="btn primary" onClick={()=>go("compare")}>Compare allocations <ArrowRight size={16}/></button>
           </div>
           <div className="portfolio-tabs">{portfolios.map((p,i)=><button key={p.id} className={i===activePortfolio?"active":""} onClick={()=>setActivePortfolio(i)}>
@@ -306,7 +303,7 @@ export default function Workspace() {
 
         {view === "compare" && <>
           <div className="page-heading"><div><span className="eyebrow">PORTFOLIO COMPARISON</span><h1>Compare portfolios</h1>
-            <p>Compare the selected allocations. The workbook provides fund-level cumulative returns, not aligned monthly price observations for calculating historical portfolio performance.</p></div>
+</div>
             <button className="btn quiet" onClick={()=>go("builder")}>Edit allocations <ArrowRight size={16}/></button>
           </div>
           <div className="portfolio-card-grid">{portfolios.map(p=>{
@@ -340,7 +337,7 @@ export default function Workspace() {
 
         {view === "proposal" && <>
           <div className="page-heading"><div><span className="eyebrow">CLIENT DOCUMENTS</span><h1>Investment bond proposal</h1>
-            <p>Generate an A4 Omega-branded proposal using allocations from Portfolio builder, cumulative returns from the current workbook and supporting information extracted from each linked PDF.</p></div>
+</div>
           </div>
           <section className="panel padded">
             <span className="eyebrow">PROPOSAL DETAILS</span>
@@ -366,12 +363,6 @@ export default function Workspace() {
                   <p className="muted">{weighted.length} funds · {totalWeight.toFixed(1)}% allocated · {matched}/{weighted.length} PDF filenames linked</p>
                 </label>;
               })}
-            </div>
-            <div className="notice neutral" style={{marginTop:17}}>
-              <ShieldAlert size={18}/><span>This PDF uses the workbook for all fund names and cumulative return percentages. The linked PDFs supply objectives, strategy, risk rating, charges, factsheet date and source references where extractable. Missing PDF fields are labelled unavailable. The PDF contains an allocation chart and a cumulative-return line chart with the reported 1-, 3-, 5- and 10-year figures; missing periods are left blank.</span>
-            </div>
-            <div className="notice neutral">
-              <ShieldAlert size={18}/><span>The export is marked <strong>draft for adviser review</strong> because PDF contents, share classes, return reporting dates and charges have not been independently verified for client distribution. A matched filename does not constitute this sign-off.</span>
             </div>
             <div className="button-row" style={{marginTop:14}}>
               <button className="btn quiet" type="button" onClick={()=>go("builder")}>

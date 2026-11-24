@@ -11,6 +11,18 @@ function number(pattern:RegExp,text:string):number|null {
   if(!hit)return null;
   const n=Number(hit.replace(/[%,]/g,""));return Number.isFinite(n)?n:null;
 }
+/** A fund description is taken exclusively from the source text or OCR.
+ * Clean OCR column headings, never generate descriptive wording. */
+export function cleanSourceDescription(raw:string|null,provider:string|null):string|null{
+  if(!raw)return null;
+  let v=raw.replace(/\s+/g," ").trim();
+  if(provider==="New Ireland"){
+    v=v.replace(/^Risk\s+Profile\s*:\s*/i,"")
+      .replace(/\bSFDR\s+Classification\s*:\s*$/i,"")
+      .replace(/\s+(?:Very\s+High|Medium\s+to\s+High|Low\s+to\s+Medium|High|Medium|Low)\s+Risk\s*$/i,"");
+  }
+  return v.length>=35?v:null;
+}
 function section(text:string,start:RegExp,end:RegExp,limit=1400):string|null{
   const match=start.exec(text);if(!match)return null;
   const rem=text.slice(match.index+match[0].length);
@@ -145,7 +157,7 @@ export function parseFactsheetText(params:{
   // official name. Provider-specific titles come from PDF page content only.
   const firstPage=pages[0]??"";
   return {
-    importId,filename,providerHint:provider,title,metadataVersion:4,
+    importId,filename,providerHint:provider,title,metadataVersion:5,
     moneyMateId:first(/MoneyMate\s*ID\s*[:\s]*(\d{5,12})/i,text),
     asOf:provider==="New Ireland"
       ?first(/\bPerformance\s+as\s+at\s+(\d{1,2}\s+[A-Za-z]+\s+20\d{2})\b/i,text)
@@ -168,7 +180,11 @@ export function parseFactsheetText(params:{
     // New Ireland publishes named categories (e.g. Low to Medium Risk),
     // not an equivalent provider-confirmed 1–7 numeric score.
     riskProfile:provider==="New Ireland"
-      ?first(/\bRisk\s+Profile\s*:\s*(Low\s+to\s+Medium\s+Risk|Medium\s+to\s+High\s+Risk|Low\s+Risk|Medium\s+Risk|High\s+Risk|Very\s+High\s+Risk|Very\s+Low\s+Risk)\b/i,text):null,
+      ?(first(/\bRisk\s+Profile\s*:\s*(Low\s+to\s+Medium\s+Risk|Medium\s+to\s+High\s+Risk|Low\s+Risk|Medium\s+Risk|High\s+Risk|Very\s+High\s+Risk|Very\s+Low\s+Risk)\b/i,text) ??
+        (()=>{const nearby=section(text,/\bFund\s+Description\s*:/i,/\bManaged\s+By\s*:/i,1900)??"";
+          const matches=[...nearby.matchAll(/\b(Low\s+to\s+Medium\s+Risk|Medium\s+to\s+High\s+Risk|Very\s+High\s+Risk|Very\s+Low\s+Risk|High\s+Risk|Medium\s+Risk|Low\s+Risk)\b/gi)];
+          return matches.at(-1)?.[1]??null;
+        })()):null,
     managedBy:provider==="New Ireland"
       ?section(text,/\bManaged\s+By\s*:\s*/i,/\bStyle\s*:/i,230)
       :provider==="Standard Life"
@@ -187,7 +203,9 @@ export function parseFactsheetText(params:{
     sfdrClass:provider==="Zurich"
       ?first(/\bSFDR\s+Class\s+(Article\s+[689])\b/i,text):null,
     objective:provider==="New Ireland"
-      ?section(text,/\bFund\s+Description\s*:\s*/i,/\b(?:Managed\s+By|Style|Asset\s+Mix)\s*:/i,1600)
+      ?cleanSourceDescription(
+        section(text,/\bFund\s+Description\s*:\s*/i,
+          /\b(?:Managed\s+By|Style|Asset\s+Mix)\s*:/i,1600),"New Ireland")
       :provider==="Zurich"
       ?section(text,/\bFund Description\b/i,
           /\bYearly Investment Performance\b|\bFund Performance\b|\bSector Average\b|\bPerformance Table\b/i,1300)
@@ -228,7 +246,37 @@ export async function extractFundFactsheet(params:{
         // OCR is optional; never fill unreadable details from guessed values.
       }
     }
-    return parseFactsheetText({importId:params.importId,filename:params.filename,pages});
+    const parsed=parseFactsheetText({importId:params.importId,filename:params.filename,pages});
+    // Zurich writes its description in the left-hand column beside a graph.
+    // PDF text extraction can interleave performance-chart ticks and returns.
+    if(parsed.providerHint==="Zurich"){
+      try{
+        const page=await doc.getPage(1);
+        const text=await page.getTextContent();
+        const width=page.getViewport({scale:1}).width;
+        const tokens=text.items.flatMap(item=>{
+          if(!("str" in item)||!item.str?.trim()||!item.transform)return[];
+          return [{s:String(item.str).trim(),
+            x:item.transform[4],y:item.transform[5]}];
+        }).filter(t=>t.x>=0&&t.x<width*.40);
+        const heading=tokens.find(t=>/^Fund Description$/i.test(t.s));
+        if(heading){
+          const lines=tokens.filter(t=>t.y<heading.y-8&&t.y>18)
+            .sort((a,b)=>b.y-a.y||a.x-b.x)
+            .filter(t=>!/^[-+]?\d+(?:\.\d+)?%$/.test(t.s))
+            .filter(t=>!/^(?:Nov|Sep|Feb|Jan|May|Aug)\s*\d{2}$/i.test(t.s));
+          const left=lines.map(t=>t.s).join(" ");
+          const cleaned=left.split(/\b(?:Notes\s*:|Asset\s+Distribution|Sector\s+Average)\b/i)[0]
+            .replace(/^\s*(?:(?:-?\d+(?:\.\d+)?%\s*)|(?:Indicative\s+equity\s+(?:range|exposure)[^.!?]{0,115}))+/i,"")
+            .replace(/\s+/g," ").trim();
+          if(cleaned.length>=45 && /\b(fund|invest|equity|bond|returns)\b/i.test(cleaned))
+            parsed.objective=cleaned.slice(0,1300);
+        }
+      }catch{
+        // Keep the ordinary textual extraction when column isolation fails.
+      }
+    }
+    return parsed;
   }finally{
     const disposable=doc as unknown as { destroy?:()=>Promise<void> };
     if(typeof disposable.destroy==="function")await disposable.destroy();

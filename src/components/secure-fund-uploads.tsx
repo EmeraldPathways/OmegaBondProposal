@@ -193,9 +193,6 @@ export default function SecureFundUploads() {
     <FundSourceAudit/>
     <FundPerformanceReview key={resetSequence} />
 
-    <div className="notice neutral" style={{ marginBottom: 22 }}>
-      <ShieldAlert size={18} />
-      <span><strong>Source intake only.</strong> New PDFs are automatically matched to the latest workbook fund names. Returns are sourced exclusively from that workbook. Mismatches remain in manual review; client-facing reports remain gated on reporting-date, share-class and fee validation. No client personal information should be uploaded.</span>
-    </div>
+
   </>;
 }
