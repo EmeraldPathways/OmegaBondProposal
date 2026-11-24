@@ -21,7 +21,7 @@ export default function FundEnrichmentAudit(){
   const [runCount,setRunCount]=useState(0);
   const [isPaused,setIsPaused]=useState(false);
   const pauseAfterCurrent=useRef(false);
-  const working=useRef(false),stopped=useRef(false),started=useRef(false);
+  const activeRequest=useRef(false);
   const refresh=useCallback(async()=>{
     const response=await fetch("/api/fund-enrichment",{credentials:"same-origin",cache:"no-store"});
     const payload=await response.json() as Report&{error?:string};
@@ -30,20 +30,12 @@ export default function FundEnrichmentAudit(){
     return payload;
   },[]);
   useEffect(()=>{
-    stopped.current=false;
-    void refresh().then(status=>{
-      if(status.pending>0&&!started.current){
-        started.current=true;
-        void run();
-      }
-    }).catch(error=>
-      setError(error instanceof Error?error.message:"Extraction audit unavailable."));
-    return ()=>{stopped.current=true};
-  // This is a one-time mount/start check; run() is stable in this closure.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    void refresh().catch(e=>setError(e instanceof Error?
+      e.message:"Could not load factsheet audit."));
   },[refresh]);
   async function run(){
-    if(busy)return;
+    if(activeRequest.current)return;
+    activeRequest.current=true;
     pauseAfterCurrent.current=false;
     setBusy(true);setIsPaused(false);setError("");setRunCount(0);
     setMessage("Starting PDF extraction. Keep this page open; progress is saved after each PDF.");
@@ -88,7 +80,7 @@ export default function FundEnrichmentAudit(){
     }catch(e){
       setError(e instanceof Error?e.message:"PDF processing was interrupted.");
       await refresh().catch(()=>{});
-    }finally{setBusy(false);}
+    }finally{activeRequest.current=false;setBusy(false);}
   }
   return <section className="panel padded" style={{marginTop:20,marginBottom:20}}>
     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:16,flexWrap:"wrap"}}>
