@@ -30,9 +30,7 @@ if(process.env.VERCEL_ENV!=="production"||!process.env.DATABASE_URL){
     sourceFilename:typeof row.filename==="string"?row.filename:"",
     sourceDate:typeof source.asOf==="string"?source.asOf:"",
     draft:valid?draft:"",
-    sourceObjective:objective,
-    sourceDescription:description!==objective?description:"",
-    sourceStrategy:strategy,
+    sourceExcerpt:(!valid?(objective||description||strategy).slice(0,600):""),
     status:valid?"DRAFT — EDIT / APPROVE":"NEEDS REVIEW — NO COMPLETE SOURCE SENTENCE"
   };
   console.log("OMEGA_REVIEW_EXPORT|"+JSON.stringify(data));
