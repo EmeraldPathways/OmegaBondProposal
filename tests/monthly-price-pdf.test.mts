@@ -47,22 +47,43 @@ async function renderCount(n:number){
   }
   return {pages:doc.numPages,texts};
 }
-test("five real 61-period source lines fit cover, with three + two detail cards",async()=>{
-  const sample=await renderCount(5);
-  assert.equal(sample.pages,3,"Monthly cover chart must not insert unwanted pages.");
-  // No redundant cover chart or new overview page. Every fund has a
-  // source-backed sparkline in its existing details card.
-  assert.ok(sample.texts[1].includes(history.funds[0].name));
-  assert.ok(sample.texts[1].includes(history.funds[2].name));
-  assert.ok(sample.texts[2].includes(history.funds[3].name));
-  assert.ok(sample.texts[2].includes(history.funds[4].name));
+test("three-fund proposal restores the chart to page 2 and retains full-width fund details",async()=>{
+  const sample=await renderCount(3);
+  assert.equal(sample.pages,3,"Cover, performance charts, three full-width fund cards");
+  assert.match(sample.texts[0],/Fund allocations and reported cumulative returns/);
+  assert.match(sample.texts[1],/Five-year fund performance/);
+  assert.match(sample.texts[1],/Initial investment breakdown/);
+  for(let i=0;i<3;i++){
+    assert.ok(sample.texts[1].includes(history.funds[i].name),
+      "The chart legend should identify "+history.funds[i].name);
+    assert.ok(sample.texts[2].includes(history.funds[i].name),
+      "The next page should contain the detail card for "+history.funds[i].name);
+  }
+  assert.ok(!sample.texts[2].includes("Five-year fund performance"),
+    "Fund detail cards must not repeat the performance chart.");
 });
-test("eight source-backed history lines and the 3-card pagination remain within A4",async()=>{
+test("five-fund proposal: page one allocations, page two full-size historical chart, then 3+2 details",async()=>{
+  const sample=await renderCount(5);
+  assert.equal(sample.pages,4,
+    "Expected cover, dedicated full-size historical chart, three-fund details, two-fund details.");
+  assert.match(sample.texts[0],/Fund allocations and reported cumulative returns/);
+  assert.match(sample.texts[1],/Five-year fund performance/);
+  assert.match(sample.texts[1],/Reported cumulative returns/);
+  assert.ok(sample.texts[1].includes(history.funds[0].name));
+  assert.ok(sample.texts[1].includes(history.funds[4].name));
+  assert.ok(sample.texts[2].includes(history.funds[0].name));
+  assert.ok(sample.texts[2].includes(history.funds[2].name));
+  assert.ok(sample.texts[3].includes(history.funds[3].name));
+  assert.ok(sample.texts[3].includes(history.funds[4].name));
+  assert.ok(!sample.texts[2].includes("Five-year fund performance"));
+  assert.ok(!sample.texts[3].includes("Five-year fund performance"));
+});
+test("eight selected funds retain one full-size chart page and 3+3+2 details",async()=>{
   const sample=await renderCount(8);
-  assert.equal(sample.pages,4,"Cover plus three detail pages expected for eight funds.");
-  assert.ok(!sample.texts[0].includes("Five-year fund performance"));
+  assert.equal(sample.pages,5,
+    "Expected cover, chart page and three fund-detail pages.");
+  assert.match(sample.texts[1],/Five-year fund performance/);
   for(let i=0;i<8;i++)
-    assert.ok(sample.texts[Math.floor(i/3)+1].includes(history.funds[i].name),
+    assert.ok(sample.texts[Math.floor(i/3)+2].includes(history.funds[i].name),
       "Missing details for "+history.funds[i].name);
 });
-

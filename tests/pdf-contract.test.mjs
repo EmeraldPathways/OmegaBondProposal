@@ -42,7 +42,9 @@ test("new A4 Omega PDF displays actual workbook fund charts and PDF metadata wit
   assert.doesNotMatch(pdf,/Charts in source PDF|Printed PDF title|data\.workbookFilename\}/);
   assert.doesNotMatch(pdf,/DRAFT|NOT APPROVED FOR CLIENT DISTRIBUTION/);
   assert.match(pdf,/CompactPortfolioAllocationAndBreakdown/);
-  assert.match(pdf,/FundPriceSparkline/);
+  assert.match(pdf,/FiveYearMonthlyChart/);
+  assert.match(read("src/lib/pdf/five-year-monthly-chart.tsx"),/priceSegments\(fund\.priceHistory/);
+  assert.doesNotMatch(pdf,/FundPriceSparkline/);
   assert.match(pdf,/f\.priceHistory/);
   assert.match(read("src/components/fund-price-history-chart.tsx"),/Reported cumulative return/);
   assert.doesNotMatch(pdf,/CumulativeReturnLineChart/);
@@ -98,6 +100,7 @@ test("portfolio PDF skips the redundant overview and preserves overflow allocati
   assert.match(pdf,/p\.funds\.slice\(firstPageFundLimit\(data\.portfolios\.length\)\)/);
   assert.doesNotMatch(pdf,/INVESTMENT OVERVIEW/);
   assert.doesNotMatch(pdf,/p\.id\+"-overview-"/);
+  assert.match(pdf,/p\.id\+"-monthly-performance-"/);
   assert.doesNotMatch(pdf,/<CumulativeReturnLineChart funds=\{group\}/);
 });
 test("cover contains investment details and the allocation-return table; single portfolio preserves its doughnut",()=>{
@@ -109,7 +112,9 @@ test("cover contains investment details and the allocation-return table; single 
   assert.doesNotMatch(pdf,/INVESTMENT BOND PROPOSAL\s*\n\s*<\/Text>\s*\n\s*<Text style=\{\[style\.heading/);
   assert.match(pdf,/marginTop:11,marginBottom:4/);
   assert.match(pdf,/FundAllocationReturnsTable/);
-  assert.match(pdf,/FundPriceSparkline/);
+  assert.match(pdf,/FiveYearMonthlyChart/);
+  assert.match(read("src/lib/pdf/five-year-monthly-chart.tsx"),/priceSegments\(fund\.priceHistory/);
+  assert.doesNotMatch(pdf,/FundPriceSparkline/);
 });
 
 test("fund enrichment persists source data and proposal reads saved records without reparsing PDFs",()=>{

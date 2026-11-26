@@ -4,6 +4,7 @@ import {OMEGA_LOGO_PATHS} from "@/lib/branding/omega-logo-paths";
 import {firstPageFundLimit,paginateFundDetails,fundCardNarrative,abbreviateWords} from "@/lib/pdf/fund-detail-layout";
 import {chartFundGroups} from "@/lib/pdf/cumulative-return-chart";
 import type {PriceHistoryPoint} from "@/lib/reconciliation/monthly-prices";
+import {FiveYearMonthlyChart,CHART_COLORS} from "@/lib/pdf/five-year-monthly-chart";
 
 export type WorkbookReturnPeriods = Record<
   "ytd"|"oneMonth"|"threeMonth"|"sixMonth"|"oneYear"|"threeYear"|"fiveYear"|"tenYear"|"sinceLaunch",
@@ -109,7 +110,7 @@ function Footer(){
     <Text style={style.footerText}>INVESTMENT BOND PROPOSAL</Text>
   </View>;
 }
-const CHART_COLORS=["#671E27","#A8995F","#647579","#809485","#AC7471","#9A9C94","#977F70","#76808B"];
+
 const radians=(degrees:number)=>degrees*Math.PI/180;
 function pointOnCircle(cx:number,cy:number,r:number,angle:number){
   return [cx+Math.cos(radians(angle))*r,cy+Math.sin(radians(angle))*r];
@@ -216,7 +217,7 @@ function CompactPortfolioAllocationAndBreakdown({
   </View>;
 }
 /** The opening page includes an allocation chart for every selected
- * portfolio. The full-size per-portfolio overview remains unchanged. */
+ * portfolio. The dedicated five-year chart page follows the allocations. */
 function CoverPortfolioAllocation({portfolio,multiple}:{
   portfolio:WorkbookProposalPortfolio;multiple:boolean
 }){
@@ -290,39 +291,6 @@ function CoverPortfolioAllocation({portfolio,multiple}:{
 }
 /** These paths represent only actual source observations in the PRICES worksheet.
  * The former 1/3/5/10-year interpolated-looking line chart is not used. */
-function priceSegments(points:PriceHistoryPoint[]):PriceHistoryPoint[][]{
-  const result:PriceHistoryPoint[][]=[];
-  let segment:PriceHistoryPoint[]=[];
-  for(const point of points){
-    if(segment.length&&Date.parse(point.date)-Date.parse(segment[segment.length-1].date)>
-      48*86400000){
-      result.push(segment);segment=[];
-    }
-    segment.push(point);
-  }
-  if(segment.length)result.push(segment);
-  return result;
-}
-function FundPriceSparkline({points}:{points:PriceHistoryPoint[]}){
-  if(points.length<2)return null;
-  const dates=points.map(p=>Date.parse(p.date+"T00:00:00Z"));
-  const first=Math.min(...dates),last=Math.max(...dates);
-  const values=points.map(p=>p.returnPct);
-  const bottom=Math.min(...values),top=Math.max(...values);
-  const x=(date:string)=>2+(Date.parse(date+"T00:00:00Z")-first)/
-    Math.max(1,last-first)*122;
-  const y=(value:number)=>25-(value-bottom)/Math.max(.01,top-bottom)*22;
-  return <View style={{position:"absolute",top:9,right:10,width:128,height:30}}>
-    <Svg width={128} height={28} viewBox="0 0 128 28">
-      {priceSegments(points).map((segment,i)=>
-        <Path key={i} stroke={color.wine} strokeWidth={1.7} fill="none"
-          strokeLinejoin="round" strokeLinecap="round"
-          d={segment.map((point,j)=>(j?"L":"M")+
-            x(point.date).toFixed(2)+" "+y(point.returnPct).toFixed(2)).join(" ")}/>
-      )}
-    </Svg>
-  </View>;
-}
 function FundAllocationReturnsTable({funds,dense}:{
   funds:WorkbookProposalFund[];dense:boolean
 }){
@@ -449,6 +417,29 @@ export default function WorkbookProposalPDF({data}:{data:WorkbookProposalData}){
         </Page>
       )
     )}
+    {/* A dedicated chart page restores legible full-size performance charts.
+        It is chart content, not the previously removed redundant overview. */}
+    {data.portfolios.flatMap((p,index)=>
+      chartFundGroups(p.funds,8)
+        .filter(group=>group.some(f=>(f.priceHistory?.length??0)>=2))
+        .map((group,chartIndex)=>
+          <Page key={p.id+"-monthly-performance-"+chartIndex}
+            size="A4" style={style.page} wrap={false}>
+            <Banner label={"PORTFOLIO "+String.fromCharCode(65+index)+" · PERFORMANCE"}/>
+            <Text style={[style.eyebrow,{marginTop:11}]}>
+              FIVE-YEAR HISTORICAL PERFORMANCE
+            </Text>
+            <Text style={[style.heading,{marginBottom:4}]}>
+              {p.title} · Fund performance
+            </Text>
+            <FiveYearMonthlyChart funds={group}/>
+            <CompactPortfolioAllocationAndBreakdown
+              funds={group} allFunds={p.funds}
+              totalInvestment={data.investment} dense={group.length>4}/>
+            <Footer/>
+          </Page>
+        )
+    )}
     {data.portfolios.flatMap((p,index)=>
       paginateFundDetails(p.funds).map((group,pageIndex,pages)=>
       <Page key={p.id+"-factsheets-"+pageIndex} size="A4"
@@ -462,12 +453,8 @@ export default function WorkbookProposalPDF({data}:{data:WorkbookProposalData}){
           fontSize:7.5,color:color.muted,marginBottom:2
         }}>Funds {pageIndex*3+1}–{pageIndex*3+group.length} of {p.funds.length}</Text>:null}
         {group.map(f=><View key={f.id+"-source"} style={style.sourceCard} wrap={false}>
-          <Text style={[style.sourceTitle,
-            (f.priceHistory?.length??0)>1?{maxWidth:"70%"}:{}]}>{f.name}</Text>
-          {(f.priceHistory?.length??0)>1?
-            <FundPriceSparkline points={f.priceHistory??[]}/>:null}
-          <Text style={[style.meta,
-            (f.priceHistory?.length??0)>1?{maxWidth:"70%"}:{}]}>
+          <Text style={style.sourceTitle}>{f.name}</Text>
+          <Text style={style.meta}>
             {f.provider}{f.factsheet.date?" · As at "+f.factsheet.date:""}
           </Text>
           <Text style={style.meta}>
