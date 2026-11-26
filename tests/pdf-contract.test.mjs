@@ -42,11 +42,10 @@ test("new A4 Omega PDF displays actual workbook fund charts and PDF metadata wit
   assert.doesNotMatch(pdf,/Charts in source PDF|Printed PDF title|data\.workbookFilename\}/);
   assert.doesNotMatch(pdf,/DRAFT|NOT APPROVED FOR CLIENT DISTRIBUTION/);
   assert.match(pdf,/CompactPortfolioAllocationAndBreakdown/);
-  assert.match(pdf,/CumulativeReturnLineChart/);
-  assert.match(pdf,/CUMULATIVE_PERIODS/);
-  assert.match(pdf,/cumulativeReturnValues\(f.returns\)/);
-  assert.match(pdf,/contiguousReturnSegments\(values\)/);
-  assert.match(pdf,/Reported cumulative returns/);
+  assert.match(pdf,/FundPriceSparkline/);
+  assert.match(pdf,/f\.priceHistory/);
+  assert.match(read("src/components/fund-price-history-chart.tsx"),/Reported cumulative return/);
+  assert.doesNotMatch(pdf,/CumulativeReturnLineChart/);
   assert.doesNotMatch(pdf,/HistoricalPortfolioGrowthChart/);
   assert.doesNotMatch(pdf,/Math\.random|monthlyPrices|performanceSeries|sampleHistorical/);
 });
@@ -110,7 +109,7 @@ test("cover contains investment details and the allocation-return table; single 
   assert.doesNotMatch(pdf,/INVESTMENT BOND PROPOSAL\s*\n\s*<\/Text>\s*\n\s*<Text style=\{\[style\.heading/);
   assert.match(pdf,/marginTop:11,marginBottom:4/);
   assert.match(pdf,/FundAllocationReturnsTable/);
-  assert.match(pdf,/CumulativeReturnLineChart/);
+  assert.match(pdf,/FundPriceSparkline/);
 });
 
 test("fund enrichment persists source data and proposal reads saved records without reparsing PDFs",()=>{

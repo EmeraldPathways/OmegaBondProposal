@@ -1,3 +1,4 @@
+import {createHash} from "node:crypto";
 import ExcelJS from "exceljs";
 import { get } from "@vercel/blob";
 import { NextResponse } from "next/server";
@@ -7,6 +8,9 @@ import { APPROVED_FUNDS } from "@/lib/approved-funds";
 import { getActiveFunds,ensureActiveFundNamesTable } from "@/lib/server/active-funds";
 import { workbookFundNames,workbookReturnRows,verifyWorkbookConsistency,matchWorkbookReturn } from "@/lib/reconciliation/workbook-source";
 import { similarity } from "@/lib/reconciliation/engine";
+import {pricesFromWorkbook} from "@/lib/reconciliation/monthly-prices";
+import {persistMonthlyPriceSnapshot,activateMonthlyPriceSnapshot,currentPriceSnapshot}
+  from "@/lib/server/fund-prices";
 import { extractFundFactsheet } from "@/lib/reconciliation/factsheet";
 import { HORIZONS, downgradeDuplicateApprovals } from "@/lib/reconciliation/engine";
 import { reconcilePdfOnly } from "@/lib/reconciliation/pdf-only";
@@ -51,8 +55,20 @@ async function workbook(){
   const names=workbookFundNames(book);
   const rows=workbookReturnRows(book);
   verifyWorkbookConsistency(names,rows);
+  // A monthly fund update must supply the PRICES sheet. Reject incomplete
+  // workbooks before changing the active 107-fund universe or its returns.
+  const prices=pricesFromWorkbook(book,names);
+  const sourceSha256=createHash("sha256").update(bytes).digest("hex");
   await ensureActiveFundNamesTable();
   const sql=getNeonSql();
+  const activePrices=await currentPriceSnapshot(sql);
+  if(activePrices&&prices.end<String(activePrices.end).slice(0,10))
+    throw new Error("This monthly PRICES report predates the active workbook. "+
+      "Upload a current or newer report instead.");
+  const priceStats=await persistMonthlyPriceSnapshot(sql,{
+    snapshotId:sourceSha256,sourceFile:stored.filename,
+    sourceSha256,workbookImportId:stored.id
+  },prices,false);
   const namesPayload=JSON.stringify(names.map((f,index)=>({
     id:f.id,provider:f.provider,name:f.name,sortOrder:index+1
   })));
@@ -71,9 +87,11 @@ async function workbook(){
     "SELECT $1::uuid,r.provider,r.row,r.name,r.returns",
     "FROM jsonb_to_recordset($2::jsonb) AS r(provider text,row integer,name text,returns jsonb)"
   ].join(" "),[stored.id,rowsPayload]);
+  await activateMonthlyPriceSnapshot(sql,sourceSha256);
   return {phase:"workbook",funds:names.length,rows:rows.length,
+    priceHistory:priceStats,
     sourceFile:stored.filename,sourceImportId:stored.id,
-    message:"The corrected workbook now defines all 107 fund names and performance returns."};
+    message:"The monthly workbook now supplies 107 fund names, current returns and verified PRICES history."};
 }
 async function factsheets(){
   const sql=getNeonSql();

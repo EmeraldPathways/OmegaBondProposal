@@ -81,7 +81,7 @@ export default function FundPerformanceReview(){
     if(pdfBusy||busy)return;
     setPdfBusy(true);setError("");setMessage("");
     try{
-      setPdfStep("Validating current workbook's 107 fund names and returns");
+      setPdfStep("Validating 107 fund names, cumulative returns and PRICES history");
       const master=await invoke("workbook");
       for(let i=0;i<300;i++){
         const scan=await invoke("factsheets");
@@ -93,7 +93,8 @@ export default function FundPerformanceReview(){
       const result=await invoke("reconcile");
       await Promise.all([refresh(),refreshPdf()]);
       if(alive.current)setMessage("Imported "+master.funds+" authoritative fund names and "+
-        master.rows+" provider performance rows from the updated workbook. "+
+        master.rows+" provider performance rows and "+
+        (master.priceHistory?.points??0)+" monthly price-history observations. "+
         (result.counts?.auto_approved??0)+" PDF filenames linked automatically to their workbook fund names. "+
         "Uncertain fund or return series remain in manual review. Returns from older PDFs are never used.");
     }catch(e){
@@ -243,7 +244,7 @@ export default function FundPerformanceReview(){
         disabled={busy||pdfBusy}
         onClick={()=>void importWorkbookPerformance()}>
         {pdfBusy?<LoaderCircle className="pdf-spin" size={17}/>:<Database size={17}/>}
-        {pdfBusy?"Matching workbook and PDFs…":"Import updated workbook + auto-match PDFs"}
+        {pdfBusy?"Matching workbook and PDFs…":"Import monthly update + refresh charts"}
       </button>
       <button className="btn quiet" type="button" onClick={()=>void exportAllPdfTables()}
         disabled={busy||pdfBusy||status.totalFactsheets===0}>

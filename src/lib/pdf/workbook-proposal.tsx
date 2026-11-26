@@ -2,10 +2,8 @@ import React from "react";
 import {Document,Page,View,Text,StyleSheet,Svg,Path,Circle,Rect,Line} from "@react-pdf/renderer";
 import {OMEGA_LOGO_PATHS} from "@/lib/branding/omega-logo-paths";
 import {firstPageFundLimit,paginateFundDetails,fundCardNarrative,abbreviateWords} from "@/lib/pdf/fund-detail-layout";
-import {
-  CUMULATIVE_PERIODS,cumulativeReturnValues,contiguousReturnSegments,
-  cumulativeChartDomain,chartFundGroups
-} from "@/lib/pdf/cumulative-return-chart";
+import {chartFundGroups} from "@/lib/pdf/cumulative-return-chart";
+import type {PriceHistoryPoint} from "@/lib/reconciliation/monthly-prices";
 
 export type WorkbookReturnPeriods = Record<
   "ytd"|"oneMonth"|"threeMonth"|"sixMonth"|"oneYear"|"threeYear"|"fiveYear"|"tenYear"|"sinceLaunch",
@@ -14,6 +12,7 @@ export type WorkbookReturnPeriods = Record<
 export type WorkbookProposalFund = {
   id:string;name:string;provider:string;weight:number;allocatedAmount:number;
   returns:WorkbookReturnPeriods;
+  priceHistory?:PriceHistoryPoint[];
   factsheet:{
     filename:string|null; title:string|null; date:string|null;
     objective:string|null;strategy:string|null;moneyMateId:string|null;
@@ -289,71 +288,39 @@ function CoverPortfolioAllocation({portfolio,multiple}:{
     </View>
   </View>;
 }
-function CumulativeReturnLineChart({funds,dense}:{
-  funds:WorkbookProposalFund[];dense:boolean
-}){
-  const rows=funds.map(f=>({fund:f,values:cumulativeReturnValues(f.returns)}));
-  const {min,max}=cumulativeChartDomain(rows.map(row=>row.values));
-  const xLeft=55,xRight=485,yTop=16,yBottom=180;
-  const graphWidth=xRight-xLeft,graphHeight=yBottom-yTop;
-  const x=(i:number)=>xLeft+(i/(CUMULATIVE_PERIODS.length-1))*graphWidth;
-  const y=(v:number)=>yBottom-(v-min)/(max-min)*graphHeight;
-  const ticks=Array.from({length:5},(_,i)=>min+(max-min)*i/4);
-  const hasValues=rows.some(row=>row.values.some(value=>value!==null));
-  const label=(n:number)=>Number.isInteger(n)?n.toFixed(0):n.toFixed(1);
-  return <View style={{
-    borderWidth:.7,borderColor:color.border,borderRadius:8,
-    paddingHorizontal:12,paddingTop:11,paddingBottom:dense?8:10,
-    marginTop:11,backgroundColor:"#FDFDFC"
-  }} wrap={false}>
-    <Text style={{fontFamily:"Times-Roman",color:color.wine,fontSize:16,
-      marginBottom:4}}>Cumulative fund performance</Text>
-    <Text style={{fontSize:7.8,color:color.muted}}>
-      Reported cumulative returns (%) · 1-, 3-, 5- and 10-year lookback periods
-    </Text>
-    {hasValues?<Svg width="100%" height={dense?155:184} viewBox="0 0 505 210">
-      {ticks.map((tick,index)=><React.Fragment key={"grid-"+index}>
-        <Line x1={xLeft} x2={xRight} y1={y(tick)} y2={y(tick)}
-          stroke={Math.abs(tick)<1e-8?"#C6C5C0":"#E9E8E3"}
-          strokeWidth={Math.abs(tick)<1e-8?1.4:.8}/>
-        <Text x={6} y={y(tick)+3.5}
-          style={{fontSize:9,fill:color.muted}}>{label(tick)}%</Text>
-      </React.Fragment>)}
-      {CUMULATIVE_PERIODS.map((period,i)=><React.Fragment key={period.key}>
-        <Line x1={x(i)} x2={x(i)} y1={yTop} y2={yBottom}
-          stroke="#F0EFEB" strokeWidth={.5}/>
-        <Text x={x(i)-18} y={yBottom+22}
-          style={{fontSize:10,fill:color.ink}}>{period.label}</Text>
-      </React.Fragment>)}
-      {rows.flatMap(({fund,values},fundIndex)=>{
-        const lineColor=CHART_COLORS[fundIndex%CHART_COLORS.length];
-        const paths=contiguousReturnSegments(values).map((indices,j)=>
-          <Path key={fund.id+"-line-"+j}
-            d={indices.map((i,k)=>(k?"L":"M")+x(i).toFixed(2)+" "+
-              y(values[i]!).toFixed(2)).join(" ")}
-            stroke={lineColor} strokeWidth={2.8} fill="none"
-            strokeLinejoin="round" strokeLinecap="round"/>);
-        const markers=values.flatMap((value,i)=>value===null?[]:[
-          <Circle key={fund.id+"-point-"+i} cx={x(i)} cy={y(value)}
-            r={3.8} fill={lineColor} stroke="#FFFFFF" strokeWidth={1.1}/>
-        ]);
-        return [...paths,...markers];
-      })}
-    </Svg>:<Text style={{marginTop:15,fontSize:8,color:color.muted}}>
-      No reported 1-, 3-, 5- or 10-year returns are available.
-    </Text>}
-    <View style={{flexDirection:"row",flexWrap:"wrap",gap:dense?2:4,
-      marginTop:dense?4:7}}>
-      {funds.map((fund,i)=><View key={fund.id} style={{
-        width:"49%",flexDirection:"row",alignItems:"flex-start",
-        gap:6,paddingVertical:dense?2:4
-      }}>
-        <View style={{backgroundColor:CHART_COLORS[i%CHART_COLORS.length],
-          width:13,height:2.5,marginTop:4}}/>
-        <Text style={{fontSize:dense?7:7.6,color:color.ink,flex:1,
-          lineHeight:1.3}}>{fund.name}</Text>
-      </View>)}
-    </View>
+/** These paths represent only actual source observations in the PRICES worksheet.
+ * The former 1/3/5/10-year interpolated-looking line chart is not used. */
+function priceSegments(points:PriceHistoryPoint[]):PriceHistoryPoint[][]{
+  const result:PriceHistoryPoint[][]=[];
+  let segment:PriceHistoryPoint[]=[];
+  for(const point of points){
+    if(segment.length&&Date.parse(point.date)-Date.parse(segment[segment.length-1].date)>
+      48*86400000){
+      result.push(segment);segment=[];
+    }
+    segment.push(point);
+  }
+  if(segment.length)result.push(segment);
+  return result;
+}
+function FundPriceSparkline({points}:{points:PriceHistoryPoint[]}){
+  if(points.length<2)return null;
+  const dates=points.map(p=>Date.parse(p.date+"T00:00:00Z"));
+  const first=Math.min(...dates),last=Math.max(...dates);
+  const values=points.map(p=>p.returnPct);
+  const bottom=Math.min(...values),top=Math.max(...values);
+  const x=(date:string)=>2+(Date.parse(date+"T00:00:00Z")-first)/
+    Math.max(1,last-first)*122;
+  const y=(value:number)=>25-(value-bottom)/Math.max(.01,top-bottom)*22;
+  return <View style={{position:"absolute",top:9,right:10,width:128,height:30}}>
+    <Svg width={128} height={28} viewBox="0 0 128 28">
+      {priceSegments(points).map((segment,i)=>
+        <Path key={i} stroke={color.wine} strokeWidth={1.7} fill="none"
+          strokeLinejoin="round" strokeLinecap="round"
+          d={segment.map((point,j)=>(j?"L":"M")+
+            x(point.date).toFixed(2)+" "+y(point.returnPct).toFixed(2)).join(" ")}/>
+      )}
+    </Svg>
   </View>;
 }
 function FundAllocationReturnsTable({funds,dense}:{
@@ -495,8 +462,12 @@ export default function WorkbookProposalPDF({data}:{data:WorkbookProposalData}){
           fontSize:7.5,color:color.muted,marginBottom:2
         }}>Funds {pageIndex*3+1}–{pageIndex*3+group.length} of {p.funds.length}</Text>:null}
         {group.map(f=><View key={f.id+"-source"} style={style.sourceCard} wrap={false}>
-          <Text style={style.sourceTitle}>{f.name}</Text>
-          <Text style={style.meta}>
+          <Text style={[style.sourceTitle,
+            (f.priceHistory?.length??0)>1?{maxWidth:"70%"}:{}]}>{f.name}</Text>
+          {(f.priceHistory?.length??0)>1?
+            <FundPriceSparkline points={f.priceHistory??[]}/>:null}
+          <Text style={[style.meta,
+            (f.priceHistory?.length??0)>1?{maxWidth:"70%"}:{}]}>
             {f.provider}{f.factsheet.date?" · As at "+f.factsheet.date:""}
           </Text>
           <Text style={style.meta}>

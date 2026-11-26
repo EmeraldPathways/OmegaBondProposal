@@ -3,6 +3,7 @@ import {z} from "zod";
 import {auth,ADMIN_EMAIL,isLoginConfigured} from "@/auth";
 import {getNeonSql} from "@/lib/server/neon";
 import {getActiveFunds} from "@/lib/server/active-funds";
+import {readActiveFundPricePoints} from "@/lib/server/fund-prices";
 import {matchWorkbookReturn,workbookNameKey,pdfFilenameFundKey} from "@/lib/reconciliation/workbook-source";
 import type {WorkbookEntry,ReportedReturns,FactSheetData} from "@/lib/reconciliation/engine";
 import WorkbookProposalPDF, {
@@ -89,7 +90,7 @@ export async function POST(request:Request){
 
     // Do not trust returns or fund metadata from the browser. Resolve every
     // selected series independently against the most recent workbook import.
-    const [rows,activeSources,linkedDocs]=await Promise.all([
+    const [rows,activeSources,linkedDocs,monthlyPoints]=await Promise.all([
       sql.query("SELECT provider,row_number,source_name,reported_returns "+
         "FROM fund_source_performance WHERE import_id=$1::uuid",[sourceId]),
       sql.query("SELECT DISTINCT workbook_import_id::text AS id FROM fund_active_names"),
@@ -98,7 +99,8 @@ export async function POST(request:Request){
         "s.status AS source_status,s.data AS source_data "+
         "FROM fund_reconciliations r "+
         "LEFT JOIN imports i ON i.id=r.factsheet_import_id "+
-        "LEFT JOIN fund_source_factsheets s ON s.import_id=r.factsheet_import_id")
+        "LEFT JOIN fund_source_factsheets s ON s.import_id=r.factsheet_import_id"),
+      readActiveFundPricePoints(sql,[...requestedIds])
     ]);
     if(activeSources.length!==1||String(activeSources[0].id)!==sourceId)
       return validationError("The workbook has been uploaded but not imported. Run workbook matching first.");
@@ -110,6 +112,12 @@ export async function POST(request:Request){
     // Generation never downloads or reparses PDFs; use the explicit admin
     // enrichment process to refresh sources when their parser version changes.
     const pdfMap=new Map(linkedDocs.map(row=>[String(row.fund_id),row]));
+    const monthlyMap=new Map<string,{date:string;label:string;returnPct:number}[]>();
+    for(const point of monthlyPoints){
+      const existing=monthlyMap.get(point.fundId)??[];
+      existing.push({date:point.date,label:point.label,returnPct:point.returnPct});
+      monthlyMap.set(point.fundId,existing);
+    }
     const portfolioReports=data.portfolios.map(p=>{
       const funds:WorkbookProposalFund[]=Object.entries(p.weights)
         .filter(([,weight])=>weight>0)
@@ -131,6 +139,7 @@ export async function POST(request:Request){
             id,name:fund.name,provider:fund.provider,
             weight,allocatedAmount:data.investment*weight/100,
             returns:safeReturns(row.returns),
+            priceHistory:monthlyMap.get(id)??[],
             factsheet:{
               filename:pdfFilename,title:short(pdf?.title,160),date:short(pdf?.asOf,50),
               objective:short(pdf?.objective,1200),strategy:short(pdf?.strategy,1200),

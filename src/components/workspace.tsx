@@ -10,6 +10,7 @@ import {
 import OmegaLogo from "@/components/omega-logo";
 import SecureFundUploads from "@/components/secure-fund-uploads";
 import ProposalPdfViewer from "@/components/proposal-pdf-viewer";
+import FundPriceHistoryChart from "@/components/fund-price-history-chart";
 import { APPROVED_FUND_GROUPS, type ApprovedFund } from "@/lib/approved-funds";
 import type { Portfolio } from "@/lib/types";
 import { fmtEuro, sumWeights } from "@/lib/analytics";
@@ -356,6 +357,7 @@ export default function Workspace() {
             <Stat label="5-year cumulative" value={formatReported(workbookReturns(published[selectedFund.id])?.fiveYear)} />
             <Stat label="10-year cumulative" value={formatReported(workbookReturns(published[selectedFund.id])?.tenYear)} />
           </div>
+          <FundPriceHistoryChart fundId={selectedFund.id}/>
           {published[selectedFund.id].extracted_factsheet && <>
             <h3>Original provider factsheet — recorded source</h3>
             <p><strong>Fund title:</strong> {published[selectedFund.id].extracted_factsheet?.title??"Not extracted"}</p>

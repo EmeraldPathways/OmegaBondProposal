@@ -124,7 +124,7 @@ export default function SecureFundUploads() {
       <div>
         <span className="eyebrow">PRIVATE FUND DATABASE</span>
         <h1>Upload fund documents</h1>
-        <p>Start fresh with the corrected XLSX workbook defining the 107 fund names and percentage returns, then upload the new PDF factsheets for automatic identity matching.</p>
+        <p>Upload a monthly XLSX workbook containing FUNDS, PRICES and provider performance tabs. Existing PDF factsheets remain stored for proposal exports.</p>
       </div>
       <span className="soft-pill"><FolderLock size={14} /> Private storage</span>
     </div>
@@ -145,13 +145,13 @@ export default function SecureFundUploads() {
 
       <section className="panel padded">
         <div className="section-icon" style={{ width: "fit-content" }}><FileSpreadsheet size={20} /></div>
-        <h2 style={{ marginTop: 18 }}>Updated performance workbook — upload first</h2>
-        <p className="muted">Required first: upload the corrected 107-fund XLSX workbook. Its FUNDS tab defines all fund names; its provider tabs contain every displayed performance return. Old PDF returns are not used.</p>
+        <h2 style={{ marginTop: 18 }}>Monthly workbook update</h2>
+        <p className="muted">Upload the current 107-fund XLSX workbook. Its FUNDS tab defines all fund names; its provider tabs contain every displayed performance return. Old PDF returns are not used.</p>
         <input ref={perfInput} hidden type="file" accept=".xlsx,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
           aria-label="Select fund performance workbook" onChange={e => void uploadFiles(e.currentTarget.files, "performance")} />
         <button type="button" className="dropzone" disabled={busy} onClick={() => perfInput.current?.click()}>
           {busy ? <LoaderCircle size={28} className="pdf-spin" /> : <FileSpreadsheet size={29} />}
-          <b>{busy ? "Uploading workbook..." : "Select Excel or CSV file"}</b>
+          <b>{busy ? "Uploading workbook..." : "Select monthly Excel workbook"}</b>
           <small>XLSX or CSV • maximum 3.5 MB</small>
         </button>
         <p className="fineprint">{performance} performance file{performance === 1 ? "" : "s"} recorded.</p>
