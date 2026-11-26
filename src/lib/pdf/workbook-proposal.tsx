@@ -47,10 +47,9 @@ const color={
 const style=StyleSheet.create({
   page:{backgroundColor:color.white,paddingTop:38,paddingBottom:53,paddingHorizontal:40,
     fontFamily:"Helvetica",fontSize:9,color:color.ink},
-  // Reserve the original 50pt banner height in flow while pinning its
-  // artwork to the same physical A4 top margin on each chart page.
-  performancePage:{paddingTop:88},
-  anchoredBanner:{position:"absolute",top:38,left:40,right:40},
+  // Print-safe A4 placement: chart page contents share the same 38pt top
+  // and 40pt side margins regardless of the number of selected funds.
+  chartPageContent:{position:"absolute",top:38,left:40,right:40},
   banner:{backgroundColor:color.wine,borderRadius:7,paddingHorizontal:15,
     height:50,flexDirection:"row",justifyContent:"space-between",alignItems:"center"},
   eyebrow:{fontSize:8,color:color.gold,fontFamily:"Helvetica-Bold",letterSpacing:1.4,marginTop:12},
@@ -111,9 +110,6 @@ function Logo(){
 }
 function Banner(){
   return <View style={style.banner}><Logo/></View>;
-}
-function AnchoredChartBanner(){
-  return <View style={[style.banner,style.anchoredBanner]}><Logo/></View>;
 }
 function Footer(){
   return <View style={style.footer} fixed>
@@ -463,19 +459,21 @@ export default function WorkbookProposalPDF({data}:{data:WorkbookProposalData}){
         .filter(group=>group.some(f=>(f.priceHistory?.length??0)>=2))
         .map((group,chartIndex)=>
           <Page key={p.id+"-monthly-performance-"+chartIndex}
-            size="A4" style={[style.page,style.performancePage]} wrap={false}>
-            <AnchoredChartBanner/>
-            <Text style={[style.eyebrow,{marginTop:11}]}>
-              FIVE-YEAR HISTORICAL PERFORMANCE
-            </Text>
-            <Text style={[style.heading,{marginBottom:4}]}>
-              {p.title} · Fund performance
-            </Text>
-            <FiveYearMonthlyChart funds={group}/>
-            {!isExpandedPortfolio(p.funds.length)?
-              <CompactPortfolioAllocationAndBreakdown
-                funds={group} allFunds={p.funds}
-                totalInvestment={data.investment} dense={group.length>4}/>:null}
+            size="A4" style={style.page} wrap={false}>
+            <View style={style.chartPageContent} wrap={false}>
+              <Banner/>
+              <Text style={[style.eyebrow,{marginTop:11}]}>
+                FIVE-YEAR HISTORICAL PERFORMANCE
+              </Text>
+              <Text style={[style.heading,{marginBottom:4}]}>
+                {p.title} · Fund performance
+              </Text>
+              <FiveYearMonthlyChart funds={group}/>
+              {!isExpandedPortfolio(p.funds.length)?
+                <CompactPortfolioAllocationAndBreakdown
+                  funds={group} allFunds={p.funds}
+                  totalInvestment={data.investment} dense={group.length>4}/>:null}
+            </View>
             <Footer/>
           </Page>
         )
