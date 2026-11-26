@@ -61,7 +61,8 @@ test("three-fund proposal restores the chart to page 2 and retains full-width fu
   assert.equal(sample.pages,3,"Cover, performance charts, three full-width fund cards");
   assert.match(sample.texts[0],/Fund allocations and reported cumulative returns/);
   assert.match(sample.texts[1],/Five-year fund performance/);
-  assert.match(sample.texts[1],/Initial investment breakdown/);
+  assert.match(sample.texts[1],/Amount breakdown/);
+  assert.ok(!sample.texts[1].includes("Initial investment breakdown"));
   for(let i=0;i<3;i++){
     assert.ok(sample.texts[1].includes(history.funds[i].name),
       "The chart legend should identify "+history.funds[i].name);

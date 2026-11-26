@@ -196,10 +196,10 @@ function CompactPortfolioAllocationAndBreakdown({
     }}>
       <Text style={{
         fontFamily:"Times-Roman",fontSize:14,color:color.wine,marginBottom:8
-      }}>Initial investment breakdown</Text>
+      }}>Amount breakdown</Text>
       <View style={{flexDirection:"row",justifyContent:"space-between",
         backgroundColor:color.pale,padding:7,marginBottom:dense?5:9}}>
-        <Text style={{fontSize:8,fontFamily:"Helvetica-Bold"}}>Total initial investment</Text>
+        <Text style={{fontSize:8,fontFamily:"Helvetica-Bold"}}>Total amount</Text>
         <Text style={{fontSize:9,fontFamily:"Helvetica-Bold",color:color.wine}}>
           {euro(totalInvestment)}
         </Text>
@@ -366,7 +366,7 @@ export default function WorkbookProposalPDF({data}:{data:WorkbookProposalData}){
       }]}>{proposalTitle}</Text>
       <View style={style.hero} wrap={false}>
         <View style={{width:"31%"}}>
-          <Text style={[style.fieldLabel,{fontSize:7.3,marginBottom:3}]}>Initial investment</Text>
+          <Text style={[style.fieldLabel,{fontSize:7.3,marginBottom:3}]}>Amount</Text>
           <Text style={[style.investment,{fontSize:20,marginBottom:0}]}>{euro(data.investment)}</Text>
         </View>
         <View style={{width:"66%",gap:7}}>

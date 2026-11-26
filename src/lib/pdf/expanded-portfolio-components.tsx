@@ -17,7 +17,7 @@ export function ExtendedFundInvestmentBreakdown({funds}:{
     borderRadius:8,padding:15,backgroundColor:"#FDFDFC"
   }} wrap={false}>
     <Text style={{fontFamily:"Times-Roman",fontSize:15.5,
-      color:color.wine,marginBottom:11}}>Initial investment breakdown</Text>
+      color:color.wine,marginBottom:11}}>Amount breakdown</Text>
     <View style={{flexDirection:"row",gap:16}}>
       {[funds.slice(0,midpoint),funds.slice(midpoint)].map((items,column)=>
         <View key={column} style={{width:"48%"}}>

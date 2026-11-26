@@ -85,7 +85,8 @@ test("five-fund reference format stays exactly four pages: cover/chart/3+2",asyn
   assert.match(pages[0],/Fund allocations and reported cumulative returns/);
   assert.match(pages[1],/Five-year fund performance/);
   assert.match(pages[1],/Portfolio allocation/);
-  assert.match(pages[1],/Initial investment breakdown/);
+  assert.match(pages[1],/Amount breakdown/);
+  assert.ok(!pages[1].includes("Initial investment breakdown"));
   for(let i=0;i<3;i++)assert.ok(pages[2].includes(funds[i].name));
   for(let i=3;i<5;i++)assert.ok(pages[3].includes(funds[i].name));
 });
@@ -99,7 +100,7 @@ for(let n=6;n<=10;n++){
       "Extended cover should not contain a partial returns table");
     assert.match(pages[0],/Portfolio allocation/);
     assert.match(pages[1],/Fund allocations and reported cumulative returns/);
-    assert.match(pages[1],/Initial investment breakdown/);
+    assert.match(pages[1],/Amount breakdown/);
     assert.ok(pages[1].includes("10 YEARS"));
     for(const fund of funds){
       assert.ok(pages[0].includes(fund.name),

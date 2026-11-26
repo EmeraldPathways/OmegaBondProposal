@@ -56,13 +56,14 @@ test("A4 PDF can render uploaded-workbook returns and PDF factsheet metadata wit
     const coverText=await coverPage.getTextContent();
     const cover=coverText.items.map(item=>"str" in item?item.str:"").join(" ");
     for(const heading of [
-      "Initial investment","Prepared for","Prepared by",
+      "Amount","Prepared for","Prepared by",
       "Portfolio options","Selected funds","Objective",
       "Portfolio allocation",
       "Fund allocations and reported cumulative returns","10 YEARS",
       "Aviva Fixed ESG 60 Series 1","Zurich International Equity"
     ])assert.ok(cover.includes(heading),
       "First A4 page must contain "+heading);
+    assert.ok(!cover.includes("Initial investment"),"PDF must use Amount, not the old label.");
     const labelY=(label:string)=>{
       const match=coverText.items.find(item=>"str" in item&&item.str===label);
       assert.ok(match&&"transform" in match,
@@ -71,8 +72,8 @@ test("A4 PDF can render uploaded-workbook returns and PDF factsheet metadata wit
     };
     // The cover's metadata moves to a compact two-row layout beside
     // the investment amount rather than a large vertical hero.
-    assert.ok(labelY("Initial investment")-labelY("Selected funds")<50,
-      "Initial investment panel must be vertically compact");
+    assert.ok(labelY("Amount")-labelY("Selected funds")<50,
+      "Amount panel must be vertically compact");
     const detailsPage=await pdfDocument.getPage(2);
     const extracted=await detailsPage.getTextContent();
     const details=extracted.items.map(item=>"str" in item?item.str:"").join(" ");
@@ -120,7 +121,7 @@ test("multi-portfolio PDF has one cover and one detail page per three-fund portf
     const text=await coverPage.getTextContent();
     const cover=text.items.map(item=>"str" in item?item.str:"").join(" ");
     for(const label of ["Portfolio A","Portfolio B","Portfolio C",
-      "Initial investment","Fund allocations and reported cumulative returns"])
+      "Amount","Fund allocations and reported cumulative returns"])
       assert.ok(cover.includes(label),"Cover is missing "+label);
   }finally{
     const disposable=document as unknown as {destroy?:()=>Promise<void>};
