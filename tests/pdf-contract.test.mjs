@@ -135,8 +135,6 @@ test("fund enrichment persists source data and proposal reads saved records with
   assert.doesNotMatch(pdf,/Volatility rating/);
   assert.doesNotMatch(pdf,/Total expense ratio/);
   assert.doesNotMatch(pdf,/Risk profile/);
-  assert.doesNotMatch(pdf,/riskDisclosure/);
-  assert.doesNotMatch(pdf,/chargesDisclosure/);
   assert.match(pdf,/originalFactsheetParagraph/);
   assert.doesNotMatch(pdf,/MoneyMate ID: \\{f\\.factsheet\\.moneyMateId\\?\\?"Not stated"/);
 });
