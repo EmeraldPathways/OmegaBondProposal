@@ -140,3 +140,27 @@ test("fund enrichment persists source data and proposal reads saved records with
   assert.match(pdf,/chargesDisclosure/);
   assert.doesNotMatch(pdf,/MoneyMate ID: \\{f\\.factsheet\\.moneyMateId\\?\\?"Not stated"/);
 });
+
+test("PDF branding has logo-only headers, an introduction cover, and no static footer label",()=>{
+  const pdf=read("src/lib/pdf/workbook-proposal.tsx");
+  const chart=read("src/lib/pdf/five-year-monthly-chart.tsx");
+  const form=read("src/components/workspace.tsx");
+  const api=read("src/app/api/proposal/pdf/route.ts");
+  const viewer=read("src/components/proposal-pdf-viewer.tsx");
+  assert.match(pdf,/function Banner\(\)/);
+  assert.match(pdf,/style=\{style\.banner\}><Logo\/>/);
+  assert.doesNotMatch(pdf,/<Banner label=/);
+  assert.doesNotMatch(pdf,/bannerLabel:/);
+  assert.doesNotMatch(pdf,/<Text style=\{style\.footerText\}>INVESTMENT BOND PROPOSAL/);
+  assert.match(pdf,/<Text style=\{style\.eyebrow\}>INTRODUCTION<\/Text>/);
+  assert.match(pdf,/hyphenationCallback=\{word=>\[word\]\}/);
+  assert.match(pdf,/\{proposalTitle\}<\/Text>/);
+  assert.doesNotMatch(pdf,/Prepared \{data\.preparedDate\}/);
+  assert.match(form,/htmlFor="proposaltitle"/);
+  assert.match(form,/proposalTitle:proposalTitle\.trim\(\)/);
+  assert.match(viewer,/proposalTitle:string/);
+  assert.match(api,/proposalTitle:z\.string/);
+  assert.match(api,/proposalTitle:data\.proposalTitle/);
+  assert.match(chart,/flexDirection:"row",alignItems:"baseline"/);
+  assert.doesNotMatch(chart,/Source: the current monthly workbook PRICES tab/);
+});

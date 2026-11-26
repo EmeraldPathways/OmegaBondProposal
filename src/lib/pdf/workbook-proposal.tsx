@@ -35,6 +35,7 @@ export type WorkbookProposalPortfolio = {
   id:string;title:string;description:string;funds:WorkbookProposalFund[];
 };
 export type WorkbookProposalData = {
+  proposalTitle?:string;
   client:string;adviser:string;objective:string;investment:number;
   workbookFilename:string;preparedDate:string;
   portfolios:WorkbookProposalPortfolio[];
@@ -48,7 +49,6 @@ const style=StyleSheet.create({
     fontFamily:"Helvetica",fontSize:9,color:color.ink},
   banner:{backgroundColor:color.wine,borderRadius:7,paddingHorizontal:15,
     height:50,flexDirection:"row",justifyContent:"space-between",alignItems:"center"},
-  bannerLabel:{fontFamily:"Helvetica-Bold",fontSize:8,color:color.white,letterSpacing:.7},
   eyebrow:{fontSize:8,color:color.gold,fontFamily:"Helvetica-Bold",letterSpacing:1.4,marginTop:12},
   title:{fontFamily:"Times-Roman",fontSize:27,color:color.wine,marginTop:5,marginBottom:4},
   heading:{fontFamily:"Times-Roman",fontSize:18,color:color.wine,marginBottom:10},
@@ -105,13 +105,12 @@ function Logo(){
     {OMEGA_LOGO_PATHS.map((d,i)=><Path key={i} d={d} fill="#FFFFFF" fillRule="evenodd"/>)}
   </Svg>;
 }
-function Banner({label}:{label:string}){
-  return <View style={style.banner}><Logo/><Text style={style.bannerLabel}>{label}</Text></View>;
+function Banner(){
+  return <View style={style.banner}><Logo/></View>;
 }
 function Footer(){
   return <View style={style.footer} fixed>
     <Text style={style.footerText}>OFM Financial Ltd T/A Omega Financial Management · regulated by the Central Bank of Ireland</Text>
-    <Text style={style.footerText}>INVESTMENT BOND PROPOSAL</Text>
   </View>;
 }
 
@@ -353,14 +352,18 @@ function FundAllocationReturnsTable({funds,dense}:{
   </View>;
 }
 export default function WorkbookProposalPDF({data}:{data:WorkbookProposalData}){
-  return <Document title="Omega Investment Bond Proposal"
+  const proposalTitle=data.proposalTitle?.trim()||"Investment bond proposal";
+  return <Document title={proposalTitle}
     author="Omega Financial Management"
-    subject="Investment bond proposal and selected portfolio allocations" language="en-IE">
+    subject={proposalTitle+" and selected portfolio allocations"} language="en-IE">
     <Page size="A4" style={style.page}>
-      <Banner label="INVESTMENT BOND PROPOSAL"/>
-      <Text style={style.eyebrow}>INVESTMENT BOND & PORTFOLIO ALLOCATION</Text>
-      <Text style={style.title}>Investment bond proposal</Text>
-      <Text style={style.subtitle}>Prepared {data.preparedDate}</Text>
+      <Banner/>
+      <Text style={style.eyebrow}>INTRODUCTION</Text>
+      <Text hyphenationCallback={word=>[word]} style={[style.title,{
+        fontSize:proposalTitle.length>85?20:proposalTitle.length>53?24:29,
+        lineHeight:1.13,
+        marginBottom:12
+      }]}>{proposalTitle}</Text>
       <View style={style.hero} wrap={false}>
         <View style={{width:"31%"}}>
           <Text style={[style.fieldLabel,{fontSize:7.3,marginBottom:3}]}>Initial investment</Text>
@@ -417,7 +420,7 @@ export default function WorkbookProposalPDF({data}:{data:WorkbookProposalData}){
       isExpandedPortfolio(p.funds.length)?[
         <Page key={p.id+"-expanded-allocations"} size="A4"
           style={style.page} wrap={false}>
-          <Banner label={"PORTFOLIO "+String.fromCharCode(65+index)+" · ALLOCATIONS"}/>
+          <Banner/>
           <Text style={[style.eyebrow,{marginTop:12}]}>PORTFOLIO ALLOCATION & RETURNS</Text>
           <Text style={[style.heading,{marginBottom:5}]}>
             {p.title} · All selected funds
@@ -436,7 +439,7 @@ export default function WorkbookProposalPDF({data}:{data:WorkbookProposalData}){
       )).map((group,groupIndex)=>
         <Page key={p.id+"-allocation-continuation-"+groupIndex}
           size="A4" style={style.page} wrap={false}>
-          <Banner label={"PORTFOLIO "+String.fromCharCode(65+index)+" · ALLOCATIONS"}/>
+          <Banner/>
           <Text style={[style.heading,{marginTop:11,marginBottom:4}]}>
             {p.title} · Remaining fund allocations
           </Text>
@@ -454,7 +457,7 @@ export default function WorkbookProposalPDF({data}:{data:WorkbookProposalData}){
         .map((group,chartIndex)=>
           <Page key={p.id+"-monthly-performance-"+chartIndex}
             size="A4" style={style.page} wrap={false}>
-            <Banner label={"PORTFOLIO "+String.fromCharCode(65+index)+" · PERFORMANCE"}/>
+            <Banner/>
             <Text style={[style.eyebrow,{marginTop:11}]}>
               FIVE-YEAR HISTORICAL PERFORMANCE
             </Text>
@@ -480,7 +483,7 @@ export default function WorkbookProposalPDF({data}:{data:WorkbookProposalData}){
         .map((group,pageIndex,pages)=>
       <Page key={p.id+"-factsheets-"+pageIndex} size="A4"
         style={style.page} wrap={false}>
-        <Banner label={"PORTFOLIO "+String.fromCharCode(65+index)+" · FUND DETAILS"}/>
+        <Banner/>
         <Text style={[style.eyebrow,{marginTop:9}]}>FUND INFORMATION</Text>
         <Text style={[style.heading,{marginBottom:3,fontSize:16}]}>
           {p.title} · Fund details

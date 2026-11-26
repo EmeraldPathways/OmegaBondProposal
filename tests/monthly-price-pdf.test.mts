@@ -25,7 +25,7 @@ const card={filename:"Official.pdf",title:null,date:"24 November 2026",
   description:null,strategy:"Index and active holdings.",
   moneyMateId:null,baseCurrency:"EUR",riskRating:3,amcPct:null,civPct:null,
   chartPages:[]};
-async function renderCount(n:number){
+async function renderCount(n:number,proposalTitle?:string){
   const funds=history.funds.slice(0,n).map((f,i)=>({
     id:f.fundId,name:f.name,provider:f.provider,
     weight:i===n-1?100-Math.floor(100/n)*(n-1):Math.floor(100/n),
@@ -33,6 +33,7 @@ async function renderCount(n:number){
     returns,priceHistory:f.points,factsheet:card
   }));
   const data:WorkbookProposalData={
+    proposalTitle,
     client:"Test Client",adviser:"Omega Financial",objective:"Long-term growth",
     investment:100000,workbookFilename:"Monthly workbook",preparedDate:"24 November 2026",
     portfolios:[{id:"a",title:"Proposed Portfolio",description:"Sample",funds}]
@@ -40,12 +41,20 @@ async function renderCount(n:number){
   const bytes=await renderToBuffer(Proposal({data}));
   const doc=await getDocumentProxy(new Uint8Array(bytes));
   const texts:string[]=[];
+  let chartTitleY:number|null=null;
+  let chartPeriodY:number|null=null;
   for(let i=1;i<=doc.numPages;i++){
     const page=await doc.getPage(i);
     const info=await page.getTextContent();
+    for(const item of info.items){
+      if(!("str" in item)||!("transform" in item))continue;
+      if(item.str==="Five-year fund performance")chartTitleY=item.transform[5];
+      if(item.str.startsWith("Reported cumulative returns (%)"))
+        chartPeriodY=item.transform[5];
+    }
     texts.push(info.items.map(item=>"str" in item?item.str:"").join(" "));
   }
-  return {pages:doc.numPages,texts};
+  return {pages:doc.numPages,texts,chartTitleY,chartPeriodY};
 }
 test("three-fund proposal restores the chart to page 2 and retains full-width fund details",async()=>{
   const sample=await renderCount(3);
@@ -88,4 +97,36 @@ test("eight selected funds use dedicated allocations, two chart pages and 3+3+2 
   for(let i=0;i<8;i++)
     assert.ok(sample.texts[Math.floor(i/3)+4].includes(history.funds[i].name),
       "Missing details for "+history.funds[i].name);
+});
+
+
+test("PDF accepts a custom proposal title and removes repeated header/footer and cover date",async()=>{
+  const customTitle="Private Client Investment Strategy and Fund Recommendations";
+  const sample=await renderCount(5,customTitle);
+  assert.equal(sample.pages,4,"Custom title should preserve five-fund pagination");
+  const text=sample.texts[0].replace(/-\s+(?=[A-Za-z])/g,"");
+  assert.ok(text.includes(customTitle),"Cover must use typed title");
+  assert.match(sample.texts[0],/I N T R O D U C T I O N/,
+    "Cover eyebrow must read INTRODUCTION");
+  assert.ok(!sample.texts[0].includes("INVESTMENT BOND & PORTFOLIO ALLOCATION"));
+  assert.ok(!sample.texts[0].includes("Prepared 24 November 2026"));
+  for(const [i,page] of sample.texts.entries()){
+    assert.ok(!page.includes("INVESTMENT BOND PROPOSAL"),
+      "Remove fixed proposal label from every header/footer, page "+(i+1));
+    assert.ok(!page.includes("Source: the current monthly workbook PRICES tab."),
+      "Do not print workbook source disclaimer on chart pages");
+  }
+  assert.match(sample.texts[1],/Five-year fund performance/);
+  assert.match(sample.texts[1],/Reported cumulative returns \(%\)/);
+  assert.ok(sample.chartTitleY!==null&&sample.chartPeriodY!==null);
+  assert.ok(Math.abs(sample.chartTitleY-sample.chartPeriodY)<3,
+    "Reported cumulative returns and the five-year title must share one row");
+});
+
+test("a long custom title wraps without introducing extra pages",async()=>{
+  const title="Personalised Investment Recommendation for Retirement Planning and Long-Term Capital Preservation";
+  const sample=await renderCount(3,title);
+  assert.equal(sample.pages,3);
+  assert.ok(sample.texts[0].replace(/-\s+(?=[A-Za-z])/g,"").includes(title),
+    "Long title should appear completely in the cover PDF");
 });

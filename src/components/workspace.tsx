@@ -98,6 +98,7 @@ export default function Workspace() {
     if(!funds.some(f=>f.id===addFundId))setAddFundId(funds[0]?.id??"");
   },[funds,addFundId]);
   const [investment, setInvestment] = useState(490000);
+  const [proposalTitle,setProposalTitle]=useState("Investment bond proposal");
   const [client, setClient] = useState("");
   const [adviser, setAdviser] = useState("Omega Financial Management");
   const [objective, setObjective] = useState("Review diversified investment options in line with the client's objectives and risk profile.");
@@ -300,11 +301,15 @@ export default function Workspace() {
         </>}
 
         {view === "proposal" && <>
-          <div className="page-heading"><div><span className="eyebrow">CLIENT DOCUMENTS</span><h1>Investment bond proposal</h1>
+          <div className="page-heading"><div><span className="eyebrow">CLIENT DOCUMENTS</span><h1>{proposalTitle.trim()||"Investment bond proposal"}</h1>
             <p>Generate an A4 Omega-branded proposal using allocations from Portfolio builder, cumulative returns from the current workbook and supporting information extracted from each linked PDF.</p></div>
           </div>
           <section className="panel padded">
             <span className="eyebrow">PROPOSAL DETAILS</span>
+            <label className="form-label" htmlFor="proposaltitle">Proposal title</label>
+            <input id="proposaltitle" className="form-input" maxLength={120}
+              value={proposalTitle} onChange={e=>setProposalTitle(e.target.value)}
+              placeholder="Investment bond proposal"/>
             <label className="form-label" htmlFor="clientname">Client name</label>
             <input id="clientname" className="form-input" maxLength={120} value={client}
               placeholder="Client name (optional for internal drafts)" onChange={e=>setClient(e.target.value)}/>
@@ -336,6 +341,7 @@ export default function Workspace() {
             {!readyForProposal&&<p className="fineprint">The live PDF preview becomes available when at least one selected portfolio has a 100% allocation and every selected fund has a current workbook return row and exact PDF filename match.</p>}
           </section>
           {readyForProposal&&<ProposalPdfViewer input={{
+            proposalTitle:proposalTitle.trim()||"Investment bond proposal",
             client,adviser,objective,investment,portfolios:proposalPortfolios
           }}/>}
         </>}

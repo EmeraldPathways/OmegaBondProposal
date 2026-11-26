@@ -53,12 +53,15 @@ export function FiveYearMonthlyChart({funds}:{funds:WorkbookProposalFund[]}){
     backgroundColor:"#FDFDFC",paddingHorizontal:14,paddingTop:11,paddingBottom:12,
     marginTop:10
   }} wrap={false}>
-    <Text style={{fontFamily:"Times-Roman",fontSize:16.5,color:color.wine}}>
-      Five-year fund performance
-    </Text>
-    <Text style={{fontSize:8.4,color:color.muted,marginTop:3,marginBottom:8}}>
-      Reported cumulative returns (%) · {startLabel} – {endLabel}
-    </Text>
+    <View style={{flexDirection:"row",alignItems:"baseline",
+      justifyContent:"space-between",gap:8,marginBottom:8}}>
+      <Text style={{fontFamily:"Times-Roman",fontSize:16.5,color:color.wine}}>
+        Five-year fund performance
+      </Text>
+      <Text style={{fontSize:8.2,color:color.muted}}>
+        Reported cumulative returns (%) · {startLabel} – {endLabel}
+      </Text>
+    </View>
     <Svg width="100%" height={275} viewBox="0 0 505 275">
       <Rect x={plotLeft} y={plotTop} width={plotRight-plotLeft}
         height={plotBottom-plotTop} fill="#FFFFFF" stroke="#E6E4E0"
@@ -101,9 +104,6 @@ export function FiveYearMonthlyChart({funds}:{funds:WorkbookProposalFund[]}){
         </Text>
       </View>)}
     </View>
-    <Text style={{fontSize:7.3,color:color.muted,marginTop:6}}>
-      Source: the current monthly workbook PRICES tab. Lines follow reported
-      monthly observations; unavailable periods are not estimated.
-    </Text>
+
   </View>;
 }

@@ -5,6 +5,7 @@ import {ArrowDownToLine,FileText,RefreshCw,ShieldCheck} from "lucide-react";
 import type {Portfolio} from "@/lib/types";
 
 export type WorkbookProposalInput={
+  proposalTitle:string;
   client:string;adviser:string;objective:string;investment:number;
   portfolios:Portfolio[];
 };

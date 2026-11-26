@@ -22,6 +22,7 @@ const portfolio=z.object({
   weights:z.record(z.number().finite().min(0).max(100))
 });
 const payload=z.object({
+  proposalTitle:z.string().trim().min(1).max(120).default("Investment bond proposal"),
   client:z.string().trim().max(120).default(""),
   adviser:z.string().trim().min(1).max(120),
   objective:z.string().trim().min(1).max(600),
@@ -168,6 +169,7 @@ export async function POST(request:Request){
       return {id:p.id,title:p.title,description:p.description,funds};
     });
     const report:WorkbookProposalData={
+      proposalTitle:data.proposalTitle,
       client:data.client,adviser:data.adviser,objective:data.objective,
       investment:data.investment,workbookFilename:String(source[0].filename),
       preparedDate:new Intl.DateTimeFormat("en-IE",{
