@@ -411,7 +411,7 @@ export default function Workspace() {
                 <SlidersHorizontal size={16}/> Edit portfolio allocations
               </button>
             </div>
-            {!readyForProposal&&<p className="notice neutral" role="status">{pdfBlockReason}</p>
+            {!readyForProposal&&<p className="notice neutral" role="status">{pdfBlockReason}</p>}
           </section>
           {readyForProposal&&<ProposalPdfViewer input={{
             proposalTitle:proposalTitle.trim()||"Investment bond proposal",
