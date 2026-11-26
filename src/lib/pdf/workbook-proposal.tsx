@@ -49,7 +49,7 @@ const style=StyleSheet.create({
     fontFamily:"Helvetica",fontSize:9,color:color.ink},
   // Print-safe A4 placement: chart page contents share the same 38pt top
   // and 40pt side margins regardless of the number of selected funds.
-  chartPageContent:{position:"absolute",top:38,left:40,right:40},
+  chartPageContent:{position:"absolute",top:38,left:40,width:515,height:725},
   banner:{backgroundColor:color.wine,borderRadius:7,paddingHorizontal:15,
     height:50,flexDirection:"row",justifyContent:"space-between",alignItems:"center"},
   eyebrow:{fontSize:8,color:color.gold,fontFamily:"Helvetica-Bold",letterSpacing:1.4,marginTop:12},
