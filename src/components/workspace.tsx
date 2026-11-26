@@ -331,7 +331,7 @@ export default function Workspace() {
               placeholder="Client name (optional for internal drafts)" onChange={e=>setClient(e.target.value)}/>
             <label className="form-label" htmlFor="advisername">Prepared by</label>
             <input id="advisername" className="form-input" maxLength={120} value={adviser} onChange={e=>setAdviser(e.target.value)}/>
-            <label className="form-label" htmlFor="objective">Investment objective</label>
+            <label className="form-label" htmlFor="objective">Objective</label>
             <textarea id="objective" className="form-input textarea" rows={2} maxLength={600} value={objective} onChange={e=>setObjective(e.target.value)}/>
             <label className="form-label" style={{marginTop:18}}>Portfolios to include</label>
             <div className="portfolio-card-grid">

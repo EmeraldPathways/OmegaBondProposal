@@ -393,7 +393,7 @@ export default function WorkbookProposalPDF({data}:{data:WorkbookProposalData}){
         </View>
       </View>
       <View style={style.box}>
-        <Text style={style.section}>Investment objective</Text>
+        <Text style={style.section}>Objective</Text>
         <Text style={style.p}>{data.objective}</Text>
       </View>
       {data.portfolios.length===1&&data.portfolios[0].funds.length<=10?<CoverPortfolioAllocation
