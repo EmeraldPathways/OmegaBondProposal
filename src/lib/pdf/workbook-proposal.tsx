@@ -5,6 +5,10 @@ import {firstPageFundLimit,paginateFundDetails,fundCardNarrative,abbreviateWords
 import {chartFundGroups} from "@/lib/pdf/cumulative-return-chart";
 import type {PriceHistoryPoint} from "@/lib/reconciliation/monthly-prices";
 import {FiveYearMonthlyChart,CHART_COLORS} from "@/lib/pdf/five-year-monthly-chart";
+import {ExtendedFundInvestmentBreakdown,ExtendedChartFundSummary} from "@/lib/pdf/expanded-portfolio-components";
+import {isExpandedPortfolio,splitPerformanceFundGroups,
+  paginateExpandedFundDetails,fundDetailPageOffsets}
+  from "@/lib/pdf/adaptive-fund-layout";
 
 export type WorkbookReturnPeriods = Record<
   "ytd"|"oneMonth"|"threeMonth"|"sixMonth"|"oneYear"|"threeYear"|"fiveYear"|"tenYear"|"sinceLaunch",
@@ -222,8 +226,9 @@ function CoverPortfolioAllocation({portfolio,multiple}:{
   portfolio:WorkbookProposalPortfolio;multiple:boolean
 }){
   const funds=portfolio.funds;
-  const shown=funds.slice(0,multiple?6:9);
-  const size=multiple?84:109;
+  const expanded=isExpandedPortfolio(funds.length);
+  const shown=funds.slice(0,expanded?funds.length:multiple?6:9);
+  const size=expanded?160:multiple?84:109;
   const paths:{id:string;d:string;color:string}[]=[];
   let cumulative=0;
   funds.forEach((fund,i)=>{
@@ -237,14 +242,16 @@ function CoverPortfolioAllocation({portfolio,multiple}:{
   const percentageAllocated=funds.reduce((total,f)=>total+f.weight,0);
   return <View style={{
     borderWidth:.7,borderColor:color.border,borderRadius:7,
-    paddingHorizontal:12,paddingVertical:multiple?8:11,
-    marginTop:multiple?8:12,backgroundColor:"#FDFDFC"
+    paddingHorizontal:expanded?18:12,
+    paddingVertical:expanded?18:multiple?8:11,
+    marginTop:expanded?20:multiple?8:12,backgroundColor:"#FDFDFC"
   }} wrap={false}>
-    <Text style={{fontFamily:"Times-Roman",fontSize:multiple?13.3:16,
-      color:color.wine,marginBottom:multiple?3:8}}>
+    <Text style={{fontFamily:"Times-Roman",
+      fontSize:expanded?19:multiple?13.3:16,
+      color:color.wine,marginBottom:expanded?13:multiple?3:8}}>
       {multiple?"Portfolio allocation · "+portfolio.title:"Portfolio allocation"}
     </Text>
-    <View style={{flexDirection:"row",alignItems:"center",gap:15}}>
+    <View style={{flexDirection:"row",alignItems:"center",gap:expanded?22:15}}>
       <View style={{width:size,height:size,position:"relative"}}>
         <Svg width={size} height={size} viewBox="0 0 164 164">
           {funds.length===1?<Circle cx={82} cy={82} r={60}
@@ -253,14 +260,17 @@ function CoverPortfolioAllocation({portfolio,multiple}:{
           <Circle cx={82} cy={82} r={43} fill="#FFFFFF"/>
         </Svg>
         <View style={{
-          position:"absolute",top:multiple?31:40,left:multiple?11:16,
-          width:multiple?62:77,alignItems:"center"
+          position:"absolute",
+          top:expanded?59:multiple?31:40,
+          left:expanded?29:multiple?11:16,
+          width:expanded?102:multiple?62:77,alignItems:"center"
         }}>
           <Text style={{fontFamily:"Helvetica-Bold",
-            fontSize:multiple?13:17,color:color.wine}}>
+            fontSize:expanded?24:multiple?13:17,color:color.wine}}>
             {percentageAllocated.toFixed(0)}%
           </Text>
-          <Text style={{fontSize:multiple?6:7,color:color.muted}}>allocated</Text>
+          <Text style={{fontSize:expanded?8:multiple?6:7,
+            color:color.muted}}>allocated</Text>
         </View>
       </View>
       <View style={{flex:1}}>
@@ -268,17 +278,17 @@ function CoverPortfolioAllocation({portfolio,multiple}:{
           const position=funds.findIndex(item=>item.id===f.id);
           return <View key={f.id} style={{
             flexDirection:"row",alignItems:"flex-start",gap:7,
-            marginBottom:multiple?3:5
+            marginBottom:expanded?9:multiple?3:5
           }}>
             <View style={{width:8,height:8,borderRadius:2,marginTop:2,
               backgroundColor:CHART_COLORS[position%CHART_COLORS.length]}}/>
             <Text style={{
-              flex:1,fontSize:multiple?7:8.2,
-              color:color.ink,lineHeight:1.3
+              flex:1,fontSize:expanded?9:multiple?7:8.2,
+              color:color.ink,lineHeight:1.34
             }}>{f.name}</Text>
             <Text style={{
-              fontFamily:"Helvetica-Bold",fontSize:multiple?7:8.1,
-              textAlign:"right",width:42
+              fontFamily:"Helvetica-Bold",fontSize:expanded?9:multiple?7:8.1,
+              textAlign:"right",width:expanded?50:42
             }}>{f.weight.toFixed(1)}%</Text>
           </View>;
         })}
@@ -383,9 +393,10 @@ export default function WorkbookProposalPDF({data}:{data:WorkbookProposalData}){
         <Text style={style.section}>Investment objective</Text>
         <Text style={style.p}>{data.objective}</Text>
       </View>
-      {data.portfolios.length===1?<CoverPortfolioAllocation
+      {data.portfolios.length===1&&data.portfolios[0].funds.length<=10?<CoverPortfolioAllocation
         portfolio={data.portfolios[0]} multiple={false}/>:null}
-      {data.portfolios.map(p=><View key={p.id+"-cover-returns"} wrap={false}>
+      {data.portfolios.filter(p=>!isExpandedPortfolio(p.funds.length))
+        .map(p=><View key={p.id+"-cover-returns"} wrap={false}>
         {data.portfolios.length>1?<Text style={{
           fontFamily:"Helvetica-Bold",fontSize:9,color:color.wine,marginTop:9
         }}>{p.title}</Text>:null}
@@ -400,12 +411,29 @@ export default function WorkbookProposalPDF({data}:{data:WorkbookProposalData}){
 
       <Footer/>
     </Page>
+    {/* Extended portfolios reserve a complete page for every selected
+        fund's allocations and all four workbook-return periods. */}
+    {data.portfolios.flatMap((p,index)=>
+      isExpandedPortfolio(p.funds.length)?[
+        <Page key={p.id+"-expanded-allocations"} size="A4"
+          style={style.page} wrap={false}>
+          <Banner label={"PORTFOLIO "+String.fromCharCode(65+index)+" · ALLOCATIONS"}/>
+          <Text style={[style.eyebrow,{marginTop:12}]}>PORTFOLIO ALLOCATION & RETURNS</Text>
+          <Text style={[style.heading,{marginBottom:5}]}>
+            {p.title} · All selected funds
+          </Text>
+          <FundAllocationReturnsTable funds={p.funds} dense={false}/>
+          <ExtendedFundInvestmentBreakdown funds={p.funds}/>
+          <Footer/>
+        </Page>
+      ]:[]
+    )}
     {/* Add allocation-only continuation pages when the first-page table
         cannot fit every selected fund. The redundant overview chart page is removed. */}
     {data.portfolios.flatMap((p,index)=>
-      chartFundGroups(
+      (isExpandedPortfolio(p.funds.length)?[]:chartFundGroups(
         p.funds.slice(firstPageFundLimit(data.portfolios.length)),12
-      ).map((group,groupIndex)=>
+      )).map((group,groupIndex)=>
         <Page key={p.id+"-allocation-continuation-"+groupIndex}
           size="A4" style={style.page} wrap={false}>
           <Banner label={"PORTFOLIO "+String.fromCharCode(65+index)+" · ALLOCATIONS"}/>
@@ -420,7 +448,8 @@ export default function WorkbookProposalPDF({data}:{data:WorkbookProposalData}){
     {/* A dedicated chart page restores legible full-size performance charts.
         It is chart content, not the previously removed redundant overview. */}
     {data.portfolios.flatMap((p,index)=>
-      chartFundGroups(p.funds,8)
+      (isExpandedPortfolio(p.funds.length)?
+        splitPerformanceFundGroups(p.funds):chartFundGroups(p.funds,8))
         .filter(group=>group.some(f=>(f.priceHistory?.length??0)>=2))
         .map((group,chartIndex)=>
           <Page key={p.id+"-monthly-performance-"+chartIndex}
@@ -431,17 +460,24 @@ export default function WorkbookProposalPDF({data}:{data:WorkbookProposalData}){
             </Text>
             <Text style={[style.heading,{marginBottom:4}]}>
               {p.title} · Fund performance
+              {isExpandedPortfolio(p.funds.length)?
+                " ("+(chartIndex+1)+" of "+
+                  splitPerformanceFundGroups(p.funds).length+")":""}
             </Text>
             <FiveYearMonthlyChart funds={group}/>
-            <CompactPortfolioAllocationAndBreakdown
-              funds={group} allFunds={p.funds}
-              totalInvestment={data.investment} dense={group.length>4}/>
+            {isExpandedPortfolio(p.funds.length)?
+              <ExtendedChartFundSummary group={group} portfolio={p}/>:
+              <CompactPortfolioAllocationAndBreakdown
+                funds={group} allFunds={p.funds}
+                totalInvestment={data.investment} dense={group.length>4}/>}
             <Footer/>
           </Page>
         )
     )}
     {data.portfolios.flatMap((p,index)=>
-      paginateFundDetails(p.funds).map((group,pageIndex,pages)=>
+      (isExpandedPortfolio(p.funds.length)?
+        paginateExpandedFundDetails(p.funds):paginateFundDetails(p.funds))
+        .map((group,pageIndex,pages)=>
       <Page key={p.id+"-factsheets-"+pageIndex} size="A4"
         style={style.page} wrap={false}>
         <Banner label={"PORTFOLIO "+String.fromCharCode(65+index)+" · FUND DETAILS"}/>
@@ -451,13 +487,33 @@ export default function WorkbookProposalPDF({data}:{data:WorkbookProposalData}){
         </Text>
         {pages.length>1?<Text style={{
           fontSize:7.5,color:color.muted,marginBottom:2
-        }}>Funds {pageIndex*3+1}–{pageIndex*3+group.length} of {p.funds.length}</Text>:null}
-        {group.map(f=><View key={f.id+"-source"} style={style.sourceCard} wrap={false}>
-          <Text style={style.sourceTitle}>{f.name}</Text>
-          <Text style={style.meta}>
+        }}>Funds {(isExpandedPortfolio(p.funds.length)?
+          fundDetailPageOffsets(pages):pages.map((_,i)=>i*3))[pageIndex]+1}
+          –{(isExpandedPortfolio(p.funds.length)?
+          fundDetailPageOffsets(pages):pages.map((_,i)=>i*3))[pageIndex]+group.length}
+          of {p.funds.length}</Text>:null}
+        {group.map(f=><View key={f.id+"-source"}
+          style={[style.sourceCard,
+            isExpandedPortfolio(p.funds.length)?{
+              height:group.length===2?265:194,
+              paddingVertical:13,paddingHorizontal:14,
+              borderLeftWidth:3,borderLeftColor:color.gold
+            }:{}]}
+          wrap={false}>
+          <Text style={[style.sourceTitle,
+            isExpandedPortfolio(p.funds.length)?{
+              fontSize:11.1,marginBottom:6
+            }:{}]}>{f.name}</Text>
+          <Text style={[style.meta,
+            isExpandedPortfolio(p.funds.length)?{
+              fontSize:8.5,lineHeight:1.45,marginBottom:5
+            }:{}]}>
             {f.provider}{f.factsheet.date?" · As at "+f.factsheet.date:""}
           </Text>
-          <Text style={style.meta}>
+          <Text style={[style.meta,
+            isExpandedPortfolio(p.funds.length)?{
+              fontSize:8.3,lineHeight:1.4,marginBottom:5
+            }:{}]}>
             {abbreviateWords([
               f.factsheet.riskProfile?"Risk profile: "+f.factsheet.riskProfile:
                 f.factsheet.riskRating!=null?
@@ -479,7 +535,10 @@ export default function WorkbookProposalPDF({data}:{data:WorkbookProposalData}){
             ].filter(Boolean).map(String).join(" · "),58)}
           </Text>
           {fundCardNarrative(f.factsheet).map((item,i)=>
-            <Text key={i} style={[style.meta,{marginBottom:3}]}>
+            <Text key={i} style={[style.meta,
+              isExpandedPortfolio(p.funds.length)?{
+                fontSize:8.3,lineHeight:1.5,marginBottom:5
+              }:{marginBottom:3}]}>
               {item.label}: {item.text}
             </Text>)}
         </View>)}

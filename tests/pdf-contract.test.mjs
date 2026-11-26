@@ -106,7 +106,7 @@ test("portfolio PDF skips the redundant overview and preserves overflow allocati
 test("cover contains investment details and the allocation-return table; single portfolio preserves its doughnut",()=>{
   const pdf=read("src/lib/pdf/workbook-proposal.tsx");
   assert.match(pdf,/CoverPortfolioAllocation/);
-  assert.match(pdf,/data\.portfolios\.length===1\?<CoverPortfolioAllocation/);
+  assert.match(pdf,/data\.portfolios\.length===1&&data\.portfolios\[0\]\.funds\.length<=10\?<CoverPortfolioAllocation/);
   assert.match(pdf,/marginTop:8,paddingHorizontal:12,paddingVertical:7/);
   assert.match(pdf,/flexDirection:"row",alignItems:"center",gap:13/);
   assert.doesNotMatch(pdf,/INVESTMENT BOND PROPOSAL\s*\n\s*<\/Text>\s*\n\s*<Text style=\{\[style\.heading/);

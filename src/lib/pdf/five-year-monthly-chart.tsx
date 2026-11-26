@@ -4,7 +4,7 @@ import type {WorkbookProposalFund} from "@/lib/pdf/workbook-proposal";
 import type {PriceHistoryPoint} from "@/lib/reconciliation/monthly-prices";
 
 // Shared palette for the full-size performance chart and portfolio allocation.
-export const CHART_COLORS=["#671E27","#A8995F","#647579","#809485","#AC7471","#9A9C94","#977F70","#76808B"];
+export const CHART_COLORS=["#671E27","#A8995F","#647579","#809485","#AC7471","#9A9C94", "#977F70","#76808B","#B27F68","#526177"];
 const color={wine:"#671E27",muted:"#72766F",border:"#E4E3DE",ink:"#31342F"};
 
 function priceSegments(points:PriceHistoryPoint[]):PriceHistoryPoint[][]{
