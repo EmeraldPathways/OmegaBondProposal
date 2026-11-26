@@ -56,7 +56,7 @@ test("A4 PDF can render uploaded-workbook returns and PDF factsheet metadata wit
     const cover=coverText.items.map(item=>"str" in item?item.str:"").join(" ");
     for(const heading of [
       "Initial investment","Prepared for","Prepared by",
-      "Portfolio options","Selected funds","Investment objective",
+      "Portfolio options","Selected funds","Objective",
       "Portfolio allocation",
       "Fund allocations and reported cumulative returns","10 YEARS",
       "Aviva Fixed ESG 60 Series 1","Zurich International Equity"
