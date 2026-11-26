@@ -14,6 +14,7 @@ import FundPriceHistoryChart from "@/components/fund-price-history-chart";
 import { APPROVED_FUND_GROUPS, type ApprovedFund } from "@/lib/approved-funds";
 import type { Portfolio } from "@/lib/types";
 import { fmtEuro, sumWeights } from "@/lib/analytics";
+import {weightedPublishedPortfolioReturn,type WeightedPublishedReturn} from "@/lib/reconciliation/portfolio-performance";
 
 type View = "funds" | "imports" | "builder" | "compare" | "proposal";
 const NAV: { key: View; label: string; icon: typeof Database }[] = [
@@ -54,6 +55,14 @@ const formatReported=(value:number|null|undefined)=>value==null?"—":(value>0?"
 const workbookReturns = (fund:ReconciledFund|undefined)=>
   fund?.evidence?.displayedReturnsSource==="uploaded_workbook"?
     fund.reported_returns:null;
+function displayWeightedReturn(value:WeightedPublishedReturn,compact=false):string{
+  if(value.status==="available")return formatReported(value.returnPct);
+  if(compact)return "—";
+  if(value.status==="empty")return "No funds selected";
+  if(value.status==="incomplete")return "Incomplete allocation";
+  if(value.status==="incompatible")return "Incompatible sources";
+  return "Insufficient data ("+value.covered+"/"+value.selected+" funds)";
+}
 const prettyFeeBasis=(value:string|undefined)=>({
   gross_of_amc:"Gross of AMC",net_of_amc:"Net of AMC",
   net_of_ter:"Net of fund TER",before_full_policy_amc:"Before full policy AMC",
@@ -92,6 +101,12 @@ export default function Workspace() {
   const [provider, setProvider] = useState("All providers");
   const [selectedFund, setSelectedFund] = useState<ApprovedFund | null>(null);
   const [portfolios, setPortfolios] = useState<Portfolio[]>(INITIAL_PORTFOLIOS);
+  const comparisonReturns=useMemo(()=>portfolios.map(portfolio=>({
+    id:portfolio.id,
+    threeYear:weightedPublishedPortfolioReturn(portfolio,published,"threeYear"),
+    fiveYear:weightedPublishedPortfolioReturn(portfolio,published,"fiveYear"),
+    tenYear:weightedPublishedPortfolioReturn(portfolio,published,"tenYear")
+  })),[portfolios,published]);
   const [activePortfolio, setActivePortfolio] = useState(0);
   const [addFundId, setAddFundId] = useState("");
   useEffect(()=>{
@@ -268,19 +283,20 @@ export default function Workspace() {
 
         {view === "compare" && <>
           <div className="page-heading"><div><span className="eyebrow">PORTFOLIO COMPARISON</span><h1>Compare portfolios</h1>
-            <p>Compare the selected allocations. The workbook provides fund-level cumulative returns, not aligned monthly price observations for calculating historical portfolio performance.</p></div>
+            <p>Compare allocations and indicative weighted fund returns where the same source workbook covers every selected holding.</p></div>
             <button className="btn quiet" onClick={()=>go("builder")}>Edit allocations <ArrowRight size={16}/></button>
           </div>
           <div className="portfolio-card-grid">{portfolios.map(p=>{
             const holdings=Object.entries(p.weights).filter(([id,v])=>v>0 && names.has(id));
             const valid=Math.abs(sumWeights(p)-100)<0.00001;
+            const comparison=comparisonReturns.find(item=>item.id===p.id)!;
             return <div className="portfolio-card" key={p.id}>
               <span className="eyebrow">PORTFOLIO {p.id.toUpperCase()}</span>
               <h2>{p.title}</h2><p>{p.description}</p>
               <div className="portfolio-card-value">{sumWeights(p).toFixed(1)}%</div>
               <small>Allocation total {valid?"— complete":"— incomplete"}</small>
               <div className="portfolio-card-bottom"><span>Selected funds <b>{holdings.length}</b></span>
-                <span>Historical performance <b>Not calculated</b></span></div>
+                <span>Indicative 5-year return <b title={displayWeightedReturn(comparison.fiveYear)}>{displayWeightedReturn(comparison.fiveYear,true)}</b></span></div>
             </div>;
           })}</div>
           <div className="panel table-panel">
@@ -291,12 +307,12 @@ export default function Workspace() {
                 <tr><td>Initial investment</td>{portfolios.map(p=><td key={p.id}>{fmtEuro(investment)}</td>)}</tr>
                 <tr><td>Number of funds</td>{portfolios.map(p=><td key={p.id}>{Object.values(p.weights).filter(v=>v>0).length}</td>)}</tr>
                 <tr><td>Allocation total</td>{portfolios.map(p=><td key={p.id}>{sumWeights(p).toFixed(1)}%</td>)}</tr>
-                <tr><td>3-year published return</td>{portfolios.map(p=><td key={p.id}>Not calculated</td>)}</tr>
-                <tr><td>5-year published return</td>{portfolios.map(p=><td key={p.id}>Not calculated</td>)}</tr>
-                <tr><td>10-year published return</td>{portfolios.map(p=><td key={p.id}>Not calculated</td>)}</tr>
+                <tr><td>3-year weighted return (indicative)</td>{comparisonReturns.map(p=><td key={p.id}>{displayWeightedReturn(p.threeYear)}</td>)}</tr>
+                <tr><td>5-year weighted return (indicative)</td>{comparisonReturns.map(p=><td key={p.id}>{displayWeightedReturn(p.fiveYear)}</td>)}</tr>
+                <tr><td>10-year weighted return (indicative)</td>{comparisonReturns.map(p=><td key={p.id}>{displayWeightedReturn(p.tenYear)}</td>)}</tr>
               </tbody>
             </table></div>
-            <p className="fineprint padded-note">No portfolio return, volatility or value history is calculated from unmatched date/fee conventions. The generated PDF lists the original cumulative returns for each allocated fund.</p>
+            <p className="fineprint padded-note">Displayed percentages are indicative allocation-weighted sums of fund-level cumulative returns from one workbook, not verified historical portfolio returns or unit-price performance. Each selected fund must report the full period. Reporting dates and fees have not been independently verified; additional charges, taxes and rebalancing are not modelled. Do not use these figures as approved client performance.</p>
           </div>
         </>}
 
