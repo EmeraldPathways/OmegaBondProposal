@@ -43,18 +43,21 @@ async function renderCount(n:number,proposalTitle?:string){
   const texts:string[]=[];
   let chartTitleY:number|null=null;
   let chartPeriodY:number|null=null;
+  const chartMarkers:{page:number;label:string;y:number}[]=[];
   for(let i=1;i<=doc.numPages;i++){
     const page=await doc.getPage(i);
     const info=await page.getTextContent();
     for(const item of info.items){
       if(!("str" in item)||!("transform" in item))continue;
       if(item.str==="Five-year fund performance")chartTitleY=item.transform[5];
+      if(/Five.year fund performance|HISTORICAL PERFORMANCE|Fund performance|OFM Financial|Proposed Portfolio/.test(item.str))
+        chartMarkers.push({page:i,label:item.str.slice(0,90),y:item.transform[5]});
       if(item.str.startsWith("Reported cumulative returns (%)"))
         chartPeriodY=item.transform[5];
     }
     texts.push(info.items.map(item=>"str" in item?item.str:"").join(" "));
   }
-  return {pages:doc.numPages,texts,chartTitleY,chartPeriodY};
+  return {pages:doc.numPages,texts,chartTitleY,chartPeriodY,chartMarkers};
 }
 test("three-fund proposal restores the chart to page 2 and retains full-width fund details",async()=>{
   const sample=await renderCount(3);
@@ -134,7 +137,7 @@ test("the dedicated chart header stays at the same A4 top offset on page 2 or pa
   assert.match(nine.texts[2],/Five-year fund performance/);
   assert.ok(five.chartTitleY!==null&&nine.chartTitleY!==null);
   assert.ok(Math.abs(five.chartTitleY-nine.chartTitleY)<1.5,
-    `Chart title moved: page 2 y=${five.chartTitleY}, page 3 y=${nine.chartTitleY}.`);
+    `Chart title moved: page 2 y=${five.chartTitleY}, page 3 y=${nine.chartTitleY}. five markers=${JSON.stringify(five.chartMarkers)} nine markers=${JSON.stringify(nine.chartMarkers)}`);
   assert.ok(nine.chartTitleY>620&&nine.chartTitleY<730,
     "The chart content must stay near the top of the printed A4 sheet.");
 });
