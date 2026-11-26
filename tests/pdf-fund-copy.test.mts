@@ -87,7 +87,7 @@ test("single paragraph preserves original complete factsheet sentences beyond fo
   const result=originalFactsheetParagraph({objective:text,
     description:"Different secondary description."});
   assert.equal(result,text);
-  assert.ok(result.includes("sentence 18."));
+  assert.ok(result.includes("statement 18 is a complete investment sentence."));
   assert.ok(!result.includes("secondary description"));
   assert.ok(!result.includes("…"));
 });
