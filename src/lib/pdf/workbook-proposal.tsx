@@ -109,10 +109,11 @@ function Logo(){
     {OMEGA_LOGO_PATHS.map((d,i)=><Path key={i} d={d} fill="#FFFFFF" fillRule="evenodd"/>)}
   </Svg>;
 }
-function Banner({anchored=false}:{anchored?:boolean}={}){
-  return <View style={anchored?[style.banner,style.anchoredBanner]:style.banner}>
-    <Logo/>
-  </View>;
+function Banner(){
+  return <View style={style.banner}><Logo/></View>;
+}
+function AnchoredChartBanner(){
+  return <View style={[style.banner,style.anchoredBanner]}><Logo/></View>;
 }
 function Footer(){
   return <View style={style.footer} fixed>
@@ -463,7 +464,7 @@ export default function WorkbookProposalPDF({data}:{data:WorkbookProposalData}){
         .map((group,chartIndex)=>
           <Page key={p.id+"-monthly-performance-"+chartIndex}
             size="A4" style={[style.page,style.performancePage]} wrap={false}>
-            <Banner anchored/>
+            <AnchoredChartBanner/>
             <Text style={[style.eyebrow,{marginTop:11}]}>
               FIVE-YEAR HISTORICAL PERFORMANCE
             </Text>
