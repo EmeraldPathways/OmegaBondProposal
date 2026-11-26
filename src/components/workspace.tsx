@@ -18,6 +18,7 @@ import {allocateInvestment,allocationBasisPoints,displayAllocationTotal,
   isAllocationComplete,remainingAllocationPct,validInvestmentAmount,
   weightBasisPoints} from "@/lib/allocation-precision";
 import {weightedPublishedPortfolioReturn,type WeightedPublishedReturn} from "@/lib/reconciliation/portfolio-performance";
+import {getFundRiskRating,riskRatingLabel,RISK_RATING_CAVEAT} from "@/lib/fund-risk-ratings";
 
 type View = "funds" | "imports" | "builder" | "compare" | "proposal";
 const NAV: { key: View; label: string; icon: typeof Database }[] = [
@@ -238,9 +239,10 @@ export default function Workspace() {
               </select><ChevronDown size={15}/></label>
             </div>
             <div className="table-scroll"><table className="data-table">
-              <thead><tr><th>FUND</th><th>PROVIDER</th><th>1 YEAR*</th><th>3 YEARS CUM.*</th><th>5 YEARS CUM.*</th><th>10 YEARS CUM.*</th><th>PERFORMANCE SOURCE</th><th></th></tr></thead>
+              <thead><tr><th>FUND</th><th>PROVIDER</th><th>RISK (1–7)</th><th>1 YEAR*</th><th>3 YEARS CUM.*</th><th>5 YEARS CUM.*</th><th>10 YEARS CUM.*</th><th>PERFORMANCE SOURCE</th><th></th></tr></thead>
               <tbody>{filtered.map(f=><tr key={f.id}>
                 <td><b>{f.name}</b></td><td>{f.provider}</td>
+                <td>{riskRatingLabel(f)}</td>
                 <td>{formatReported(workbookReturns(published[f.id])?.oneYear)}</td>
                 <td>{formatReported(workbookReturns(published[f.id])?.threeYear)}</td>
                 <td>{formatReported(workbookReturns(published[f.id])?.fiveYear)}</td>
@@ -254,7 +256,7 @@ export default function Workspace() {
               </tr>)}</tbody>
             </table>{filtered.length===0 && <div className="empty">No matching funds found.</div>}</div>
           </div>
-          <p className="fineprint">{filtered.length} of {funds.length} approved funds displayed. Unselected funds in the source workbook are intentionally excluded. * Returns come only from the newly uploaded performance workbook, not from older PDFs. All displayed periods, including 3-, 5- and 10-year returns, are cumulative percentages, as confirmed for the workbook; they are not annualised. Reporting dates and charges must still be verified before client use. Differences in reporting dates and charges must be considered; these figures are not yet approved for client proposals.</p>
+          <p className="fineprint">{RISK_RATING_CAVEAT} {filtered.length} of {funds.length} approved funds displayed. Unselected funds in the source workbook are intentionally excluded. * Returns come only from the newly uploaded performance workbook, not from older PDFs. All displayed periods, including 3-, 5- and 10-year returns, are cumulative percentages, as confirmed for the workbook; they are not annualised. Reporting dates and charges must still be verified before client use. Differences in reporting dates and charges must be considered; these figures are not yet approved for client proposals.</p>
         </>}
 
         {view === "imports" && <SecureFundUploads/>}
@@ -296,7 +298,7 @@ export default function Workspace() {
                 const fund=funds.find(f=>f.id===id);
                 if(!fund)return null;
                 return <div className="allocation-row" key={id}>
-                  <div><strong>{fund.name}</strong><small>{fund.provider}</small></div>
+                  <div><strong>{fund.name}</strong><small>{fund.provider} · Risk {riskRatingLabel(fund)}</small></div>
                   <div className="allocation-controls">
                     <DecimalInput className="weight-input" max={100}
                       label={"Allocation for "+fund.name} value={percentage}
@@ -425,6 +427,11 @@ export default function Workspace() {
         <button className="modal-close" aria-label="Close" onClick={()=>setSelectedFund(null)}><X size={20}/></button>
         <span className="eyebrow">OMEGA-APPROVED FUND</span><h2>{selectedFund.name}</h2>
         <p className="muted">{selectedFund.provider}</p>
+        <p><strong>Risk rating (1–7):</strong> {riskRatingLabel(selectedFund)}
+          {getFundRiskRating(selectedFund)?.source&&
+            <small> · {getFundRiskRating(selectedFund)!.source}</small>}
+        </p>
+        <p className="fineprint">{RISK_RATING_CAVEAT}</p>
         {published[selectedFund.id] ? <>
           <p><strong>Performance source:</strong> {workbookReturns(published[selectedFund.id])?"Current workbook + linked PDF":"PDF filename not linked"}</p>
           <p><strong>Workbook returns as of:</strong> {published[selectedFund.id].evidence?.publishedPerformance?.asOf??"Date not provided"} ·

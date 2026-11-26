@@ -2,6 +2,7 @@ import React from "react";
 import {Document,Page,View,Text,StyleSheet,Svg,Path,Circle,Rect,Line} from "@react-pdf/renderer";
 import {OMEGA_LOGO_PATHS} from "@/lib/branding/omega-logo-paths";
 import {firstPageFundLimit,paginateFundDetails,originalFactsheetParagraph} from "@/lib/pdf/fund-detail-layout";
+import {riskRatingLabel,RISK_RATING_CAVEAT} from "@/lib/fund-risk-ratings";
 import {chartFundGroups} from "@/lib/pdf/cumulative-return-chart";
 import type {PriceHistoryPoint} from "@/lib/reconciliation/monthly-prices";
 import {FiveYearMonthlyChart,CHART_COLORS} from "@/lib/pdf/five-year-monthly-chart";
@@ -505,10 +506,16 @@ export default function WorkbookProposalPDF({data}:{data:WorkbookProposalData}){
               borderLeftWidth:3,borderLeftColor:color.gold
             }:{}]}
           wrap={false}>
-          <Text style={[style.sourceTitle,
-            isExpandedPortfolio(p.funds.length)?{
-              fontSize:11.1,marginBottom:6
-            }:{}]}>{f.name}</Text>
+          <View style={{flexDirection:"row",alignItems:"flex-start",justifyContent:"space-between",gap:6}}>
+            <Text style={[style.sourceTitle,{width:"73%"},
+              isExpandedPortfolio(p.funds.length)?{
+                fontSize:11.1,marginBottom:6
+              }:{}]}>{f.name}</Text>
+            <Text style={{width:"25%",textAlign:"right",fontSize:7.8,
+              fontFamily:"Helvetica-Bold",color:color.wine}}>
+              Risk rating: {riskRatingLabel(f)}
+            </Text>
+          </View>
           <Text style={{
             fontSize:8.6,lineHeight:1.52,color:color.ink,marginTop:8
           }}>
@@ -516,6 +523,9 @@ export default function WorkbookProposalPDF({data}:{data:WorkbookProposalData}){
               "A complete fund description is not available in the stored factsheet."}
           </Text>
         </View>)}
+        <Text style={{fontSize:6.6,color:color.muted,marginTop:6,lineHeight:1.35}}>
+          {RISK_RATING_CAVEAT}
+        </Text>
         <Footer/>
       </Page>))}
   </Document>;
