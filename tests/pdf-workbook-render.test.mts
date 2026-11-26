@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {renderToBuffer} from "@react-pdf/renderer";
 import {getDocumentProxy} from "unpdf";
 import WorkbookProposalPDF,{type WorkbookProposalData} from "../src/lib/pdf/workbook-proposal.tsx";
+import {allocateInvestment} from "../src/lib/allocation-precision.ts";
 
 test("A4 PDF can render uploaded-workbook returns and PDF factsheet metadata without price histories",async()=>{
   const data:WorkbookProposalData={
@@ -270,5 +271,44 @@ test("allocation continuation appears only for funds that cannot fit the cover",
   }finally{
     const disposable=doc as unknown as {destroy?:()=>Promise<void>};
     if(typeof disposable.destroy==="function")await disposable.destroy();
+  }
+});
+
+test("nine-fund PDF preserves two-decimal percentages and a cent-accurate high investment",async()=>{
+  const weights=[40.80,5.81,0.76,10,10,10,10,10,2.63];
+  const weightMap=Object.fromEntries(weights.map((weight,i)=>["fund-"+i,weight]));
+  const amounts=allocateInvestment(2_495_955.74,weightMap);
+  const returns={ytd:1,oneMonth:2,threeMonth:3,sixMonth:4,
+    oneYear:5,threeYear:6,fiveYear:7,tenYear:null,sinceLaunch:null};
+  const factsheet={filename:"Source.pdf",title:null,date:"24 Nov 2026",
+    objective:null,strategy:null,moneyMateId:null,baseCurrency:"EUR",
+    riskRating:null,amcPct:null,civPct:null,chartPages:[]};
+  const funds=weights.map((weight,i)=>({
+    id:"fund-"+i,name:"Verified fund "+(i+1),provider:"Aviva",
+    weight,allocatedAmount:amounts["fund-"+i],returns,factsheet
+  }));
+  const data:WorkbookProposalData={
+    proposalTitle:"Portfolio Performance",client:"Client Example",
+    adviser:"Omega Financial Management",objective:"Review the portfolio.",
+    investment:2_495_955.74,workbookFilename:"November workbook",
+    preparedDate:"26 November 2026",
+    portfolios:[{id:"a",title:"Portfolio Performance",description:"Nine holdings",funds}]
+  };
+  const doc=await getDocumentProxy(new Uint8Array(
+    await renderToBuffer(WorkbookProposalPDF({data}))));
+  try{
+    assert.ok(doc.numPages>=4);
+    const cover=(await (await doc.getPage(1)).getTextContent())
+      .items.map(x=>"str" in x?x.str:"").join(" ");
+    const allocations=(await (await doc.getPage(2)).getTextContent())
+      .items.map(x=>"str" in x?x.str:"").join(" ");
+    assert.ok(cover.includes("2,495,955.74"),"Investment cents must appear in PDF");
+    assert.ok(cover.includes("40.80%"),"Cover must preserve hundredth-percent allocations");
+    assert.ok(allocations.includes("5.81%"),"Full fund table must preserve hundredths");
+    for(const fund of funds)assert.ok(allocations.includes(fund.name));
+    assert.equal(Math.round(funds.reduce((sum,f)=>sum+f.allocatedAmount,0)*100),249595574);
+  }finally{
+    const disposable=doc as unknown as {destroy?:()=>Promise<void>};
+    await disposable.destroy?.();
   }
 });

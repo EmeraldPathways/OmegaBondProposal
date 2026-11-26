@@ -1,4 +1,6 @@
 import {renderToBuffer} from "@react-pdf/renderer";
+import {allocateInvestment,isAllocationComplete,validInvestmentAmount}
+  from "@/lib/allocation-precision";
 import {z} from "zod";
 import {auth,ADMIN_EMAIL,isLoginConfigured} from "@/auth";
 import {getNeonSql} from "@/lib/server/neon";
@@ -26,7 +28,8 @@ const payload=z.object({
   client:z.string().trim().max(120).default(""),
   adviser:z.string().trim().min(1).max(120),
   objective:z.string().trim().min(1).max(600),
-  investment:z.number().finite().positive().max(1e9),
+  investment:z.number().finite().positive().max(1e9)
+    .refine(validInvestmentAmount,"Amount must have at most two decimal places."),
   portfolios:z.array(portfolio).min(1).max(3)
 });
 const periods=[
@@ -70,9 +73,8 @@ export async function POST(request:Request){
   const requestedIds=new Set<string>();
   for(const p of data.portfolios){
     const allocations=Object.entries(p.weights).filter(([,weight])=>weight>0);
-    const total=allocations.reduce((sum,[,weight])=>sum+weight,0);
-    if(allocations.length<1||allocations.length>30||Math.abs(total-100)>0.005)
-      return validationError("Each selected portfolio must allocate exactly 100% across 1–30 funds.");
+    if(allocations.length<1||allocations.length>30||!isAllocationComplete(p.weights))
+      return validationError("Each selected portfolio must allocate exactly 100.00% across 1–30 funds, using no more than two decimal places.");
     for(const [id] of allocations)requestedIds.add(id);
   }
   try{
@@ -120,6 +122,7 @@ export async function POST(request:Request){
       monthlyMap.set(point.fundId,existing);
     }
     const portfolioReports=data.portfolios.map(p=>{
+      const allocatedAmounts=allocateInvestment(data.investment,p.weights);
       const funds:WorkbookProposalFund[]=Object.entries(p.weights)
         .filter(([,weight])=>weight>0)
         .map(([id,weight])=>{
@@ -138,7 +141,7 @@ export async function POST(request:Request){
           const numeric=(v:unknown)=>typeof v==="number"&&Number.isFinite(v)&&v>=0&&v<=100?v:null;
           return {
             id,name:fund.name,provider:fund.provider,
-            weight,allocatedAmount:data.investment*weight/100,
+            weight,allocatedAmount:allocatedAmounts[id],
             returns:safeReturns(row.returns),
             priceHistory:monthlyMap.get(id)??[],
             factsheet:{

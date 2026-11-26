@@ -58,5 +58,5 @@ export function blendedFee(p: Portfolio, funds: Fund[]): number | null {
   if (applied.some(([id])=>funds.find(f=>f.id===id)?.fee == null)) return null;
   return applied.reduce((s,[id,w])=>s+(funds.find(f=>f.id===id)?.fee??0)*w/100,0);
 }
-export function fmtEuro(n: number): string {return new Intl.NumberFormat("en-IE",{style:"currency",currency:"EUR",maximumFractionDigits:0}).format(n);}
+export function fmtEuro(n: number): string {return new Intl.NumberFormat("en-IE",{style:"currency",currency:"EUR",minimumFractionDigits:2,maximumFractionDigits:2}).format(n);}
 export function fmtPercent(n: number | null, signed=false): string {return n == null || !finite(n)?"—":(signed && n>0?"+":"")+n.toFixed(2)+"%";}

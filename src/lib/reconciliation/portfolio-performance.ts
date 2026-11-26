@@ -1,4 +1,5 @@
 import type {Portfolio} from "../types";
+import {isAllocationComplete} from "../allocation-precision";
 
 /** Fund-level cumulative returns from a single identified performance workbook.
  * These are NOT verified, date-aligned portfolio unit-price observations.
@@ -40,10 +41,7 @@ export function weightedPublishedPortfolioReturn(
   const selected=holdings.length;
   const base={returnPct:null,covered:0,selected};
   if(!selected)return {...base,status:"empty"};
-  const all=Object.values(portfolio.weights);
-  const total=all.reduce((sum,weight)=>sum+weight,0);
-  if(all.some(weight=>!Number.isFinite(weight)||weight<0||weight>100)||
-      Math.abs(total-100)>0.005)
+  if(!isAllocationComplete(portfolio.weights))
     return {...base,status:"incomplete"};
 
   let covered=0;

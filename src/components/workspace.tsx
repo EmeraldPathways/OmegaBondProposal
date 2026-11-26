@@ -13,7 +13,10 @@ import ProposalPdfViewer from "@/components/proposal-pdf-viewer";
 import FundPriceHistoryChart from "@/components/fund-price-history-chart";
 import { APPROVED_FUND_GROUPS, type ApprovedFund } from "@/lib/approved-funds";
 import type { Portfolio } from "@/lib/types";
-import { fmtEuro, sumWeights } from "@/lib/analytics";
+import { fmtEuro } from "@/lib/analytics";
+import {allocateInvestment,allocationBasisPoints,displayAllocationTotal,
+  isAllocationComplete,remainingAllocationPct,validInvestmentAmount,
+  weightBasisPoints} from "@/lib/allocation-precision";
 import {weightedPublishedPortfolioReturn,type WeightedPublishedReturn} from "@/lib/reconciliation/portfolio-performance";
 
 type View = "funds" | "imports" | "builder" | "compare" | "proposal";
@@ -69,15 +72,37 @@ const prettyFeeBasis=(value:string|undefined)=>({
   not_stated:"Not stated"
 }[value??""]??"Not stated");
 const PROVIDERS = Object.keys(APPROVED_FUND_GROUPS);
-const isValidWeight = (weight: number) => Number.isFinite(weight) && weight >= 0 && weight <= 100;
+const isValidWeight = (weight: number) => weightBasisPoints(weight)!==null;
 
 function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return <div className="stat"><span>{label}</span><strong>{value}</strong>{sub && <small>{sub}</small>}</div>;
 }
 
-function MoneyInput({ value, onChange }: { value: number; onChange: (v: number) => void }) {
-  return <input className="form-input" type="number" min={1} max={1000000000} step={1000}
-    value={value} onChange={event => onChange(Math.max(1, Math.min(1000000000, Number(event.target.value) || 1)))}/>;
+/** Maintain a typed suffix such as 40. or 40.80 while updating
+ * the numeric calculation immediately; reject more than two decimals. */
+function DecimalInput({value,onChange,max,className,id,label}:{
+  value:number;onChange:(n:number)=>void;max:number;
+  className:string;id?:string;label?:string;
+}){
+  const [draft,setDraft]=useState(value.toFixed(2));
+  const [focused,setFocused]=useState(false);
+  useEffect(()=>{if(!focused)setDraft(value.toFixed(2));},[value,focused]);
+  return <input type="text" inputMode="decimal" autoComplete="off"
+    className={className} id={id} aria-label={label}
+    value={draft} onFocus={()=>setFocused(true)}
+    onChange={event=>{
+      const next=event.target.value.replace(/,/g,"");
+      if(!/^\d*(?:\.\d{0,2})?$/.test(next))return;
+      const number=Number(next);
+      if(!Number.isFinite(number)||number>max)return;
+      setDraft(next);
+      onChange(number);
+    }}
+    onBlur={()=>{setFocused(false);setDraft(value.toFixed(2));}}/>;
+}
+function MoneyInput({value,onChange}:{value:number;onChange:(v:number)=>void}){
+  return <DecimalInput id="capital" className="form-input" label="Amount"
+    value={value} onChange={onChange} max={1000000000}/>;
 }
 
 export default function Workspace() {
@@ -125,7 +150,6 @@ export default function Workspace() {
   ), [funds, provider, search]);
 
   const current = portfolios[activePortfolio];
-  const total = sumWeights(current);
   const allocated = Object.entries(current.weights)
     .filter(([, percentage]) => percentage > 0)
     .map(([id, percentage]) => ({ fund: funds.find(f => f.id === id), percentage }))
@@ -146,14 +170,30 @@ export default function Workspace() {
   function removeFund(id: string) {
     const weights = { ...current.weights }; delete weights[id]; changePortfolio(activePortfolio, { weights });
   }
+  const allocationAmounts=isAllocationComplete(current.weights)&&
+    validInvestmentAmount(investment)?allocateInvestment(investment,current.weights):null;
   const linked=(fund:ReconciledFund|undefined)=>
     Boolean(fund?.evidence?.matchBasis==="unique_provider_qualified_filename" &&
       fund?.factsheet_import_id && fund?.evidence?.displayedReturnsSource==="uploaded_workbook");
   const proposalPortfolios=portfolios.filter(p=>
     includePortfolios[p.id] && Object.entries(p.weights).some(([,weight])=>weight>0));
-  const readyForProposal=proposalPortfolios.length>0 &&
-    proposalPortfolios.every(p=>Math.abs(sumWeights(p)-100)<.005 &&
-      Object.entries(p.weights).filter(([,weight])=>weight>0).every(([id])=>linked(published[id])));
+  const invalidProposal=proposalPortfolios.find(p=>!isAllocationComplete(p.weights));
+  const unlinkedProposal=proposalPortfolios.find(p=>
+    Object.entries(p.weights).some(([id,weight])=>weight>0&&!linked(published[id])));
+  const readyForProposal=proposalPortfolios.length>0&&
+    validInvestmentAmount(investment)&&!!adviser.trim()&&!!objective.trim()&&
+    !invalidProposal&&!unlinkedProposal;
+  const pdfBlockReason=proposalPortfolios.length===0?
+    "Select a portfolio containing at least one fund.":
+    invalidProposal?
+      invalidProposal.title+" totals "+displayAllocationTotal(invalidProposal.weights)+
+      ". Adjust the allocations to exactly 100.00% before exporting.":
+    unlinkedProposal?
+      unlinkedProposal.title+" has a fund without an approved current workbook return or linked PDF.":
+    !validInvestmentAmount(investment)?
+      "Enter a positive amount with no more than two decimal places.":
+    !adviser.trim()||!objective.trim()?
+      "Complete the Prepared by and Objective fields before exporting.":"";
 
 
   return <div className="app-shell">
@@ -238,7 +278,9 @@ export default function Workspace() {
               <label className="form-label" htmlFor="capital">Amount</label>
               <MoneyInput value={investment} onChange={setInvestment}/>
               <div className="allocation-heading"><h2>Fund allocations</h2>
-                <span className={Math.abs(total-100)<0.00001?"allocation-ok":"allocation-error"}>{total.toFixed(1)}% allocated</span>
+                <span className={isAllocationComplete(current.weights)?"allocation-ok":"allocation-error"}>
+                  {displayAllocationTotal(current.weights)} allocated
+                </span>
               </div>
               <label className="form-label" htmlFor="addfund">Add an approved fund</label>
               <div className="button-row">
@@ -256,25 +298,41 @@ export default function Workspace() {
                 return <div className="allocation-row" key={id}>
                   <div><strong>{fund.name}</strong><small>{fund.provider}</small></div>
                   <div className="allocation-controls">
-                    <input type="number" className="weight-input" min={0} max={100} step={.5} aria-label={"Allocation for "+fund.name}
-                      value={percentage} onChange={e=>setWeight(id,Number(e.target.value))}/>
+                    <DecimalInput className="weight-input" max={100}
+                      label={"Allocation for "+fund.name} value={percentage}
+                      onChange={value=>setWeight(id,value)}/>
                     <span>%</span>
                     <button type="button" className="icon-action" title={"Remove "+fund.name} onClick={()=>removeFund(id)}><X size={15}/></button>
                   </div>
                 </div>;
               })}
+              {allocated.length>0&&!isAllocationComplete(current.weights)&&
+                allocationBasisPoints(current.weights)!==null&&
+                <p className="fineprint">
+                  {(() => {const remaining=remainingAllocationPct(current.weights)!;
+                    return remaining>=0?
+                      remaining.toFixed(2)+"% remaining to reach 100.00%.":
+                      Math.abs(remaining).toFixed(2)+"% over 100.00%.";
+                  })()}
+                  {" "}PDF export requires an exact 100.00% total.
+                </p>}
 
             </section>
             <section className="panel padded"><span className="eyebrow">PORTFOLIO SUMMARY</span><h2>{current.title}</h2>
               <div className="mini-stats">
                 <Stat label="Initial investment" value={fmtEuro(investment)}/>
                 <Stat label="Allocated funds" value={String(allocated.length)}/>
-                <Stat label="Allocation total" value={total.toFixed(1)+"%"}/>
+                <Stat label="Allocation total" value={displayAllocationTotal(current.weights)}/>
               </div>
               <div className="separator"/>
               <h3>Selected funds</h3>
               {allocated.length ? allocated.map(({fund,percentage})=>
-                <div className="allocation-row" key={fund.id}><div><strong>{fund.name}</strong><small>{fund.provider}</small></div><b>{percentage.toFixed(1)}%</b></div>
+                <div className="allocation-row" key={fund.id}>
+                  <div><strong>{fund.name}</strong><small>{fund.provider}</small></div>
+                  <b>{percentage.toFixed(2)}%
+                    {allocationAmounts&&<small>{fmtEuro(allocationAmounts[fund.id]??0)}</small>}
+                  </b>
+                </div>
               ) : <p className="muted">No funds have a positive allocation.</p>}
               <p className="fineprint">Published return figures cannot be used until the corresponding share class, horizon basis and reporting date are confirmed.</p>
             </section>
@@ -288,12 +346,12 @@ export default function Workspace() {
           </div>
           <div className="portfolio-card-grid">{portfolios.map(p=>{
             const holdings=Object.entries(p.weights).filter(([id,v])=>v>0 && names.has(id));
-            const valid=Math.abs(sumWeights(p)-100)<0.00001;
+            const valid=isAllocationComplete(p.weights);
             const comparison=comparisonReturns.find(item=>item.id===p.id)!;
             return <div className="portfolio-card" key={p.id}>
               <span className="eyebrow">PORTFOLIO {p.id.toUpperCase()}</span>
               <h2>{p.title}</h2><p>{p.description}</p>
-              <div className="portfolio-card-value">{sumWeights(p).toFixed(1)}%</div>
+              <div className="portfolio-card-value">{displayAllocationTotal(p.weights)}</div>
               <small>Allocation total {valid?"— complete":"— incomplete"}</small>
               <div className="portfolio-card-bottom"><span>Selected funds <b>{holdings.length}</b></span>
                 <span>Indicative 5-year return <b title={displayWeightedReturn(comparison.fiveYear)}>{displayWeightedReturn(comparison.fiveYear,true)}</b></span></div>
@@ -306,7 +364,7 @@ export default function Workspace() {
               <tbody>
                 <tr><td>Initial investment</td>{portfolios.map(p=><td key={p.id}>{fmtEuro(investment)}</td>)}</tr>
                 <tr><td>Number of funds</td>{portfolios.map(p=><td key={p.id}>{Object.values(p.weights).filter(v=>v>0).length}</td>)}</tr>
-                <tr><td>Allocation total</td>{portfolios.map(p=><td key={p.id}>{sumWeights(p).toFixed(1)}%</td>)}</tr>
+                <tr><td>Allocation total</td>{portfolios.map(p=><td key={p.id}>{displayAllocationTotal(p.weights)}</td>)}</tr>
                 <tr><td>3-year weighted return (indicative)</td>{comparisonReturns.map(p=><td key={p.id}>{displayWeightedReturn(p.threeYear)}</td>)}</tr>
                 <tr><td>5-year weighted return (indicative)</td>{comparisonReturns.map(p=><td key={p.id}>{displayWeightedReturn(p.fiveYear)}</td>)}</tr>
                 <tr><td>10-year weighted return (indicative)</td>{comparisonReturns.map(p=><td key={p.id}>{displayWeightedReturn(p.tenYear)}</td>)}</tr>
@@ -337,7 +395,6 @@ export default function Workspace() {
             <div className="portfolio-card-grid">
               {portfolios.map(p=>{
                 const weighted=Object.entries(p.weights).filter(([,v])=>v>0);
-                const totalWeight=sumWeights(p);
                 const matched=weighted.filter(([id])=>linked(published[id])).length;
                 return <label key={p.id} className="panel padded" style={{display:"block",cursor:"pointer"}}>
                   <span style={{display:"flex",gap:9,alignItems:"center"}}>
@@ -345,7 +402,7 @@ export default function Workspace() {
                       onChange={e=>setIncludePortfolios(state=>({...state,[p.id]:e.target.checked}))}/>
                     <strong>{p.title}</strong>
                   </span>
-                  <p className="muted">{weighted.length} funds · {totalWeight.toFixed(1)}% allocated · {matched}/{weighted.length} PDF filenames linked</p>
+                  <p className="muted">{weighted.length} funds · {displayAllocationTotal(p.weights)} allocated · {matched}/{weighted.length} PDF filenames linked</p>
                 </label>;
               })}
             </div>
@@ -354,7 +411,7 @@ export default function Workspace() {
                 <SlidersHorizontal size={16}/> Edit portfolio allocations
               </button>
             </div>
-            {!readyForProposal&&<p className="fineprint">The live PDF preview becomes available when at least one selected portfolio has a 100% allocation and every selected fund has a current workbook return row and exact PDF filename match.</p>}
+            {!readyForProposal&&<p className="notice neutral" role="status">{pdfBlockReason}</p>
           </section>
           {readyForProposal&&<ProposalPdfViewer input={{
             proposalTitle:proposalTitle.trim()||"Investment bond proposal",

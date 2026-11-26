@@ -96,7 +96,7 @@ const style=StyleSheet.create({
   footerText:{fontSize:7.1,color:color.muted}
 });
 const euro=(n:number)=>new Intl.NumberFormat("en-IE",{
-  style:"currency",currency:"EUR",maximumFractionDigits:2,minimumFractionDigits:0
+  style:"currency",currency:"EUR",maximumFractionDigits:2,minimumFractionDigits:2
 }).format(n);
 const percentage=(n:number|null)=>n==null || !Number.isFinite(n)
   ?"—":(n>0?"+":"")+n.toFixed(2)+"%";
@@ -167,7 +167,7 @@ function CompactPortfolioAllocationAndBreakdown({
           </Svg>
           <View style={{position:"absolute",top:37,left:15,width:68,alignItems:"center"}}>
             <Text style={{fontFamily:"Helvetica-Bold",fontSize:15,color:color.wine}}>
-              {portfolioWeight.toFixed(0)}%
+              {portfolioWeight.toFixed(2)}%
             </Text>
             <Text style={{fontSize:6.5,color:color.muted}}>allocated</Text>
           </View>
@@ -184,7 +184,7 @@ function CompactPortfolioAllocationAndBreakdown({
               <Text style={{fontSize:dense?6.3:7,lineHeight:1.25,
                 flex:1,color:color.ink}}>{f.name}</Text>
               <Text style={{fontFamily:"Helvetica-Bold",fontSize:dense?6.5:7.2,
-                color:color.ink,width:30,textAlign:"right"}}>{f.weight.toFixed(0)}%</Text>
+                color:color.ink,width:30,textAlign:"right"}}>{f.weight.toFixed(2)}%</Text>
             </View>;
           })}
         </View>
@@ -210,7 +210,7 @@ function CompactPortfolioAllocationAndBreakdown({
         paddingVertical:dense?3:5
       }}>
         <Text style={{fontSize:dense?6.7:7.4,width:"73%",lineHeight:1.2}}>
-          {f.name} ({f.weight.toFixed(0)}%)
+          {f.name} ({f.weight.toFixed(2)}%)
         </Text>
         <Text style={{fontSize:dense?7:7.5,textAlign:"right"}}>
           {euro(f.allocatedAmount)}
@@ -266,7 +266,7 @@ function CoverPortfolioAllocation({portfolio,multiple}:{
         }}>
           <Text style={{fontFamily:"Helvetica-Bold",
             fontSize:expanded?24:multiple?13:17,color:color.wine}}>
-            {percentageAllocated.toFixed(0)}%
+            {percentageAllocated.toFixed(2)}%
           </Text>
           <Text style={{fontSize:expanded?8:multiple?6:7,
             color:color.muted}}>allocated</Text>
@@ -288,7 +288,7 @@ function CoverPortfolioAllocation({portfolio,multiple}:{
             <Text style={{
               fontFamily:"Helvetica-Bold",fontSize:expanded?9:multiple?7:8.1,
               textAlign:"right",width:expanded?50:42
-            }}>{f.weight.toFixed(1)}%</Text>
+            }}>{f.weight.toFixed(2)}%</Text>
           </View>;
         })}
         {funds.length>shown.length?<Text style={{

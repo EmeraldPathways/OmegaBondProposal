@@ -5,7 +5,7 @@ import {CHART_COLORS} from "@/lib/pdf/five-year-monthly-chart";
 
 const color={wine:"#671E27",gold:"#988B54",ink:"#31342F",muted:"#72766F",border:"#E4E3DE"};
 const euro=(n:number)=>new Intl.NumberFormat("en-IE",{
-  style:"currency",currency:"EUR",maximumFractionDigits:2,minimumFractionDigits:0
+  style:"currency",currency:"EUR",maximumFractionDigits:2,minimumFractionDigits:2
 }).format(n);
 
 export function ExtendedFundInvestmentBreakdown({funds}:{
