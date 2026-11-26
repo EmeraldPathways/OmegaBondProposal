@@ -235,7 +235,7 @@ export default function Workspace() {
               <label className="form-label" htmlFor="pdesc">Strategy description</label>
               <textarea className="form-input textarea" id="pdesc" rows={2} maxLength={250} value={current.description}
                 onChange={e=>changePortfolio(activePortfolio,{description:e.target.value})}/>
-              <label className="form-label" htmlFor="capital">Initial investment (€)</label>
+              <label className="form-label" htmlFor="capital">Amount</label>
               <MoneyInput value={investment} onChange={setInvestment}/>
               <div className="allocation-heading"><h2>Fund allocations</h2>
                 <span className={Math.abs(total-100)<0.00001?"allocation-ok":"allocation-error"}>{total.toFixed(1)}% allocated</span>
