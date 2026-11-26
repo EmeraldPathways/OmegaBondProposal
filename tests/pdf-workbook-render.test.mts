@@ -242,7 +242,7 @@ test("five funds are laid out as three standardized fund cards then two, without
     riskFactors:["Foreign-exchange exposure","Equity volatility"]
   });
   assert.ok(abbreviated.length>0);
-  assert.ok(abbreviated[0].text.includes("…"));
+  assert.ok(!abbreviated.some(item=>item.text.includes("…")),"Fund cards must never end in truncated fragments.");
   assert.ok(abbreviated.flatMap(f=>f.text.split(/\s+/)).length<=FUND_CARD_NARRATIVE_WORDS);
   const factsheet={
     filename:"Official.pdf",title:"Official Fund",date:"24 November 2026",

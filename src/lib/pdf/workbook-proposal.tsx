@@ -1,7 +1,7 @@
 import React from "react";
 import {Document,Page,View,Text,StyleSheet,Svg,Path,Circle,Rect,Line} from "@react-pdf/renderer";
 import {OMEGA_LOGO_PATHS} from "@/lib/branding/omega-logo-paths";
-import {firstPageFundLimit,paginateFundDetails,fundCardNarrative,abbreviateWords} from "@/lib/pdf/fund-detail-layout";
+import {firstPageFundLimit,paginateFundDetails,fundCardNarrative,wholeMetadataItems} from "@/lib/pdf/fund-detail-layout";
 import {chartFundGroups} from "@/lib/pdf/cumulative-return-chart";
 import type {PriceHistoryPoint} from "@/lib/reconciliation/monthly-prices";
 import {FiveYearMonthlyChart,CHART_COLORS} from "@/lib/pdf/five-year-monthly-chart";
@@ -519,7 +519,7 @@ export default function WorkbookProposalPDF({data}:{data:WorkbookProposalData}){
             isExpandedPortfolio(p.funds.length)?{
               fontSize:8.3,lineHeight:1.4,marginBottom:5
             }:{}]}>
-            {abbreviateWords([
+            {wholeMetadataItems([
               f.factsheet.riskProfile?"Risk profile: "+f.factsheet.riskProfile:
                 f.factsheet.riskRating!=null?
                   (f.provider==="Standard Life"?"Volatility rating: ":"Risk rating: ")+
