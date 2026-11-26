@@ -5,19 +5,11 @@
 export function isExpandedPortfolio(fundCount:number):boolean{
   return fundCount>=6&&fundCount<=10;
 }
+/** Every selected fund shares one full-size chart for expanded 6–10 fund portfolios.
+ * The chart's own legend identifies the individual fund lines.
+ */
 export function splitPerformanceFundGroups<T>(funds:readonly T[]):T[][]{
-  if(!isExpandedPortfolio(funds.length))return funds.length?[Array.from(funds)]:[];
-  const groupCount=Math.ceil(funds.length/5);
-  const base=Math.floor(funds.length/groupCount);
-  const extra=funds.length%groupCount;
-  const result:T[][]=[];
-  let position=0;
-  for(let i=0;i<groupCount;i++){
-    const size=base+(i<extra?1:0);
-    result.push(funds.slice(position,position+size));
-    position+=size;
-  }
-  return result;
+  return funds.length?[Array.from(funds)]:[];
 }
 export function paginateExpandedFundDetails<T>(funds:readonly T[]):T[][]{
   if(!funds.length)return [];

@@ -87,16 +87,19 @@ test("five-fund proposal: page one allocations, page two full-size historical ch
   assert.ok(!sample.texts[2].includes("Five-year fund performance"));
   assert.ok(!sample.texts[3].includes("Five-year fund performance"));
 });
-test("eight selected funds use dedicated allocations, two chart pages and 3+3+2 details",async()=>{
+test("eight selected funds use dedicated allocations, one combined chart and 3+3+2 details",async()=>{
   const sample=await renderCount(8);
-  assert.equal(sample.pages,7,"Cover, full returns, two charts and three detail pages.");
+  assert.equal(sample.pages,6,"Cover, full returns, one chart and three detail pages.");
   assert.ok(!sample.texts[0].includes("Fund allocations and reported cumulative returns"));
   assert.match(sample.texts[1],/Fund allocations and reported cumulative returns/);
   assert.match(sample.texts[2],/Five-year fund performance/);
-  assert.match(sample.texts[3],/Five-year fund performance/);
-  for(let i=0;i<8;i++)
-    assert.ok(sample.texts[Math.floor(i/3)+4].includes(history.funds[i].name),
+  assert.ok(!sample.texts[2].includes("Funds represented in this chart"));
+  for(let i=0;i<8;i++){
+    assert.ok(sample.texts[2].includes(history.funds[i].name),
+      "Combined chart must identify "+history.funds[i].name);
+    assert.ok(sample.texts[Math.floor(i/3)+3].includes(history.funds[i].name),
       "Missing details for "+history.funds[i].name);
+  }
 });
 
 

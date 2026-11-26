@@ -74,10 +74,8 @@ test("balanced grouping never strands a one-fund details page for six through te
     assert.deepEqual(details.map(x=>x.length),label);
     assert.deepEqual(details.flat(),records);
     const performance=splitPerformanceFundGroups(records);
-    assert.equal(performance.length,2);
-    assert.ok(performance.every(group=>group.length<=5));
-    assert.deepEqual(performance.flat(),records);
-    assert.ok(Math.abs(performance[0].length-performance[1].length)<=1);
+    assert.equal(performance.length,1);
+    assert.deepEqual(performance[0],records);
   }
   assert.equal(isExpandedPortfolio(5),false);
 });
@@ -92,10 +90,10 @@ test("five-fund reference format stays exactly four pages: cover/chart/3+2",asyn
   for(let i=3;i<5;i++)assert.ok(pages[3].includes(funds[i].name));
 });
 for(let n=6;n<=10;n++){
-  test(n+" funds use a clean cover, complete returns, two charts, balanced detail pages",async()=>{
+  test(n+" funds use a clean cover, complete returns, one combined chart and balanced detail pages",async()=>{
     const {pages,funds}=await renderPortfolio(n);
     const groups=paginateExpandedFundDetails(funds);
-    assert.equal(pages.length,4+groups.length,
+    assert.equal(pages.length,3+groups.length,
       "Unexpected A4 overflow for "+n+" funds; got "+pages.length+" pages");
     assert.ok(!pages[0].includes("Fund allocations and reported cumulative returns"),
       "Extended cover should not contain a partial returns table");
@@ -109,18 +107,17 @@ for(let n=6;n<=10;n++){
       assert.ok(pages[1].includes(fund.name),
         "Allocation table omitted "+fund.name);
     }
-    const chartGroups=splitPerformanceFundGroups(funds);
-    for(let i=0;i<2;i++){
-      assert.match(pages[2+i],/Five-year fund performance/);
-      assert.match(pages[2+i],/Funds represented in this chart/);
-      for(const fund of chartGroups[i]){
-        assert.ok(pages[i+2].includes(fund.name),
-          "Performance chart "+(i+1)+" does not include "+fund.name);
-      }
+    assert.equal(splitPerformanceFundGroups(funds).length,1);
+    assert.match(pages[2],/Five-year fund performance/);
+    assert.ok(!pages[2].includes("Funds represented in this chart"));
+    assert.ok(!pages[2].includes("(1 of 2)"));
+    for(const fund of funds){
+      assert.ok(pages[2].includes(fund.name),
+        "The combined performance chart does not identify "+fund.name);
     }
     let offset=0;
     for(let page=0;page<groups.length;page++){
-      const printed=pages[4+page];
+      const printed=pages[3+page];
       assert.match(printed,/Fund details/);
       assert.ok(!printed.includes("Five-year fund performance"),
         "Do not put tiny performance charts inside detail cards");

@@ -5,7 +5,7 @@ import {firstPageFundLimit,paginateFundDetails,fundCardNarrative,abbreviateWords
 import {chartFundGroups} from "@/lib/pdf/cumulative-return-chart";
 import type {PriceHistoryPoint} from "@/lib/reconciliation/monthly-prices";
 import {FiveYearMonthlyChart,CHART_COLORS} from "@/lib/pdf/five-year-monthly-chart";
-import {ExtendedFundInvestmentBreakdown,ExtendedChartFundSummary} from "@/lib/pdf/expanded-portfolio-components";
+import {ExtendedFundInvestmentBreakdown} from "@/lib/pdf/expanded-portfolio-components";
 import {isExpandedPortfolio,splitPerformanceFundGroups,
   paginateExpandedFundDetails,fundDetailPageOffsets}
   from "@/lib/pdf/adaptive-fund-layout";
@@ -463,16 +463,12 @@ export default function WorkbookProposalPDF({data}:{data:WorkbookProposalData}){
             </Text>
             <Text style={[style.heading,{marginBottom:4}]}>
               {p.title} · Fund performance
-              {isExpandedPortfolio(p.funds.length)?
-                " ("+(chartIndex+1)+" of "+
-                  splitPerformanceFundGroups(p.funds).length+")":""}
             </Text>
             <FiveYearMonthlyChart funds={group}/>
-            {isExpandedPortfolio(p.funds.length)?
-              <ExtendedChartFundSummary group={group} portfolio={p}/>:
+            {!isExpandedPortfolio(p.funds.length)?
               <CompactPortfolioAllocationAndBreakdown
                 funds={group} allFunds={p.funds}
-                totalInvestment={data.investment} dense={group.length>4}/>}
+                totalInvestment={data.investment} dense={group.length>4}/>:null}
             <Footer/>
           </Page>
         )
