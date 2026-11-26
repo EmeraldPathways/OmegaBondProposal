@@ -78,7 +78,6 @@ async function pdfVisualAviva(bytes:Uint8Array){
         label:ratingCategory(winner.n)};
    }
   }
-  await doc.destroy();
   return result;
  }catch(error){return {error:error instanceof Error?error.message.slice(0,120):"render failed"};}
  finally{try{await task?.destroy();}catch{}}
@@ -87,6 +86,7 @@ let avivaScanned=0,avivaFound=0,downloadErrors=0;
 for(let i=0;i<rows.length;i++){
  const row=rows[i] as any,p=row.data??{};
  const provider=String(row.provider),name=String(row.name);
+ if(provider!=="Aviva")continue;
  const source=String(p.sourceText??"");
  const risk=p.riskProfile&&String(p.riskProfile).trim()||"";
  const rating=Number.isInteger(p.riskRating)&&p.riskRating>=1&&p.riskRating<=7?p.riskRating:null;
