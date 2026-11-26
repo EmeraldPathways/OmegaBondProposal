@@ -537,7 +537,7 @@ export default function WorkbookProposalPDF({data}:{data:WorkbookProposalData}){
               f.factsheet.taxStatus?"Tax basis: "+f.factsheet.taxStatus:null,
               f.factsheet.moneyMateId?"MoneyMate ID: "+f.factsheet.moneyMateId:null,
               f.factsheet.baseCurrency?"Currency: "+f.factsheet.baseCurrency:null
-            ].filter(Boolean).map(String).join(" · "),58)}
+            ].filter(Boolean).map(String),58)}
           </Text>
           {fundCardNarrative(f.factsheet).map((item,i)=>
             <Text key={i} style={[style.meta,
