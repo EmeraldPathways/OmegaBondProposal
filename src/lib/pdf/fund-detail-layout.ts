@@ -18,6 +18,18 @@ export function paginateFundDetails<T>(items:readonly T[]):T[][]{
 
 type NarrativePart={label:string;text:string;limit:number};
 function clean(value:string):string{return value.replace(/\s+/g," ").trim();}
+
+/** Exclude a mis-extracted New Ireland generic risk-category heading.
+ * It begins mid-phrase ("of Investing At New Ireland…") and becomes an
+ * incomplete sentence after the fund-card word limit. Leave the original
+ * stored factsheet and all substantive risk factors untouched.
+ */
+function printableRiskDisclosure(value:string|null|undefined):string{
+  const text=clean(value??"");
+  if(/^of investing at new ireland we classify our wide range of funds\b/i.test(text))
+    return "";
+  return text;
+}
 export function wordCount(value:string):number{
   const normalized=clean(value);
   return normalized?normalized.split(" ").length:0;
@@ -38,7 +50,7 @@ export function fundCardNarrative(fields:{
     {label:"Fund description",text:primary,limit:58},
     {label:"Investment approach",text:fields.strategy??"",limit:22},
     {label:"Key risks",text:(fields.riskFactors??[]).join("; "),limit:14},
-    {label:"Risk information",text:fields.riskDisclosure??"",limit:12},
+    {label:"Risk information",text:printableRiskDisclosure(fields.riskDisclosure),limit:12},
     {label:"Charges information",text:fields.chargesDisclosure??"",limit:12},
   ];
   if(fields.description&&fields.objective&&

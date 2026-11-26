@@ -177,6 +177,60 @@ test("New Ireland saved factsheet data appears in the generated client PDF",asyn
   }
 });
 
+test("New Ireland incomplete risk-category boilerplate is absent from fund details",async()=>{
+  const {fundCardNarrative}=await import("../src/lib/pdf/fund-detail-layout.ts");
+  const fragment="of Investing At New Ireland we classify our wide range of funds into different categories.";
+  const base={
+    objective:"The fund targets growth over the long term.",
+    riskFactors:["Currency Risk","Liquidity Risk"],
+    chargesDisclosure:"Charges may reduce investment returns."
+  };
+  const broken=fundCardNarrative({...base,riskDisclosure:fragment});
+  assert.ok(!broken.some(item=>item.label==="Risk information"),
+    "Remove only the malformed generic New Ireland risk sentence.");
+  assert.ok(broken.some(item=>item.label==="Key risks"&&item.text.includes("Currency Risk")),
+    "Fund-specific risks must remain.");
+  assert.ok(broken.some(item=>item.label==="Charges information"),
+    "Other disclosures must remain.");
+  const genuine=fundCardNarrative({...base,
+    riskDisclosure:"Investment capital is not guaranteed."});
+  assert.equal(genuine.find(item=>item.label==="Risk information")?.text,
+    "Investment capital is not guaranteed.");
+
+  const returns={ytd:4,oneMonth:1,threeMonth:2,sixMonth:3,
+    oneYear:5,threeYear:15,fiveYear:20,tenYear:null,sinceLaunch:30};
+  const data:WorkbookProposalData={
+    client:"Sample Client",adviser:"Omega Financial Management",
+    objective:"Review growth funds.",investment:100000,
+    workbookFilename:"Current workbook",preparedDate:"26 November 2026",
+    portfolios:[{id:"ni",title:"New Ireland selection",description:"",
+      funds:[{id:"ni-test",name:"New Ireland Fund",provider:"New Ireland",
+        weight:100,allocatedAmount:100000,returns,
+        factsheet:{filename:"New Ireland Fund.pdf",title:"New Ireland Fund",
+          date:"26 November 2026",objective:base.objective,description:null,
+          strategy:null,riskRating:null,amcPct:null,civPct:null,
+          riskFactors:base.riskFactors,riskDisclosure:fragment,
+          chargesDisclosure:base.chargesDisclosure,
+          moneyMateId:null,baseCurrency:"EUR",chartPages:[]}
+      }]}]
+  };
+  const bytes=await renderToBuffer(WorkbookProposalPDF({data}));
+  const pdf=await getDocumentProxy(new Uint8Array(bytes));
+  try{
+    const page=await pdf.getPage(pdf.numPages);
+    const contents=await page.getTextContent();
+    const text=contents.items.map(item=>"str" in item?item.str:"").join(" ");
+    assert.ok(!text.includes("of Investing At New Ireland"),
+      "Client PDF should omit incomplete generic risk-category text.");
+    assert.ok(!text.includes("Risk information:"),
+      "Do not leave a blank Risk information label.");
+    assert.ok(text.includes("Currency Risk"),
+      "Client PDF must retain actual fund risk factors.");
+  }finally{
+    await (pdf as unknown as {destroy?:()=>Promise<void>}).destroy?.();
+  }
+});
+
 test("five funds are laid out as three standardized fund cards then two, without losing page-one returns",async()=>{
   const {fundCardNarrative,FUND_CARD_NARRATIVE_WORDS,paginateFundDetails}=
     await import("../src/lib/pdf/fund-detail-layout.ts");
