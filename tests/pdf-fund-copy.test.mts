@@ -58,7 +58,7 @@ test("never cuts a fund manager name or classification in the metadata row",()=>
     "Currency: EUR"
   ];
   const result=wholeMetadataItems(entries,11);
-  assert.equal(result,"Risk profile: Medium to High Risk · Investment style: Active");
+  assert.equal(result,"Risk profile: Medium to High Risk · Investment style: Active · Currency: EUR");
   assert.ok(!result.includes("Example International"));
   assert.equal(wholeMetadataItems(entries,40),entries.join(" · "));
 });
