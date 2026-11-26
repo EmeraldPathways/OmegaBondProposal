@@ -127,6 +127,18 @@ test("PDF accepts a custom proposal title and removes repeated header/footer and
     "Reported cumulative returns and the five-year title must share one row");
 });
 
+test("the dedicated chart header stays at the same A4 top offset on page 2 or page 3",async()=>{
+  const five=await renderCount(5);
+  const nine=await renderCount(9);
+  assert.match(five.texts[1],/Five-year fund performance/);
+  assert.match(nine.texts[2],/Five-year fund performance/);
+  assert.ok(five.chartTitleY!==null&&nine.chartTitleY!==null);
+  assert.ok(Math.abs(five.chartTitleY-nine.chartTitleY)<1.5,
+    "The chart title must not drift vertically when it moves from page 2 to page 3.");
+  assert.ok(nine.chartTitleY>620&&nine.chartTitleY<730,
+    "The chart content must stay near the top of the printed A4 sheet.");
+});
+
 test("a long custom title wraps without introducing extra pages",async()=>{
   const title="Personalised Investment Recommendation for Retirement Planning and Long-Term Capital Preservation";
   const sample=await renderCount(3,title);
