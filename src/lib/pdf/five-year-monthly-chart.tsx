@@ -3,8 +3,13 @@ import {View,Text,Svg,Path,Rect,Line} from "@react-pdf/renderer";
 import type {WorkbookProposalFund} from "@/lib/pdf/workbook-proposal";
 import type {PriceHistoryPoint} from "@/lib/reconciliation/monthly-prices";
 
-// Shared palette for the full-size performance chart and portfolio allocation.
+// Original muted palette used by portfolio allocation visuals; preserve unchanged.
 export const CHART_COLORS=["#671E27","#A8995F","#647579","#809485","#AC7471","#9A9C94", "#977F70","#76808B","#B27F68","#526177"];
+// Distinct series colours ONLY for the five-year performance chart and its legend.
+export const FIVE_YEAR_CHART_COLORS=[
+  "#1F77B4", "#FF7F0E", "#2CA02C", "#D62728", "#9467BD",
+  "#8C564B", "#E377C2", "#7F7F7F", "#BCBD22", "#17BECF"
+] as const;
 const color={wine:"#671E27",muted:"#72766F",border:"#E4E3DE",ink:"#31342F"};
 
 function priceSegments(points:PriceHistoryPoint[]):PriceHistoryPoint[][]{
@@ -88,7 +93,7 @@ export function FiveYearMonthlyChart({funds}:{funds:WorkbookProposalFund[]}){
             d={segment.map((point,k)=>
               (k?"L":"M")+axisX(point.date).toFixed(2)+" "+
               axisY(point.returnPct).toFixed(2)).join(" ")}
-            fill="none" stroke={CHART_COLORS[i%CHART_COLORS.length]}
+            fill="none" stroke={FIVE_YEAR_CHART_COLORS[i%FIVE_YEAR_CHART_COLORS.length]}
             strokeWidth={2.1} strokeLinecap="round" strokeLinejoin="round"/>
         )
       )}
@@ -98,7 +103,7 @@ export function FiveYearMonthlyChart({funds}:{funds:WorkbookProposalFund[]}){
         style={{width:"49%",flexDirection:"row",alignItems:"flex-start",
           gap:7,paddingVertical:4,paddingRight:9}}>
         <View style={{width:15,height:3,marginTop:4,
-          backgroundColor:CHART_COLORS[i%CHART_COLORS.length]}}/>
+          backgroundColor:FIVE_YEAR_CHART_COLORS[i%FIVE_YEAR_CHART_COLORS.length]}}/>
         <Text style={{fontSize:8,color:color.ink,flex:1,lineHeight:1.25}}>
           {fund.name}
         </Text>
