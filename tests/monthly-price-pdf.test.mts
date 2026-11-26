@@ -134,7 +134,7 @@ test("the dedicated chart header stays at the same A4 top offset on page 2 or pa
   assert.match(nine.texts[2],/Five-year fund performance/);
   assert.ok(five.chartTitleY!==null&&nine.chartTitleY!==null);
   assert.ok(Math.abs(five.chartTitleY-nine.chartTitleY)<1.5,
-    "The chart title must not drift vertically when it moves from page 2 to page 3.");
+    `Chart title moved: page 2 y=${five.chartTitleY}, page 3 y=${nine.chartTitleY}.`);
   assert.ok(nine.chartTitleY>620&&nine.chartTitleY<730,
     "The chart content must stay near the top of the printed A4 sheet.");
 });
