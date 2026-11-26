@@ -146,8 +146,8 @@ export async function POST(request:Request){
             priceHistory:monthlyMap.get(id)??[],
             factsheet:{
               filename:pdfFilename,title:short(pdf?.title,160),date:short(pdf?.asOf,50),
-              objective:short(pdf?.objective,1200),strategy:short(pdf?.strategy,1200),
-              description:short(pdf?.description,1200),
+              objective:short(pdf?.objective,4000),strategy:short(pdf?.strategy,1200),
+              description:short(pdf?.description,4000),
               riskDisclosure:short(pdf?.riskDisclosure,1200),
               chargesDisclosure:short(pdf?.chargesDisclosure,1200),
               riskFactors:Array.isArray(pdf?.riskFactors)?

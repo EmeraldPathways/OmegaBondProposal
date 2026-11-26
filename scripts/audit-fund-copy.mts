@@ -2,7 +2,7 @@
  * Does not expose source excerpts, modify the database or designate copy approved.
  */
 import {neon} from "@neondatabase/serverless";
-import {fundCardNarrative,completeSourceSentences}
+import {fundCardNarrative,completeSourceSentences,originalFactsheetParagraph}
   from "../src/lib/pdf/fund-detail-layout.ts";
 import type {FactSheetData} from "../src/lib/reconciliation/engine.ts";
 
@@ -20,7 +20,8 @@ if(process.env.VERCEL_ENV!=="production"||!process.env.DATABASE_URL){
       "LEFT JOIN fund_source_factsheets s ON s.import_id=r.factsheet_import_id "+
       "ORDER BY n.provider,n.name"
     );
-    let descriptions=0,risks=0,omittedSections=0,missingSources=0;
+    let descriptions=0,risks=0,omittedSections=0,missingSources=0,originalParagraphs=0;
+    const missingParagraphs:string[]=[];
     const review:string[]=[];
     const providerCounts:Record<string,{total:number;description:number;review:number}>={};
     for(const row of rows){
@@ -30,6 +31,8 @@ if(process.env.VERCEL_ENV!=="production"||!process.env.DATABASE_URL){
       const data=(row.source_status==="parsed"?
         row.source_data:null) as FactSheetData|null;
       if(!data){missingSources++;item.review++;review.push(provider+": "+name+" (no current parsed source)");continue;}
+      const original=originalFactsheetParagraph(data);
+      if(original)originalParagraphs++;else missingParagraphs.push(provider+": "+name);
       const chosen=fundCardNarrative(data);
       const desc=chosen.find(x=>x.label==="Fund description");
       const hasDescription=!!desc&&desc.text!=="Information unavailable.";
@@ -47,12 +50,15 @@ if(process.env.VERCEL_ENV!=="production"||!process.env.DATABASE_URL){
       }
     }
     console.log(tag,"Registered="+rows.length+
+      " originalParagraphs="+originalParagraphs+
+      " missingOriginalParagraphs="+missingParagraphs.length+
       " conciseDescriptions="+descriptions+
       " riskSections="+risks+
       " missingParsedSources="+missingSources+
       " unfitSourcePhrases="+omittedSections+
       " fundsForEditorialReview="+review.length);
     console.log(tag,"By provider="+JSON.stringify(providerCounts));
+    if(missingParagraphs.length)console.log(tag,"Missing source-backed paragraphs: "+missingParagraphs.join(" | "));
     if(review.length)console.log(tag,"Example review queue="+review.slice(0,20).join(" | "));
     console.log(tag,"Note: source-backed candidate text is NOT manually approved.");
   }catch(error){

@@ -163,14 +163,14 @@ test("New Ireland saved factsheet data appears in the generated client PDF",asyn
       parts.push(text.items.map(item=>"str" in item?item.str:"").join(" "));
     }
     const full=parts.join(" ");
-    for(const expected of [
-      "The PRIME 5 fund seeks long-term capital growth",
-      "Medium to High Risk","State Street Investment Management",
+    assert.ok(full.includes("The PRIME 5 fund seeks long-term capital growth"),
+      "The original factsheet objective must appear as one paragraph.");
+    for(const excluded of ["Medium to High Risk","State Street Investment Management",
       "Passively managed","Equities and bonds","Article 8",
-      "Currency Risk","Liquidity Risk",
-      "Investment capital is not guaranteed",
-      "Charges may reduce your investment return"
-    ])assert.ok(full.includes(expected),"New Ireland PDF detail missing: "+expected);
+      "Currency Risk","Liquidity Risk","Investment capital is not guaranteed",
+      "Charges may reduce your investment return","Investment approach:",
+      "Risk information:","Fund description:"])
+      assert.ok(!full.includes(excluded),"Extra fund detail must be omitted: "+excluded);
   }finally{
     const disposable=doc as unknown as {destroy?:()=>Promise<void>};
     if(typeof disposable.destroy==="function")await disposable.destroy();
@@ -224,8 +224,10 @@ test("New Ireland incomplete risk-category boilerplate is absent from fund detai
       "Client PDF should omit incomplete generic risk-category text.");
     assert.ok(!text.includes("Risk information:"),
       "Do not leave a blank Risk information label.");
-    assert.ok(text.includes("Currency Risk"),
-      "Client PDF must retain actual fund risk factors.");
+    assert.ok(!text.includes("Currency Risk"),
+      "Risk information stays in stored source data but is not printed yet.");
+    assert.ok(text.includes("The fund targets growth over the long term."),
+      "The original objective must remain in the PDF.");
   }finally{
     await (pdf as unknown as {destroy?:()=>Promise<void>}).destroy?.();
   }
@@ -234,8 +236,8 @@ test("New Ireland incomplete risk-category boilerplate is absent from fund detai
 test("five funds are laid out as three standardized fund cards then two, without losing page-one returns",async()=>{
   const {fundCardNarrative,FUND_CARD_NARRATIVE_WORDS,paginateFundDetails}=
     await import("../src/lib/pdf/fund-detail-layout.ts");
-  const longDescription=Array.from({length:210},(_,i)=>
-    "documented"+String(i)).join(" ");
+  const longDescription=Array.from({length:20},(_,i)=>
+    "Sentence "+(i+1)+" explains a documented investment objective.").join(" ");
   const abbreviated=fundCardNarrative({
     description:longDescription,
     strategy:"A global portfolio with diversified investment objectives.",
@@ -284,8 +286,10 @@ test("five funds are laid out as three standardized fund cards then two, without
       assert.ok(texts[2].includes("Example Fund "+i),"Missing next-page card "+i);
     }
     assert.ok(!texts[2].includes("Example Fund 1"));
-    assert.ok(!texts[1].includes("documented190"),
-      "Fund detail descriptions must not print their unabridged source narrative");
+    assert.ok(texts[1].includes("Sentence 20 explains a documented investment objective."),
+      "The one-paragraph fund detail must retain the full original description.");
+    assert.ok(!texts[1].includes("Investment approach:"),
+      "No additional fund sections should appear.");
   }finally{
     const disposable=doc as unknown as {destroy?:()=>Promise<void>};
     if(typeof disposable.destroy==="function")await disposable.destroy();

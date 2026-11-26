@@ -32,13 +32,12 @@ test("new A4 Omega PDF displays actual workbook fund charts and PDF metadata wit
   assert.match(pdf,/OMEGA_LOGO_PATHS/);
   assert.match(pdf,/size="A4"/);
   assert.match(pdf,/f\.returns\.threeYear/);
-  assert.match(pdf,/fundCardNarrative\(f\.factsheet\)/);
+  assert.match(pdf,/originalFactsheetParagraph\(f\.factsheet\)/);
   assert.match(read("src/lib/pdf/fund-detail-layout.ts"),/fields\.objective/);
-  assert.match(pdf,/f\.factsheet\.riskRating/);
-  assert.match(pdf,/f\.factsheet\.amcPct/);
-  assert.match(pdf,/f\.factsheet\.riskProfile/);
-  assert.match(pdf,/f\.factsheet\.expenseRatioPct/);
-  assert.match(pdf,/f\.factsheet\.managedBy/);
+  assert.doesNotMatch(pdf,/f\.factsheet\.riskRating/);
+  assert.doesNotMatch(pdf,/f\.factsheet\.riskProfile/);
+  assert.doesNotMatch(pdf,/f\.factsheet\.managedBy/);
+  assert.match(pdf,/originalFactsheetParagraph/);
   assert.doesNotMatch(pdf,/Charts in source PDF|Printed PDF title|data\.workbookFilename\}/);
   assert.doesNotMatch(pdf,/DRAFT|NOT APPROVED FOR CLIENT DISTRIBUTION/);
   assert.match(pdf,/CompactPortfolioAllocationAndBreakdown/);
@@ -83,7 +82,7 @@ test("client PDF omits internal upload provenance, validation notices and review
     /Original PDF graphics/,
     /PDF: \{f\.factsheet\.filename/,
   ])assert.doesNotMatch(pdf,expression);
-  assert.match(pdf,/fundCardNarrative\(f\.factsheet\)/);
+  assert.match(pdf,/originalFactsheetParagraph\(f\.factsheet\)/);
   assert.match(read("src/lib/pdf/fund-detail-layout.ts"),/fields\.objective/);
   assert.match(pdf,/f\.returns\.oneYear/);
   assert.match(pdf,/CompactPortfolioAllocationAndBreakdown/);
@@ -133,11 +132,12 @@ test("fund enrichment persists source data and proposal reads saved records with
   assert.match(enrichment,/UPDATE fund_reconciliations/);
   assert.match(enrichment,/extractFundFactsheet/);
   const pdf=read("src/lib/pdf/workbook-proposal.tsx");
-  assert.match(pdf,/Volatility rating/);
-  assert.match(pdf,/Total expense ratio/);
-  assert.match(pdf,/Risk profile/);
-  assert.match(pdf,/riskDisclosure/);
-  assert.match(pdf,/chargesDisclosure/);
+  assert.doesNotMatch(pdf,/Volatility rating/);
+  assert.doesNotMatch(pdf,/Total expense ratio/);
+  assert.doesNotMatch(pdf,/Risk profile/);
+  assert.doesNotMatch(pdf,/riskDisclosure/);
+  assert.doesNotMatch(pdf,/chargesDisclosure/);
+  assert.match(pdf,/originalFactsheetParagraph/);
   assert.doesNotMatch(pdf,/MoneyMate ID: \\{f\\.factsheet\\.moneyMateId\\?\\?"Not stated"/);
 });
 

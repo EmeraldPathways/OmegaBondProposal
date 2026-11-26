@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  fundCardNarrative,completeSourceSentences,wholeMetadataItems,wordCount
+  fundCardNarrative,completeSourceSentences,wholeMetadataItems,wordCount,
+  originalFactsheetParagraph
 } from "../src/lib/pdf/fund-detail-layout.ts";
 
 test("keeps complete source sentences without adding trailing ellipses",()=>{
@@ -77,4 +78,49 @@ test("limits the entire fund-detail narrative without a partial final section",(
     if(entry.label==="Key risks")continue;
     assert.ok(/[.!?]$/.test(entry.text),entry.label+" must end at a sentence boundary");
   }
+});
+
+
+test("single paragraph preserves original complete factsheet sentences beyond former 58-word limit",()=>{
+  const text=Array.from({length:18},(_,i)=>
+    "The fund statement "+(i+1)+" is a complete investment sentence.").join(" ");
+  const result=originalFactsheetParagraph({objective:text,
+    description:"Different secondary description."});
+  assert.equal(result,text);
+  assert.ok(result.includes("sentence 18."));
+  assert.ok(!result.includes("secondary description"));
+  assert.ok(!result.includes("…"));
+});
+
+test("incomplete source endings are excluded without invented investment claims",()=>{
+  const source="The SuperCAPP Fund seeks regular returns. "+
+    "It invests in equities, bonds and cash. The fund is managed prudently an";
+  assert.equal(originalFactsheetParagraph({objective:source}),
+    "The SuperCAPP Fund seeks regular returns. It invests in equities, bonds and cash.");
+});
+
+test("filters common OCR layout artefacts while preserving intact source sentences",()=>{
+  const intro="The fund aims to generate long term capital growth.";
+  assert.equal(originalFactsheetParagraph({objective:
+    "The fund invests in European veer ow ENENENEIENCIR region only. "+intro+" High Risk Ata Glance"}),
+    intro);
+  assert.equal(originalFactsheetParagraph({objective:
+    "The fund invests worldwide. The fund is managed by Zurich Life. Zurich Global Fund Zurich Global Fund"}),
+    "The fund invests worldwide. The fund is managed by Zurich Life.");
+  assert.equal(originalFactsheetParagraph({objective:
+    "Risk Profile The fund invests in equities and bonds."}),
+    "The fund invests in equities and bonds.");
+});
+
+test("a complete factsheet phrase without source punctuation remains readable",()=>{
+  const bullet="• The Fund aims to grow your investment over the long term through a combination of income and capital growth";
+  assert.equal(originalFactsheetParagraph({objective:bullet}),
+    "The Fund aims to grow your investment over the long term through a combination of income and capital growth.");
+});
+
+test("a missing or unusable objective falls back to original description",()=>{
+  assert.equal(originalFactsheetParagraph({objective:"ENENENEIENCIR v= von",description:
+    "The fund invests in a diversified range of assets."}),
+    "The fund invests in a diversified range of assets.");
+  assert.equal(originalFactsheetParagraph({objective:null,description:null}),"");
 });

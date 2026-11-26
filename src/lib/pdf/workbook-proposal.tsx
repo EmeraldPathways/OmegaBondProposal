@@ -1,7 +1,7 @@
 import React from "react";
 import {Document,Page,View,Text,StyleSheet,Svg,Path,Circle,Rect,Line} from "@react-pdf/renderer";
 import {OMEGA_LOGO_PATHS} from "@/lib/branding/omega-logo-paths";
-import {firstPageFundLimit,paginateFundDetails,fundCardNarrative,wholeMetadataItems} from "@/lib/pdf/fund-detail-layout";
+import {firstPageFundLimit,paginateFundDetails,originalFactsheetParagraph} from "@/lib/pdf/fund-detail-layout";
 import {chartFundGroups} from "@/lib/pdf/cumulative-return-chart";
 import type {PriceHistoryPoint} from "@/lib/reconciliation/monthly-prices";
 import {FiveYearMonthlyChart,CHART_COLORS} from "@/lib/pdf/five-year-monthly-chart";
@@ -509,43 +509,12 @@ export default function WorkbookProposalPDF({data}:{data:WorkbookProposalData}){
             isExpandedPortfolio(p.funds.length)?{
               fontSize:11.1,marginBottom:6
             }:{}]}>{f.name}</Text>
-          <Text style={[style.meta,
-            isExpandedPortfolio(p.funds.length)?{
-              fontSize:8.5,lineHeight:1.45,marginBottom:5
-            }:{}]}>
-            {f.provider}{f.factsheet.date?" · As at "+f.factsheet.date:""}
+          <Text style={{
+            fontSize:8.6,lineHeight:1.52,color:color.ink,marginTop:8
+          }}>
+            {originalFactsheetParagraph(f.factsheet)||
+              "A complete fund description is not available in the stored factsheet."}
           </Text>
-          <Text style={[style.meta,
-            isExpandedPortfolio(p.funds.length)?{
-              fontSize:8.3,lineHeight:1.4,marginBottom:5
-            }:{}]}>
-            {wholeMetadataItems([
-              f.factsheet.riskProfile?"Risk profile: "+f.factsheet.riskProfile:
-                f.factsheet.riskRating!=null?
-                  (f.provider==="Standard Life"?"Volatility rating: ":"Risk rating: ")+
-                  f.factsheet.riskRating+"/7":null,
-              f.factsheet.managedBy?
-                (f.provider==="Standard Life"?"Fund manager: ":"Managed by: ")+
-                f.factsheet.managedBy:null,
-              f.factsheet.managementStyle?"Investment style: "+f.factsheet.managementStyle:null,
-              f.factsheet.assetMix?"Asset mix: "+f.factsheet.assetMix:null,
-              f.factsheet.equityRange?"Equity range: "+f.factsheet.equityRange:null,
-              f.factsheet.sfdrClass?"SFDR class: "+f.factsheet.sfdrClass:null,
-              f.factsheet.amcPct!=null?"AMC: "+percentage(f.factsheet.amcPct):null,
-              f.factsheet.civPct!=null?"CIV: "+percentage(f.factsheet.civPct):null,
-              f.factsheet.expenseRatioPct!=null?"Total expense ratio: "+percentage(f.factsheet.expenseRatioPct):null,
-              f.factsheet.taxStatus?"Tax basis: "+f.factsheet.taxStatus:null,
-              f.factsheet.moneyMateId?"MoneyMate ID: "+f.factsheet.moneyMateId:null,
-              f.factsheet.baseCurrency?"Currency: "+f.factsheet.baseCurrency:null
-            ].filter(Boolean).map(String),58)}
-          </Text>
-          {fundCardNarrative(f.factsheet).map((item,i)=>
-            <Text key={i} style={[style.meta,
-              isExpandedPortfolio(p.funds.length)?{
-                fontSize:8.3,lineHeight:1.5,marginBottom:5
-              }:{marginBottom:3}]}>
-              {item.label}: {item.text}
-            </Text>)}
         </View>)}
         <Footer/>
       </Page>))}

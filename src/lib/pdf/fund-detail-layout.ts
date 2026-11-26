@@ -147,3 +147,53 @@ export function fundCardNarrative(fields:{
   }
   return output;
 }
+
+/**
+ * Temporary review-stage copy: ONE paragraph taken from the stored provider
+ * factsheet objective (or description if the objective is unusable).
+ * Reject OCR/footer fragments and never end on a partial sentence.
+ * No external research, interpretation or financial claims are introduced.
+ */
+export function originalFactsheetParagraph(fields:{
+  objective?:string|null;description?:string|null;
+}):string{
+  const suspicious=/\b(?:ENENENE\w*|veer\s+ow|v=\s*von|investir\s+primarily|expos\s+to|as\s+yc\s+move|Cumulati\b)\b/i;
+  const spillover=/\b(?:Ata\s+Glance|At\s+a\s+Glance|Total\s+Fund\s+Size|Launch\s+Date|NEW\s+IRELAND.S\s+RISK\s+RATING|Risk\s+Profile:\s+NEW\s+IRELAND|Risk\s+profile\s+NEW\s+IRELAND)\b/i;
+  const cleanSource=(value:string|null|undefined)=>{
+    let t=clean(value??"").replace(/^[•●▪\-–]\s*/,"");
+    // Zurich's equity-exposure metadata is occasionally appended before
+    // the description by the PDF extractor.
+    t=t.replace(/^Indicative equity (?:exposure|range):\s*.*?\b(?=(?:The|This|Our)\s+[A-Z])/i,"");
+    t=t.replace(/^Risk Profile\s+(?=(?:The|This)\s+[a-z])/i,"");
+    const marker=spillover.exec(t);
+    if(marker&&marker.index>0)t=t.slice(0,marker.index).trim();
+    t=t.replace(/\b(?:Very Low|Low(?: to Medium)?|Medium(?: to High)?|High)\s+Risk\s*$/i,"").trim();
+    return t;
+  };
+  const fullStop=/[.!?][”"')\]]?$/;
+  const options=[fields.objective,fields.description];
+  for(const candidate of options){
+    const text=cleanSource(candidate);
+    if(!text||leadingFragment.test(text))continue;
+    const segments=[...new Intl.Segmenter("en",{granularity:"sentence"}).segment(text)]
+      .map(x=>clean(x.segment)).filter(Boolean);
+    const accepted:string[]=[];
+    let total=0;
+    for(const segment of segments){
+      const size=wordCount(segment);
+      if(total+size>260)break; // enough for the longest current source paragraph
+      if(suspicious.test(segment))continue;
+      if(fullStop.test(segment)&&!/[.…]{2,}$/.test(segment)){
+        accepted.push(segment);total+=size;continue;
+      }
+      // Only a short, single-sentence objective may lack a full stop.
+      if(segments.length===1&&size<=55&&canUseSourceFragment(segment)&&
+        !/[\u2026]|(?:\b(?:d[eé]du|an|in|by)\s*)$/i.test(segment)){
+        accepted.push(segment+".");
+      }
+      break;
+    }
+    if(accepted.length)return accepted.join(" ");
+  }
+  return "";
+}
