@@ -153,7 +153,7 @@ export default function PerformanceWorkspace({mode}:{mode:Mode}) {
     edit({flows:record.flows.map(f=>f.id===id?{...f,...changes}:f)});
   }
   function addValuation(){
-    edit({valuations:[...record.valuations,{id:uid(),date:end||today(),fundId:null,value:0}]});
+    edit({valuations:[...record.valuations,{id:uid(),date:end||today(),fundId:null,value:null}]});
   }
   function addFlow(kind:"contribution"|"withdrawal"){
     edit({flows:[...record.flows,{id:uid(),kind,date:today(),fundId:null,amount:0,note:""}]});
@@ -238,7 +238,7 @@ export default function PerformanceWorkspace({mode}:{mode:Mode}) {
           <td><select className="form-input" aria-label="Valuation holding" value={v.fundId??"policy"} onChange={e=>changeValuation(v.id,{fundId:e.target.value==="policy"?null:e.target.value})}>
             <option value="policy">Whole policy</option>{record.funds.map(f=><option key={f.id} value={f.id}>{f.name||"Unnamed fund"}</option>)}
           </select></td>
-          <td><Amount value={v.value} label="Market valuation in euro" onChange={n=>changeValuation(v.id,{value:n??0})}/></td>
+          <td><Amount value={v.value} label="Market valuation in euro" onChange={n=>changeValuation(v.id,{value:n})}/></td>
           <td><button type="button" className="omega-v2-icon" aria-label="Remove valuation" onClick={()=>edit({valuations:record.valuations.filter(x=>x.id!==v.id)})}><Trash2 size={16}/></button></td>
         </tr>)}
         {!record.valuations.length&&<tr><td colSpan={4}>No valuations yet. Add the current valuation and any historical statements available.</td></tr>}
