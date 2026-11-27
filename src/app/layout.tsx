@@ -15,7 +15,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       lineHeight:"18px",padding:"7px 18px",textAlign:"center",
       letterSpacing:".025em",fontFamily:"Arial, sans-serif"
     }}>
-      OMEGA V2 · DEVELOPMENT PREVIEW · READ-ONLY — LIVE WEBSITE UNCHANGED
+      OMEGA V2 · DEVELOPMENT · ISOLATED TEST DATA ONLY — LIVE V1 UNCHANGED
     </div>:null}
     {children}
   </body></html>;
