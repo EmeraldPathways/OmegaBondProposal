@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import {readFileSync} from "node:fs";
 import {performanceAxisTicks} from "../src/lib/pdf/five-year-monthly-chart.tsx";
 
 test("zero is a labelled tick for positive, negative and mixed five-year returns",()=>{
@@ -19,7 +20,7 @@ test("zero is a labelled tick for positive, negative and mixed five-year returns
   }
 });
 test("PDF seven-colour risk bar retains its selected 1–7 segment and meaningful label",()=>{
-  const {readFileSync}=await import("node:fs");
+
   const source=readFileSync(new URL("../src/lib/pdf/workbook-proposal.tsx",import.meta.url),"utf8");
   assert.match(source,/const rating=getFundRiskRating\(fund\)\?\.rating\?\?null/);
   assert.match(source,/PDF_RISK_COLORS\.map/);
@@ -33,7 +34,7 @@ test("PDF seven-colour risk bar retains its selected 1–7 segment and meaningfu
   assert.equal(new Set(hex).size,7);
 });
 test("the compact second allocation legend is single-line and retains full fund names",()=>{
-  const {readFileSync}=await import("node:fs");
+
   const source=readFileSync(new URL("../src/lib/pdf/workbook-proposal.tsx",import.meta.url),"utf8");
   assert.match(source,/compactAllocationNameSize\(f\.name\)/);
   assert.match(source,/wrap=\{false\} hyphenationCallback=\{word=>\[word\]\}/);
