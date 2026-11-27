@@ -1,3 +1,3 @@
 {
-  "buildCommand": "npm test && node --import tsx --test tests/v2-investment-performance.test.mts tests/v2-policy-portfolios.test.mts tests/v2-manual-table.test.mts tests/v2-performance-pdf.test.mts tests/v2-combined-portfolio-pdf.test.mts tests/v2-pdf-viewer-ui.test.mts && npx next build"
+  "buildCommand": "npm test && node --import tsx --test tests/v2-*.test.mts && npx next build"
 }
