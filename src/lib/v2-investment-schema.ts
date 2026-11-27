@@ -25,6 +25,11 @@ export const investmentRecordSchema = z.object({
   provider: z.string().trim().max(120),
   policyNumber: z.string().trim().max(80),
   policyType: z.enum(["Pension", "Post-Retirement (ARF)", "Investment"]),
+  portfolioGroup: z.string().trim().max(120).optional(),
+  statementContributions: money.nullable().optional(),
+  statementWithdrawals: money.nullable().optional(),
+  statementAsOf: day.optional(),
+  cashFlowsConfirmed: z.boolean().optional(),
   investmentDate: day,
   originalInvestment: money,
   funds: z.array(fundSchema).max(40),
@@ -42,6 +47,8 @@ export const investmentRecordSchema = z.object({
   if (new Set(entry.flows.map(f => f.id)).size !== entry.flows.length ||
       new Set(entry.valuations.map(v => v.id)).size !== entry.valuations.length)
     context.addIssue({code:"custom",message:"Transaction and valuation IDs must be unique."});
+  if ((entry.statementContributions != null || entry.statementWithdrawals != null) && !entry.statementAsOf)
+    context.addIssue({code:"custom",message:"A dated provider statement is required when entering statement control totals."});
   if (entry.investmentDate && entry.flows.some(f => f.date < entry.investmentDate))
     context.addIssue({code:"custom",message:"Cash flows cannot predate the original investment."});
 });

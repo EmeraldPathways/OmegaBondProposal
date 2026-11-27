@@ -49,3 +49,26 @@
   .omega-v2-metric strong{font-size:17px}
 }
 @media(max-width:430px){.omega-v2-metrics{grid-template-columns:1fr}}
+
+/* Batch-entry and combined-policy portfolio extensions. */
+.omega-v2-reconciliation{margin-top:20px;padding-top:16px;border-top:1px solid #e4e3de}
+.omega-v2-reconciliation h3{margin:0 0 6px;font-size:15px;color:#671e27}
+.omega-v2-reconciliation .omega-v2-fields{margin-top:12px}
+.omega-v2-policy-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px;margin:18px 0}
+.omega-v2-policy-checkbox{display:flex;align-items:flex-start;gap:12px;padding:13px;border:1px solid #e4e3de;border-radius:8px;cursor:pointer;background:#fdfdfc}
+.omega-v2-policy-checkbox input{margin-top:3px;accent-color:#671e27}
+.omega-v2-policy-checkbox span{display:flex;flex-direction:column;gap:5px}
+.omega-v2-policy-checkbox strong{font-size:13px;color:#31342f}
+.omega-v2-policy-checkbox small{font-size:11px;color:#72766f;line-height:1.45}
+.omega-v2-paste{position:fixed;z-index:2000;left:50%;top:50%;transform:translate(-50%,-50%);width:min(720px,calc(100vw - 32px));
+  max-height:calc(100vh - 40px);overflow-y:auto;box-sizing:border-box;box-shadow:0 0 0 100vmax rgba(18,20,20,.48),0 20px 50px rgba(0,0,0,.24);background:white}
+.omega-v2-paste h2{margin-top:0}
+.omega-v2-paste .muted{line-height:1.6;font-size:13px}
+.omega-v2-paste-area{width:100%;margin:12px 0 16px;box-sizing:border-box;min-height:145px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px;white-space:pre}
+.omega-v2-paste .button-row{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap}
+
+.omega-v2-confirmation{display:flex;align-items:flex-start;gap:12px;margin-top:20px;padding:14px;background:#f7f6f2;border:1px solid #e4e3de;border-radius:8px;cursor:pointer}
+.omega-v2-confirmation input{accent-color:#671e27;flex-shrink:0;margin-top:3px}
+.omega-v2-confirmation span{display:flex;flex-direction:column;gap:4px}
+.omega-v2-confirmation strong{font-size:13px;color:#31342f}
+.omega-v2-confirmation small{font-size:12px;line-height:1.55;color:#72766f}

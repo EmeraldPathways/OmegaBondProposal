@@ -1,11 +1,13 @@
 "use client";
 
 import {useEffect, useMemo, useState} from "react";
-import {ArrowDownToLine, FileText, Plus, Save, Trash2} from "lucide-react";
+import {ArrowDownToLine, ClipboardPaste, FileText, Plus, Save, Trash2} from "lucide-react";
 import {
   type InvestmentRecord, type FundPosition, type FlowEntry, type ValuationEntry,
   calculatePerformance, checkPolicyValuations, emptyRecord, portfolioChartSeries
 } from "@/lib/v2-investment-performance";
+import {calculateCombinedPortfolio,reconcileStatementTotals,portfolioWarnings} from "@/lib/v2-policy-portfolios";
+import {parseValuationTable,parseValuationMatrix,parseCashFlowTable} from "@/lib/v2-manual-table";
 
 type Mode = "performance" | "withdrawals";
 type SavedRecord = InvestmentRecord & {updatedAt?: string};
@@ -38,8 +40,8 @@ function Amount({value,onChange,label,placeholder}:{value:number|null;onChange:(
 function Metric({label,value,detail}:{label:string;value:string;detail?:string}) {
   return <div className="omega-v2-metric"><span>{label}</span><strong>{value}</strong>{detail&&<small>{detail}</small>}</div>;
 }
-function ValuationChart({record}:{record:InvestmentRecord}) {
-  const series = portfolioChartSeries(record);
+function ValuationChart({record,start,end}:{record:InvestmentRecord;start:string;end:string}) {
+  const series = portfolioChartSeries(record).filter(p=>p.date>=start&&p.date<=end);
   if(series.length < 2) return <p className="muted">Add at least two dated portfolio valuations to display the actual value history.</p>;
   const values = series.map(p => p.value);
   const min = Math.min(...values), max = Math.max(...values);
@@ -88,6 +90,10 @@ export default function PerformanceWorkspace({mode}:{mode:Mode}) {
   const [repeatCadence,setRepeatCadence]=useState<"monthly"|"annually">("monthly");
   const [repeatCount,setRepeatCount]=useState(12);
   const [repeatFund,setRepeatFund]=useState("policy");
+  const [pasteMode,setPasteMode]=useState<"dates"|"matrix"|"cash"|null>(null);
+  const [pasteSource,setPasteSource]=useState("");
+  const [includedPolicyIds,setIncludedPolicyIds]=useState<string[]>([]);
+  const [combinedExporting,setCombinedExporting]=useState(false);
 
   useEffect(()=>{
     let cancelled=false;
@@ -103,6 +109,12 @@ export default function PerformanceWorkspace({mode}:{mode:Mode}) {
     return()=>{cancelled=true;};
   },[]);
   const performance=useMemo(()=>calculatePerformance(record,start,end),[record,start,end]);
+  const portfolioCandidates=saved.filter(p=>p.id&&record.clientName.trim()&&
+    p.clientName.trim().toLowerCase()===record.clientName.trim().toLowerCase()&&
+    (p.portfolioGroup??"").trim().toLowerCase()===(record.portfolioGroup??"").trim().toLowerCase());
+  const selectedPolicies=portfolioCandidates.filter(p=>includedPolicyIds.includes(p.id!)).map(p=>p.id===record.id?record:p);
+  const combined=calculateCombinedPortfolio(selectedPolicies,start,end);
+  const statementChecks=reconcileStatementTotals(record);
   const funds=useMemo(()=>record.funds.map(f=>({fund:f,result:calculatePerformance(record,start,end,f.id)})),[record,start,end]);
   const periodFlows=record.flows.filter(f=>f.date>start&&f.date<=end);
   const notes=[start,end].filter(Boolean).map(date=>checkPolicyValuations(record,date)).filter((v):v is string=>!!v);
@@ -110,7 +122,13 @@ export default function PerformanceWorkspace({mode}:{mode:Mode}) {
     ?record.funds.reduce((sum,f)=>sum+(f.initialAmount??0),0):null;
   if(initialFundTotal!==null&&record.originalInvestment>0&&Math.abs(initialFundTotal-record.originalInvestment)>0.02)
     notes.push("Initial fund amounts do not total the original policy investment.");
-  function edit(changes:Partial<InvestmentRecord>){setRecord(r=>({...r,...changes}));setStatus("Unsaved changes");}
+  function edit(changes:Partial<InvestmentRecord>){
+    const changesEvidence=["flows","valuations","funds","originalInvestment","investmentDate",
+      "statementContributions","statementWithdrawals","statementAsOf"].some(key=>key in changes);
+    setRecord(r=>({...r,...changes,...(changesEvidence?{cashFlowsConfirmed:false}:{})}));
+    setStatus(changesEvidence?"Unsaved changes · recheck the complete cash-flow ledger.":"Unsaved changes");
+  }
+  useEffect(()=>{setIncludedPolicyIds(record.id?[record.id]:[]);},[record.id]);
   function newCase(){setRecord(emptyRecord());setStart("");setEnd("");setStatus("New unsaved policy");}
   function openCase(id:string){const next=saved.find(r=>r.id===id);if(!next)return;
     setRecord(next);setStart(next.investmentDate);setEnd(next.valuations.map(v=>v.date).sort().at(-1)??today());setStatus("Loaded saved policy");
@@ -133,6 +151,7 @@ export default function PerformanceWorkspace({mode}:{mode:Mode}) {
     finally{setSaving(false);}
   }
   async function exportPdf(){
+    if(!record.cashFlowsConfirmed){setStatus("Confirm that all dated contributions and withdrawals are complete before exporting a client PDF.");return;}
     if(mode==="performance"&&!performance.available){setStatus("Complete the reporting valuations before exporting a performance PDF.");return;}
     setExporting(true);setStatus("");
     try{
@@ -178,14 +197,69 @@ export default function PerformanceWorkspace({mode}:{mode:Mode}) {
       additions.push({id:uid(),date,kind:"contribution",amount:repeatAmount,
         fundId:repeatFund==="policy"?null:repeatFund,note:repeatCadence==="monthly"?"Monthly contribution":"Annual contribution"});
     }
+    if(additions.some(f=>f.date>today())){
+      setStatus("The schedule includes future payments. Enter only contributions actually received; reduce the count or change the first date.");return;
+    }
+    if(record.investmentDate&&additions.some(f=>f.date<record.investmentDate)){
+      setStatus("The schedule cannot begin before the policy's original investment date.");return;
+    }
     edit({flows:[...record.flows,...additions]});
-    setStatus(String(additions.length)+" dated contributions added. Save the policy to preserve them.");
+    setStatus(String(additions.length)+" dated contributions added. Verify each payment against the provider statement before saving.");
   }
   const totalWithdrawn=periodFlows.filter(f=>f.kind==="withdrawal").reduce((n,f)=>n+f.amount,0);
   const totalAdded=periodFlows.filter(f=>f.kind==="contribution").reduce((n,f)=>n+f.amount,0);
   const lifetimeAdded=record.flows.filter(f=>f.kind==="contribution").reduce((n,f)=>n+f.amount,0);
   const lifetimeWithdrawn=record.flows.filter(f=>f.kind==="withdrawal").reduce((n,f)=>n+f.amount,0);
   const showCashTable=mode==="withdrawals";
+  function applyPastedRows(){
+    if(!pasteMode)return;
+    if(pasteMode==="cash"){
+      const parsed=parseCashFlowTable(pasteSource,record.funds);
+      if(parsed.errors.length){setStatus(parsed.errors.slice(0,5).join(" ")+" No rows were imported.");return;}
+      if(!parsed.rows.length){setStatus("No transactions were found. Check the source table and headings.");return;}
+      if(record.flows.length+parsed.rows.length>2000){setStatus("A policy supports at most 2,000 dated cash flows.");return;}
+      if(record.investmentDate&&parsed.rows.some(row=>row.date<record.investmentDate)){
+        setStatus("Pasted cash flows cannot predate the original investment.");return;
+      }
+      edit({flows:[...record.flows,...parsed.rows.map(row=>({...row,id:uid()}))]});
+      setPasteMode(null);setPasteSource("");
+      setStatus(String(parsed.rows.length)+" dated transactions added to the draft. Review and save the record.");
+      return;
+    }
+    const parsed=pasteMode==="matrix"?
+      parseValuationMatrix(pasteSource,record.funds):parseValuationTable(pasteSource,record.funds);
+    if(parsed.errors.length){setStatus(parsed.errors.slice(0,5).join(" ")+" No rows were imported.");return;}
+    if(!parsed.rows.length){setStatus("No dated valuations were found.");return;}
+    const keys=new Set(record.valuations.map(v=>v.date+":"+(v.fundId??"policy")));
+    if(parsed.rows.some(row=>keys.has(row.date+":"+(row.fundId??"policy")))){
+      setStatus("A valuation with the same date and holding already exists. No rows were imported.");return;
+    }
+    if(record.valuations.length+parsed.rows.length>2000){setStatus("A policy supports at most 2,000 valuations.");return;}
+    edit({valuations:[...record.valuations,...parsed.rows.map(row=>({...row,id:uid()}))]});
+    setPasteMode(null);setPasteSource("");
+    setStatus(String(parsed.rows.length)+" dated valuations added to the draft. Review and save the record.");
+  }
+  async function exportCombinedPdf(){
+    if(selectedPolicies.some(p=>!p.cashFlowsConfirmed)){setStatus("Every included policy must have its dated cash flows confirmed before exporting.");return;}
+    if(!combined.available||selectedPolicies.length<2){setStatus(combined.reason||"Select two policies.");return;}
+    const issues=portfolioWarnings(selectedPolicies,start,end);
+    if(issues.length){setStatus("Resolve portfolio reconciliation warnings before exporting: "+issues[0]);return;}
+    setCombinedExporting(true);
+    try{
+      const response=await fetch("/api/v2/performance/pdf",{
+        method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({records:selectedPolicies,startDate:start,endDate:end,reportType:"portfolio"})
+      });
+      if(!response.ok){const json=await response.json();throw new Error(json.error||"Could not produce combined report.");}
+      const url=URL.createObjectURL(await response.blob());
+      const a=document.createElement("a");
+      a.href=url;a.download="Omega-Combined-Portfolio-Performance.pdf";
+      document.body.appendChild(a);a.click();a.remove();
+      window.setTimeout(()=>URL.revokeObjectURL(url),5000);
+      setStatus("Combined client portfolio PDF downloaded.");
+    }catch(error){setStatus(error instanceof Error?error.message:"Could not export combined PDF.");}
+    finally{setCombinedExporting(false);}
+  }
   return <section className="omega-v2-workspace">
     <div className="page-heading"><div>
       <span className="eyebrow">{showCashTable?"CASH FLOW RECORDS":"ACTUAL INVESTMENT PERFORMANCE"}</span>
@@ -201,7 +275,7 @@ export default function PerformanceWorkspace({mode}:{mode:Mode}) {
       </label>
       <button className="btn quiet" onClick={newCase} type="button"><Plus size={16}/> New policy</button>
       <button className="btn primary" disabled={saving} onClick={save} type="button"><Save size={16}/>{saving?"Saving…":"Save policy"}</button>
-      <button className="btn quiet" disabled={exporting||(!showCashTable&&!performance.available)}
+      <button className="btn quiet" disabled={exporting||!record.cashFlowsConfirmed||(!showCashTable&&!performance.available)}
         onClick={exportPdf} type="button"><ArrowDownToLine size={16}/>{exporting?"Preparing…":"Download PDF"}</button>
     </div>
     {(loading||status)&&<p role="status" className="omega-v2-status">{loading?"Loading policies…":status}</p>}
@@ -211,6 +285,7 @@ export default function PerformanceWorkspace({mode}:{mode:Mode}) {
       <div className="omega-v2-fields">
         <label className="omega-v2-field"><span>Client name</span><input className="form-input" maxLength={120} value={record.clientName} onChange={e=>edit({clientName:e.target.value})}/></label>
         <label className="omega-v2-field"><span>Policy name</span><input className="form-input" maxLength={120} placeholder="e.g. Retirement portfolio" value={record.policyName} onChange={e=>edit({policyName:e.target.value})}/></label>
+        <label className="omega-v2-field"><span>Client portfolio group (optional)</span><input className="form-input" maxLength={120} placeholder="e.g. Retirement Portfolio" value={record.portfolioGroup??""} onChange={e=>edit({portfolioGroup:e.target.value})}/></label>
         <label className="omega-v2-field"><span>Portfolio type</span><select className="form-input" value={record.policyType} onChange={e=>edit({policyType:e.target.value as InvestmentRecord["policyType"]})}>
           <option>Investment</option><option>Pension</option><option>Post-Retirement (ARF)</option>
         </select></label>
@@ -218,6 +293,18 @@ export default function PerformanceWorkspace({mode}:{mode:Mode}) {
         <label className="omega-v2-field"><span>Policy number</span><input className="form-input" maxLength={80} value={record.policyNumber} onChange={e=>edit({policyNumber:e.target.value})}/></label>
         <label className="omega-v2-field"><span>Original investment date</span><input className="form-input" type="date" value={record.investmentDate} onChange={e=>{edit({investmentDate:e.target.value});if(!start)setStart(e.target.value);}}/></label>
         <label className="omega-v2-field"><span>Original investment (€)</span><Amount label="Original investment in euro" value={record.originalInvestment} onChange={n=>edit({originalInvestment:n??0})}/></label>
+      </div>
+      <div className="omega-v2-reconciliation">
+        <h3>Provider statement control totals (optional)</h3>
+        <p className="muted">The source valuation workbook lists total contributions and withdrawals, but not their individual dates. Use these totals to check the dated transactions entered below. They do not create cash flows automatically.</p>
+        <div className="omega-v2-fields">
+          <label className="omega-v2-field"><span>Statement as-of date</span><input className="form-input" type="date" value={record.statementAsOf??""} onChange={e=>edit({statementAsOf:e.target.value})}/></label>
+          <label className="omega-v2-field"><span>Total contributions, including original (€)</span><Amount label="Statement total contributions" value={record.statementContributions??null} onChange={n=>edit({statementContributions:n})}/></label>
+          <label className="omega-v2-field"><span>Total withdrawals (€)</span><Amount label="Statement total withdrawals" value={record.statementWithdrawals??null} onChange={n=>edit({statementWithdrawals:n})}/></label>
+        </div>
+        {statementChecks.map(c=><p key={c.label} className={c.matches?"fineprint":"notice neutral"}>
+          {c.matches?"Reconciled: ":"Reconciliation needed: "}{c.label} · Provider {euro(c.expected)} · Entered {euro(c.entered)} · Difference {euro(c.difference)}
+        </p>)}
       </div>
       <p className="fineprint">Enter the original investment only once. The investment-date opening value defaults to this amount unless an actual policy valuation is entered for that date. Additional deposits belong in the contribution table below.</p>
     </div>
@@ -242,7 +329,11 @@ export default function PerformanceWorkspace({mode}:{mode:Mode}) {
     <div className="panel padded omega-v2-section">
       <div className="omega-v2-section-head"><div><span className="eyebrow">03 · DATED VALUATIONS</span>
         <p className="muted">Enter actual valuation dates from provider statements. Use policy total or individual fund values.</p></div>
-        <button className="btn quiet" type="button" onClick={addValuation}><Plus size={16}/> Add valuation</button>
+        <div className="button-row">
+          <button className="btn quiet" type="button" onClick={addValuation}><Plus size={16}/> Add valuation</button>
+          <button className="btn quiet" type="button" onClick={()=>{setPasteMode("dates");setPasteSource("");}}><ClipboardPaste size={16}/> Paste dated rows</button>
+          <button className="btn quiet" type="button" onClick={()=>{setPasteMode("matrix");setPasteSource("");}}><ClipboardPaste size={16}/> Paste Excel fund matrix</button>
+        </div>
       </div>
       <div className="table-scroll"><table className="data-table omega-v2-table"><thead><tr><th>DATE</th><th>HOLDING</th><th>MARKET VALUE (€)</th><th></th></tr></thead><tbody>
         {record.valuations.map(v=><tr key={v.id}>
@@ -261,7 +352,8 @@ export default function PerformanceWorkspace({mode}:{mode:Mode}) {
       <div className="omega-v2-section-head"><div><span className="eyebrow">04 · CONTRIBUTIONS & WITHDRAWALS</span>
         <p className="muted">Cash flows must be dated to measure growth separately from invested and withdrawn money.</p></div>
         <div className="button-row"><button className="btn quiet" type="button" onClick={()=>addFlow("contribution")}><Plus size={16}/> Contribution</button>
-          <button className="btn quiet" type="button" onClick={()=>addFlow("withdrawal")}><Plus size={16}/> Withdrawal</button></div>
+          <button className="btn quiet" type="button" onClick={()=>addFlow("withdrawal")}><Plus size={16}/> Withdrawal</button>
+          <button className="btn quiet" type="button" onClick={()=>{setPasteMode("cash");setPasteSource("");}}><ClipboardPaste size={16}/> Paste transactions</button></div>
       </div>
       <div className="table-scroll"><table className="data-table omega-v2-table"><thead><tr><th>DATE</th><th>TYPE</th><th>ALLOCATED TO</th><th>AMOUNT (€)</th><th>NOTES</th><th></th></tr></thead><tbody>
         {record.flows.map(f=><tr key={f.id}>
@@ -289,6 +381,12 @@ export default function PerformanceWorkspace({mode}:{mode:Mode}) {
         </select></label>
         <button className="btn quiet" type="button" onClick={addRecurring}><Plus size={15}/> Add schedule</button>
       </div>
+      <label className="omega-v2-confirmation">
+        <input type="checkbox" checked={record.cashFlowsConfirmed===true}
+          onChange={e=>edit({cashFlowsConfirmed:e.target.checked})}/>
+        <span><strong>Confirm complete dated cash flows</strong>
+          <small>I have checked all actual additional contributions and withdrawals against the available provider statements for this policy. Future planned payments are excluded. This confirmation is required to export a client PDF, but not to save a draft.</small></span>
+      </label>
     </div>
 
     <div className="panel padded omega-v2-section">
@@ -317,9 +415,10 @@ export default function PerformanceWorkspace({mode}:{mode:Mode}) {
         <Metric label="Euro gain / loss" value={euro(performance.gain)}/>
         <Metric label="Cumulative return · Modified Dietz" value={pct(performance.cumulativeReturnPct)} detail="Not annualised"/>
       </div>
+      {!record.cashFlowsConfirmed&&<p className="notice neutral" role="status">Draft calculation only. Confirm that all actual dated contributions and withdrawals have been entered before exporting a client report.</p>}
       {!performance.available&&<p className="notice neutral" role="status">Return unavailable: {performance.reason}</p>}
       {notes.map((n,i)=><p key={i} className="notice neutral">{n}</p>)}
-      {!showCashTable&&<><h3>Recorded portfolio value history</h3><ValuationChart record={record}/>
+      {!showCashTable&&<><h3>Recorded portfolio value history</h3><ValuationChart record={record} start={start} end={end}/>
         <h3>Fund-level cumulative performance</h3>
         <div className="table-scroll"><table className="data-table omega-v2-table"><thead><tr><th>FUND</th><th>OPENING VALUE</th><th>CLOSING VALUE</th><th>EURO GAIN / LOSS</th><th>CUMULATIVE RETURN</th></tr></thead>
           <tbody>{funds.map(({fund,result})=><tr key={fund.id}>
@@ -340,5 +439,58 @@ export default function PerformanceWorkspace({mode}:{mode:Mode}) {
       </>}
       <p className="fineprint">Methodology: cumulative Modified Dietz return measures investment gain after adjusting for dated external cash flows and the capital invested for the remaining portion of the period. Not a time-weighted return or annualised figure. Assumes flows occur at the close of their entered date. Reported valuation accuracy, fees, tax treatment and transaction dates must be checked against provider statements before client use.</p>
     </div>
+
+    {portfolioCandidates.length>=2&&<div className="panel padded omega-v2-section">
+      <span className="eyebrow">07 · COMBINED CLIENT PORTFOLIO</span>
+      <h2>Combined policy performance</h2>
+      <p className="muted">Select two or more saved policies for the same client and portfolio group. All must have valid valuations at the selected reporting dates. This calculates from combined cash flows and capital, not an average of percentage returns.</p>
+      <div className="omega-v2-policy-grid">
+        {portfolioCandidates.map(p=><label key={p.id} className="omega-v2-policy-checkbox">
+          <input type="checkbox" checked={includedPolicyIds.includes(p.id!)}
+            onChange={e=>setIncludedPolicyIds(current=>e.target.checked?[...current,p.id!]:current.filter(id=>id!==p.id))}/>
+          <span><strong>{p.policyName}</strong><small>{p.provider||"Provider not entered"} · {p.policyType}</small></span>
+        </label>)}
+      </div>
+      {selectedPolicies.length>=2&&<>
+        <div className="omega-v2-metrics">
+          <Metric label="Combined opening valuation" value={euro(combined.openingValue)}/>
+          <Metric label="Combined closing valuation" value={euro(combined.closingValue)}/>
+          <Metric label="Combined contributions" value={euro(combined.contributions)}/>
+          <Metric label="Combined withdrawals" value={euro(combined.withdrawals)}/>
+          <Metric label="Combined euro gain / loss" value={euro(combined.gain)}/>
+          <Metric label="Combined cumulative return" value={pct(combined.cumulativeReturnPct)} detail="Modified Dietz · not annualised"/>
+        </div>
+        {!combined.available&&<p className="notice neutral">{combined.reason}</p>}
+        {portfolioWarnings(selectedPolicies,start,end).map((w,i)=><p key={i} className="notice neutral">{w}</p>)}
+        <div className="table-scroll"><table className="data-table omega-v2-table">
+          <thead><tr><th>POLICY</th><th>OPENING VALUE</th><th>CLOSING VALUE</th><th>EURO GAIN / LOSS</th><th>CUMULATIVE RETURN</th></tr></thead>
+          <tbody>{combined.policyResults.map(({record:p,performance:v},i)=><tr key={p.id??i}>
+            <td>{p.policyName}</td><td>{euro(v.openingValue)}</td><td>{euro(v.closingValue)}</td><td>{euro(v.gain)}</td><td>{pct(v.cumulativeReturnPct)}</td>
+          </tr>)}</tbody>
+        </table></div>
+        <button className="btn primary" type="button" onClick={exportCombinedPdf}
+          disabled={!combined.available||combinedExporting||selectedPolicies.some(p=>!p.cashFlowsConfirmed)||portfolioWarnings(selectedPolicies,start,end).length>0}>
+          <FileText size={16}/>{combinedExporting?"Generating…":"Export combined portfolio PDF"}
+        </button>
+      </>}
+    </div>}
+
+    {pasteMode&&<div className="panel padded omega-v2-section omega-v2-paste" role="dialog" aria-modal="true" aria-label="Paste financial table" onKeyDown={e=>{if(e.key==="Escape"){setPasteMode(null);setPasteSource("");}}}>
+      <h2>{pasteMode==="matrix"?"Paste dated fund valuation matrix":pasteMode==="cash"?"Paste dated transactions":"Paste dated valuations"}</h2>
+      <p className="muted">{pasteMode==="matrix"?
+        "Copy a rectangle from Excel starting with Fund Invested, Value @ DD/MM/YYYY, Value @ DD/MM/YYYY. Fund names must already exist in Fund Holdings. Blank cells stay missing.":
+        pasteMode==="cash"?
+        "Paste tab-separated columns: Date, Type, Holding, Amount, Notes. Use Contribution or Withdrawal. Holding may be Policy or an existing fund name.":
+        "Paste tab-separated Date, Holding, Market value. Holding may be Policy or an existing fund name. Two-column Date, Value is also supported."}</p>
+      <textarea className="form-input textarea omega-v2-paste-area" rows={8} spellCheck={false}
+        aria-label="Paste spreadsheet cells" value={pasteSource} onChange={e=>setPasteSource(e.target.value)}
+        placeholder={pasteMode==="matrix"?"Fund Invested\tValue @ 29/03/2022\tValue @ 26/11/2026":
+          pasteMode==="cash"?"Date\tType\tHolding\tAmount\tNotes":"Date\tHolding\tMarket value"}/>
+      {status&&<p role="status" className="omega-v2-status">{status}</p>}
+      <div className="button-row">
+        <button className="btn primary" type="button" onClick={applyPastedRows}>Validate and add rows</button>
+        <button className="btn quiet" type="button" onClick={()=>{setPasteMode(null);setPasteSource("");}}>Cancel</button>
+      </div>
+    </div>}
   </section>;
 }

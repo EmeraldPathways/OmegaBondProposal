@@ -16,6 +16,14 @@ export type InvestmentRecord = {
   provider: string;
   policyNumber: string;
   policyType: PolicyType;
+  /** Optional grouping of several policies for a combined client portfolio. */
+  portfolioGroup?: string;
+  /** Provider statement control totals are checks, not dated cashflows. */
+  statementContributions?: number | null;
+  statementWithdrawals?: number | null;
+  statementAsOf?: string;
+  /** Explicit adviser confirmation; required only before exporting client PDFs. */
+  cashFlowsConfirmed?: boolean;
   investmentDate: string;
   originalInvestment: number;
   funds: FundPosition[];
@@ -99,6 +107,8 @@ export function calculatePerformance(
     f.date > start && f.date <= end && (fundId === null || f.fundId === fundId));
   const contributions = transactions.filter(f => f.kind === "contribution").reduce((n, f) => n + f.amount, 0);
   const withdrawals = transactions.filter(f => f.kind === "withdrawal").reduce((n, f) => n + f.amount, 0);
+  if (record.flows.some(f => !isValidDate(f.date) || !finiteAmount(f.amount) || f.amount <= 0))
+    return result("Complete or remove invalid cash-flow dates and amounts.", opening, closing, contributions, withdrawals, transactions.length);
   if (!isValidDate(start) || !isValidDate(end) || start >= end)
     return result("Select a valid start date before the end date.", opening, closing, contributions, withdrawals, transactions.length);
   if (record.investmentDate && start < record.investmentDate)
