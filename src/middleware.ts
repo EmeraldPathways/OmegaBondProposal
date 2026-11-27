@@ -22,6 +22,12 @@ export function middleware(request:NextRequest){
   // Proposal PDF generation reads current data and returns a PDF only.
   if(pathname==="/api/proposal/pdf"&&request.method==="POST")
     return NextResponse.next();
+  // New V2-only persistence is separately guarded against the live V1 database.
+  if(pathname==="/api/v2/investments"&&request.method==="POST")
+    return NextResponse.next();
+  // Performance and withdrawal PDFs are read-only computations.
+  if(pathname==="/api/v2/performance/pdf"&&request.method==="POST")
+    return NextResponse.next();
   return NextResponse.json({
     error:"Omega V2 is a read-only development preview. Data-changing actions "+
       "are disabled until a separate V2 test database is configured."
