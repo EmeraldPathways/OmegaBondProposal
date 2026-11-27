@@ -31,7 +31,7 @@ function decodeToken(value: string) {
 }
 type ImportRow = { storage_key: string; sha256: string };
 async function readPrivate(pathname: string, opts: { token?: string; storeId?: string }) {
-  const response = await get(pathname, { access: "private", ...opts });
+  const response = await get(pathname, { access: "private", useCache: false, ...opts });
   if (!response || response.statusCode !== 200) return null;
   return { bytes: Buffer.from(await new Response(response.stream).arrayBuffer()), contentType: response.blob.contentType };
 }
@@ -98,9 +98,15 @@ async function main() {
         allowOverwrite: false,
         contentType: source.contentType || "application/octet-stream",
       });
-      const confirmed = await readPrivate(row.storage_key, destinationOptions);
-      if (!confirmed || sha256(confirmed.bytes) !== row.sha256.toLowerCase()) {
-        throw new Error("[v2-blob-copy] Destination verification failed.");
+      let confirmed = null;
+      for (let attempt = 0; attempt < 5; attempt++) {
+        confirmed = await readPrivate(row.storage_key, destinationOptions);
+        if (confirmed && sha256(confirmed.bytes) === row.sha256.toLowerCase()) break;
+        await new Promise(resolve => setTimeout(resolve, 300 * (attempt + 1)));
+      }
+      if (!confirmed) throw new Error("[v2-blob-copy] Destination copy is not yet readable.");
+      if (sha256(confirmed.bytes) !== row.sha256.toLowerCase()) {
+        throw new Error("[v2-blob-copy] Destination checksum mismatch.");
       }
       copied++;
     }));
