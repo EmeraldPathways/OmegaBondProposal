@@ -82,6 +82,9 @@ test("five-fund proposal: page one allocations, page two full-size historical ch
   assert.match(sample.texts[0],/Fund allocations and reported cumulative returns/);
   assert.match(sample.texts[1],/Five-year fund performance/);
   assert.match(sample.texts[1],/Reported cumulative returns/);
+  assert.match(sample.texts[1],/0%/,"Performance chart must have an explicit 0% tick.");
+  assert.ok(!sample.texts[2].includes("Funds 1–3 of 5"));
+  assert.ok(!sample.texts[3].includes("Funds 4–5 of 5"));
   assert.ok(sample.texts[1].includes(history.funds[0].name));
   assert.ok(sample.texts[1].includes(history.funds[4].name));
   assert.ok(sample.texts[2].includes(history.funds[0].name));

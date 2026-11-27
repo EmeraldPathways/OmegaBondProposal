@@ -25,6 +25,25 @@ function priceSegments(points:PriceHistoryPoint[]):PriceHistoryPoint[][]{
   if(segment.length)result.push(segment);
   return result;
 }
+/** Six evenly spaced gridlines with an explicit 0% baseline.
+ * Works for all-positive, mixed and all-negative historical return series.
+ */
+export function performanceAxisTicks(values:readonly number[]){
+  const observed=values.filter(Number.isFinite);
+  const low=Math.min(0,...observed),high=Math.max(0,...observed);
+  const padding=Math.max(2,(high-low)*.08);
+  const requestedMin=low-padding,requestedMax=high+padding;
+  const fractionBelow=-requestedMin/(requestedMax-requestedMin);
+  const below=Math.max(1,Math.min(4,Math.round(fractionBelow*5)));
+  const above=5-below;
+  const requiredStep=Math.max(-requestedMin/below,requestedMax/above);
+  const power=Math.pow(10,Math.floor(Math.log10(Math.max(requiredStep,.000001))));
+  const candidate=[1,1.25,1.5,2,2.5,3,4,5,7.5,10]
+    .find(x=>x*power>=requiredStep-1e-8)??10;
+  const step=candidate*power;
+  const ticks=Array.from({length:6},(_,index)=>(index-below)*step);
+  return {domainMin:-below*step,domainMax:above*step,ticks,step};
+}
 /** Full-sized five-year chart built exclusively from the saved PRICES observations. */
 export function FiveYearMonthlyChart({funds}:{funds:WorkbookProposalFund[]}){
   const series=funds.filter(f=>(f.priceHistory?.length??0)>=2);
@@ -33,17 +52,13 @@ export function FiveYearMonthlyChart({funds}:{funds:WorkbookProposalFund[]}){
   const times=points.map(point=>Date.parse(point.date+"T00:00:00Z"));
   const leftTime=Math.min(...times),rightTime=Math.max(...times);
   const values=points.map(point=>point.returnPct);
-  const rawMin=Math.min(0,...values),rawMax=Math.max(0,...values);
-  const padding=Math.max(2,(rawMax-rawMin)*.08);
-  const domainMin=rawMin-padding,domainMax=rawMax+padding;
+  const {domainMin,domainMax,ticks:yTicks,step}=performanceAxisTicks(values);
   const width=505,plotLeft=50,plotRight=487,plotTop=14,plotBottom=239;
   const axisY=(value:number)=>
     plotBottom-(value-domainMin)/Math.max(.01,domainMax-domainMin)*(plotBottom-plotTop);
   const axisX=(date:string)=>
     plotLeft+(Date.parse(date+"T00:00:00Z")-leftTime)/
       Math.max(1,rightTime-leftTime)*(plotRight-plotLeft);
-  const yTicks=Array.from({length:6},(_,index)=>
-    domainMin+(domainMax-domainMin)*index/5);
   const xTicks=Array.from({length:6},(_,index)=>{
     const stamp=leftTime+(rightTime-leftTime)*index/5;
     return {stamp,x:plotLeft+(plotRight-plotLeft)*index/5,
@@ -77,7 +92,7 @@ export function FiveYearMonthlyChart({funds}:{funds:WorkbookProposalFund[]}){
           strokeWidth={Math.abs(value)<.001?1.1:.7}/>
         <Text x={plotLeft-8} y={axisY(value)+3} textAnchor="end"
           style={{fill:color.muted,fontSize:9}}>
-          {value.toFixed(0)}%
+          {value===0?"0":Math.abs(step)<1?value.toFixed(1):value.toFixed(0)}%
         </Text>
       </React.Fragment>)}
       {xTicks.map((tick,i)=><React.Fragment key={"year-"+i}>
@@ -98,7 +113,8 @@ export function FiveYearMonthlyChart({funds}:{funds:WorkbookProposalFund[]}){
         )
       )}
     </Svg>
-    <View style={{flexDirection:"row",flexWrap:"wrap",marginTop:4}}>
+    <View style={{flexDirection:"row",flexWrap:"wrap",marginTop:4,
+      marginLeft:48,marginRight:17}}>
       {series.map((fund,i)=><View key={fund.id}
         style={{width:"49%",flexDirection:"row",alignItems:"flex-start",
           gap:7,paddingVertical:4,paddingRight:9}}>

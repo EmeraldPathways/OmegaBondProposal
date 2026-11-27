@@ -343,7 +343,7 @@ export default function Workspace() {
 
         {view === "compare" && <>
           <div className="page-heading"><div><span className="eyebrow">PORTFOLIO COMPARISON</span><h1>Compare portfolios</h1>
-            <p>Compare allocations and indicative weighted fund returns where the same source workbook covers every selected holding.</p></div>
+            </div>
             <button className="btn quiet" onClick={()=>go("builder")}>Edit allocations <ArrowRight size={16}/></button>
           </div>
           <div className="portfolio-card-grid">{portfolios.map(p=>{
@@ -378,7 +378,7 @@ export default function Workspace() {
 
         {view === "proposal" && <>
           <div className="page-heading"><div><span className="eyebrow">CLIENT DOCUMENTS</span><h1>{proposalTitle.trim()||"Investment bond proposal"}</h1>
-            <p>Generate an A4 Omega-branded proposal using allocations from Portfolio builder, cumulative returns from the current workbook and supporting information extracted from each linked PDF.</p></div>
+            </div>
           </div>
           <section className="panel padded">
             <span className="eyebrow">PROPOSAL DETAILS</span>

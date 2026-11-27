@@ -2,13 +2,13 @@ import React from "react";
 import {Document,Page,View,Text,StyleSheet,Svg,Path,Circle,Rect,Line} from "@react-pdf/renderer";
 import {OMEGA_LOGO_PATHS} from "@/lib/branding/omega-logo-paths";
 import {firstPageFundLimit,paginateFundDetails,originalFactsheetParagraph} from "@/lib/pdf/fund-detail-layout";
-import {riskRatingLabel,RISK_RATING_CAVEAT} from "@/lib/fund-risk-ratings";
+import {getFundRiskRating,RISK_RATING_CAVEAT} from "@/lib/fund-risk-ratings";
 import {chartFundGroups} from "@/lib/pdf/cumulative-return-chart";
 import type {PriceHistoryPoint} from "@/lib/reconciliation/monthly-prices";
 import {FiveYearMonthlyChart,CHART_COLORS} from "@/lib/pdf/five-year-monthly-chart";
 import {ExtendedFundInvestmentBreakdown} from "@/lib/pdf/expanded-portfolio-components";
 import {isExpandedPortfolio,splitPerformanceFundGroups,
-  paginateExpandedFundDetails,fundDetailPageOffsets}
+  paginateExpandedFundDetails}
   from "@/lib/pdf/adaptive-fund-layout";
 
 export type WorkbookReturnPeriods = Record<
@@ -134,6 +134,36 @@ function ringWedge(cx:number,cy:number,outer:number,inner:number,start:number,en
     " A "+inner+" "+inner+" 0 "+large+" 0 "+x4+" "+y4+" Z";
 }
 
+/** Fund-level provider rating, displayed on its original 1–7 scale.
+ * The white outline highlights the selected segment, like the factsheets.
+ */
+export const PDF_RISK_COLORS=[
+  "#77777B","#3879B9","#727D34","#008B79",
+  "#703094","#B6602D","#E41E2B"
+] as const;
+function FundRiskScale({fund}:{fund:WorkbookProposalFund}){
+  const rating=getFundRiskRating(fund)?.rating??null;
+  return <View style={{width:119,alignItems:"center"}}>
+    <Text style={{fontFamily:"Helvetica-Bold",fontSize:7.3,
+      color:color.wine,marginBottom:3}}>
+      Risk rating: {rating===null?"Not verified":rating+"/7"}
+    </Text>
+    <Svg width={112} height={24} viewBox="0 0 112 24">
+      {PDF_RISK_COLORS.map((fill,i)=><React.Fragment key={i}>
+        <Rect x={i*16} y={2} width={14} height={19} fill={fill}/>
+        <Text x={i*16+7} y={15} textAnchor="middle"
+          style={{fontSize:10.2,fontFamily:"Helvetica-Bold",fill:"#FFFFFF"}}>
+          {i+1}
+        </Text>
+        {rating===i+1?<Rect x={i*16-1} y={0} width={16} height={23}
+          fill="none" stroke="#FFFFFF" strokeWidth={2.8}/>:null}
+      </React.Fragment>)}
+    </Svg>
+  </View>;
+}
+function compactAllocationNameSize(name:string){
+  return name.length>54?5.8:name.length>44?6.1:name.length>34?6.4:6.8;
+}
 /** One-page portfolio layout: chart above, small allocation/breakdown,
  * and the original reported-return table anchored below. */
 function CompactPortfolioAllocationAndBreakdown({
@@ -158,41 +188,44 @@ function CompactPortfolioAllocationAndBreakdown({
       width:"49%",borderWidth:.7,borderColor:color.border,
       borderRadius:7,padding:dense?10:12,backgroundColor:"#FDFDFC"
     }}>
-      <Text style={{
-        fontFamily:"Times-Roman",fontSize:14,color:color.wine,marginBottom:7
-      }}>Portfolio allocation</Text>
-      <View style={{flexDirection:"row",alignItems:"center",gap:6}}>
-        <View style={{width:100,height:101,position:"relative"}}>
-          <Svg width={98} height={98} viewBox="0 0 164 164">
+      <View style={{flexDirection:"row",alignItems:"center",gap:8}}>
+        <View style={{width:68,height:68,position:"relative"}}>
+          <Svg width={68} height={68} viewBox="0 0 164 164">
             {allFunds.length===1?
               <Circle cx={82} cy={82} r={60} stroke={CHART_COLORS[0]}
                 strokeWidth={24} fill="none"/>:
               paths.map(p=><Path key={p.id} d={p.path} fill={p.color}/>)}
             <Circle cx={82} cy={82} r={43} fill="#FFFFFF"/>
           </Svg>
-          <View style={{position:"absolute",top:37,left:15,width:68,alignItems:"center"}}>
-            <Text style={{fontFamily:"Helvetica-Bold",fontSize:15,color:color.wine}}>
+          <View style={{position:"absolute",top:26,left:12,width:44,
+            alignItems:"center"}}>
+            <Text style={{fontFamily:"Helvetica-Bold",fontSize:8.1,color:color.wine}}>
               {portfolioWeight.toFixed(2)}%
             </Text>
-            <Text style={{fontSize:6.5,color:color.muted}}>allocated</Text>
+            <Text style={{fontSize:4.7,color:color.muted}}>allocated</Text>
           </View>
         </View>
-        <View style={{flex:1}}>
-          {funds.map(f=>{
-            const position=allFunds.findIndex(item=>item.id===f.id);
-            return <View key={f.id} style={{
-              flexDirection:"row",alignItems:"flex-start",
-              gap:4,marginBottom:dense?3:7
-            }}>
-              <View style={{width:7,height:7,marginTop:2,borderRadius:1,
-                backgroundColor:CHART_COLORS[position%CHART_COLORS.length]}}/>
-              <Text style={{fontSize:dense?6.3:7,lineHeight:1.25,
-                flex:1,color:color.ink}}>{f.name}</Text>
-              <Text style={{fontFamily:"Helvetica-Bold",fontSize:dense?6.5:7.2,
-                color:color.ink,width:30,textAlign:"right"}}>{f.weight.toFixed(2)}%</Text>
-            </View>;
-          })}
-        </View>
+        <Text style={{fontFamily:"Times-Roman",fontSize:12.2,
+          color:color.wine,flex:1}}>Portfolio allocation</Text>
+      </View>
+      <View style={{marginTop:5}}>
+        {funds.map(f=>{
+          const position=allFunds.findIndex(item=>item.id===f.id);
+          return <View key={f.id} style={{
+            flexDirection:"row",alignItems:"center",gap:4,
+            marginBottom:dense?3:5
+          }}>
+            <View style={{width:6,height:6,borderRadius:1,
+              backgroundColor:CHART_COLORS[position%CHART_COLORS.length]}}/>
+            <Text wrap={false} hyphenationCallback={word=>[word]}
+              style={{fontSize:compactAllocationNameSize(f.name),
+                flex:1,color:color.ink,lineHeight:1.15}}>{f.name}</Text>
+            <Text style={{fontFamily:"Helvetica-Bold",fontSize:6.2,
+              color:color.ink,width:31,textAlign:"right"}}>
+              {f.weight.toFixed(2)}%
+            </Text>
+          </View>;
+        })}
       </View>
     </View>
     <View style={{
@@ -270,7 +303,7 @@ function CoverPortfolioAllocation({portfolio,multiple}:{
           width:expanded?102:multiple?62:77,alignItems:"center"
         }}>
           <Text style={{fontFamily:"Helvetica-Bold",
-            fontSize:expanded?24:multiple?13:17,color:color.wine}}>
+            fontSize:expanded?17:multiple?9:11.5,color:color.wine}}>
             {percentageAllocated.toFixed(2)}%
           </Text>
           <Text style={{fontSize:expanded?8:multiple?6:7,
@@ -351,9 +384,6 @@ function FundAllocationReturnsTable({funds,dense}:{
           </Text>
         </View>)}
     </View>)}
-    <Text style={{fontSize:7.2,color:color.muted,marginTop:7}}>
-      Cumulative returns, not annualised · — indicates unavailable data
-    </Text>
   </View>;
 }
 export default function WorkbookProposalPDF({data}:{data:WorkbookProposalData}){
@@ -491,13 +521,6 @@ export default function WorkbookProposalPDF({data}:{data:WorkbookProposalData}){
         <Text style={[style.heading,{marginBottom:3,fontSize:16}]}>
           {p.title} · Fund details
         </Text>
-        {pages.length>1?<Text style={{
-          fontSize:7.5,color:color.muted,marginBottom:2
-        }}>Funds {(isExpandedPortfolio(p.funds.length)?
-          fundDetailPageOffsets(pages):pages.map((_,i)=>i*3))[pageIndex]+1}
-          –{(isExpandedPortfolio(p.funds.length)?
-          fundDetailPageOffsets(pages):pages.map((_,i)=>i*3))[pageIndex]+group.length}
-          of {p.funds.length}</Text>:null}
         {group.map(f=><View key={f.id+"-source"}
           style={[style.sourceCard,
             isExpandedPortfolio(p.funds.length)?{
@@ -511,10 +534,7 @@ export default function WorkbookProposalPDF({data}:{data:WorkbookProposalData}){
               isExpandedPortfolio(p.funds.length)?{
                 fontSize:11.1,marginBottom:6
               }:{}]}>{f.name}</Text>
-            <Text style={{width:"25%",textAlign:"right",fontSize:7.8,
-              fontFamily:"Helvetica-Bold",color:color.wine}}>
-              Risk rating: {riskRatingLabel(f)}
-            </Text>
+            <FundRiskScale fund={f}/>
           </View>
           <Text style={{
             fontSize:8.6,lineHeight:1.52,color:color.ink,marginTop:8

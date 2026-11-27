@@ -89,6 +89,7 @@ test("five-fund reference format stays exactly four pages: cover/chart/3+2",asyn
   assert.ok(!pages[1].includes("Initial investment breakdown"));
   for(let i=0;i<3;i++)assert.ok(pages[2].includes(funds[i].name));
   for(let i=3;i<5;i++)assert.ok(pages[3].includes(funds[i].name));
+  assert.doesNotMatch(pages[3],/Funds 4[–-]5 of 5/);
 });
 for(let n=6;n<=10;n++){
   test(n+" funds use a clean cover, complete returns, one combined chart and balanced detail pages",async()=>{

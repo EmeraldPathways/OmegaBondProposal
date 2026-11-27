@@ -86,7 +86,7 @@ test("client PDF omits internal upload provenance, validation notices and review
   assert.match(read("src/lib/pdf/fund-detail-layout.ts"),/fields\.objective/);
   assert.match(pdf,/f\.returns\.oneYear/);
   assert.match(pdf,/CompactPortfolioAllocationAndBreakdown/);
-  assert.match(pdf,/Cumulative returns, not annualised/);
+  assert.doesNotMatch(pdf,/Cumulative returns, not annualised · — indicates unavailable data/);
   const viewer=read("src/components/proposal-pdf-viewer.tsx");
   assert.match(viewer,/Omega-Investment-Bond-Proposal\.pdf/);
 });
@@ -161,4 +161,20 @@ test("PDF branding has logo-only headers, an introduction cover, and no static f
   assert.match(api,/proposalTitle:data\.proposalTitle/);
   assert.match(chart,/flexDirection:"row",alignItems:"baseline"/);
   assert.doesNotMatch(chart,/Source: the current monthly workbook PRICES tab/);
+});
+
+test("client headings and PDF print refinements exclude redundant copy",()=>{
+  const workspace=read("src/components/workspace.tsx");
+  const pdf=read("src/lib/pdf/workbook-proposal.tsx");
+  const chart=read("src/lib/pdf/five-year-monthly-chart.tsx");
+  assert.doesNotMatch(workspace,/Generate an A4 Omega-branded proposal using allocations/);
+  assert.doesNotMatch(workspace,/Compare allocations and indicative weighted fund returns where/);
+  assert.doesNotMatch(pdf,/Funds \{\(isExpandedPortfolio/);
+  assert.match(pdf,/<FundRiskScale fund=\{f\}\/>/);
+  assert.match(pdf,/PDF_RISK_COLORS/);
+  assert.match(pdf,/compactAllocationNameSize\(f\.name\)/);
+  assert.match(pdf,/fontSize:expanded\?17:multiple\?9:11\.5/);
+  assert.match(chart,/marginLeft:48,marginRight:17/);
+  assert.match(chart,/performanceAxisTicks\(values\)/);
+  assert.doesNotMatch(pdf,/Cumulative returns, not annualised · — indicates unavailable data/);
 });
