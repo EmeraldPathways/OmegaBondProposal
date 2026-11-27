@@ -20,12 +20,20 @@ const today = () => {
 };
 const uid = () => crypto.randomUUID();
 function Amount({value,onChange,label,placeholder}:{value:number|null;onChange:(n:number|null)=>void;label:string;placeholder?:string}) {
-  return <input className="form-input" type="number" step="0.01" min="0"
-    aria-label={label} placeholder={placeholder ?? "0.00"} value={value ?? ""}
+  const [draft,setDraft]=useState(value===null?"":String(value));
+  const [focused,setFocused]=useState(false);
+  useEffect(()=>{if(!focused)setDraft(value===null?"":String(value));},[value,focused]);
+  return <input className="form-input" type="text" inputMode="decimal"
+    aria-label={label} placeholder={placeholder ?? "0.00"} value={draft}
+    onFocus={()=>setFocused(true)}
     onChange={e => {
-      const n = e.target.value === "" ? null : Number(e.target.value);
-      onChange(n !== null && Number.isFinite(n) ? n : null);
-    }}/>;
+      const next=e.target.value.replace(/,/g,"");
+      if(!/^\d*(?:\.\d{0,2})?$/.test(next))return;
+      setDraft(next);
+      const n=next===""||next==="."?null:Number(next);
+      onChange(n!==null&&Number.isFinite(n)?n:null);
+    }}
+    onBlur={()=>{setFocused(false);setDraft(value===null?"":String(value));}}/>;
 }
 function Metric({label,value,detail}:{label:string;value:string;detail?:string}) {
   return <div className="omega-v2-metric"><span>{label}</span><strong>{value}</strong>{detail&&<small>{detail}</small>}</div>;
@@ -153,7 +161,9 @@ export default function PerformanceWorkspace({mode}:{mode:Mode}) {
     edit({flows:record.flows.map(f=>f.id===id?{...f,...changes}:f)});
   }
   function addValuation(){
-    edit({valuations:[...record.valuations,{id:uid(),date:end||today(),fundId:null,value:null}]});
+    const date=end||today();
+    edit({valuations:[...record.valuations,{id:uid(),date,fundId:null,value:null}]});
+    if(!end)setEnd(date);
   }
   function addFlow(kind:"contribution"|"withdrawal"){
     edit({flows:[...record.flows,{id:uid(),kind,date:today(),fundId:null,amount:0,note:""}]});
