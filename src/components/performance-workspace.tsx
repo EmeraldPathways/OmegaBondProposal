@@ -183,6 +183,8 @@ export default function PerformanceWorkspace({mode}:{mode:Mode}) {
   }
   const totalWithdrawn=periodFlows.filter(f=>f.kind==="withdrawal").reduce((n,f)=>n+f.amount,0);
   const totalAdded=periodFlows.filter(f=>f.kind==="contribution").reduce((n,f)=>n+f.amount,0);
+  const lifetimeAdded=record.flows.filter(f=>f.kind==="contribution").reduce((n,f)=>n+f.amount,0);
+  const lifetimeWithdrawn=record.flows.filter(f=>f.kind==="withdrawal").reduce((n,f)=>n+f.amount,0);
   const showCashTable=mode==="withdrawals";
   return <section className="omega-v2-workspace">
     <div className="page-heading"><div>
@@ -305,6 +307,9 @@ export default function PerformanceWorkspace({mode}:{mode:Mode}) {
       </div>
       <div className="omega-v2-metrics">
         <Metric label="Original investment" value={euro(record.originalInvestment)}/>
+        <Metric label="Lifetime contributions" value={euro(record.originalInvestment+lifetimeAdded)}/>
+        <Metric label="Lifetime withdrawals" value={euro(lifetimeWithdrawn)}/>
+        <Metric label="Net invested capital" value={euro(record.originalInvestment+lifetimeAdded-lifetimeWithdrawn)}/>
         <Metric label="Period opening value" value={euro(performance.openingValue)}/>
         <Metric label="Current / closing value" value={euro(performance.closingValue)}/>
         <Metric label="Additional contributions" value={euro(totalAdded)}/>
