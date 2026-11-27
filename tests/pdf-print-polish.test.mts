@@ -133,8 +133,8 @@ test("Amount breakdown prints full long fund names on a single row alongside amo
       const labels=content.items.filter(item=>"str" in item).map(item=>item.str);
       assert.ok(labels.includes("100.00%"),
         "Doughnut centre must contain the entire 100.00% text on page "+pageNumber);
-      assert.ok(!labels.includes("%"),
-        "Percentage glyph must not be separated from its number on page "+pageNumber);
+      assert.ok(!labels.includes("100.00"),
+        "The doughnut value must not be printed without its percent glyph on page "+pageNumber);
     }
     const page=await doc.getPage(2);
     const extracted=await page.getTextContent();
