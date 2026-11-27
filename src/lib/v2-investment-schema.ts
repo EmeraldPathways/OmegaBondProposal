@@ -10,7 +10,7 @@ const fundSchema = z.object({
   initialAmount: money.nullable()
 });
 const valuationSchema = z.object({
-  id: identifier, date: day.refine(Boolean), fundId: identifier.nullable(), value: money
+  id: identifier, date: day.refine(Boolean), fundId: identifier.nullable(), value: money.nullable()
 });
 const flowSchema = z.object({
   id: identifier, date: day.refine(Boolean), fundId: identifier.nullable(),
