@@ -41,10 +41,11 @@ test("the compact second allocation legend is single-line and retains full fund 
   assert.match(source,/compactAllocationNameSize\(f\.name\)/);
   assert.match(source,/wrap=\{false\} hyphenationCallback=\{word=>\[word\]\}/);
   assert.match(source,/width:68,height:68,position:"relative"/);
-  assert.match(source,/<DoughnutCenterText percentage=\{portfolioWeight\}\/>/);
-  assert.match(source,/<DoughnutCenterText percentage=\{percentageAllocated\}\/>/);
-  assert.match(source,/x=\{82\} y=\{81\} textAnchor="middle"/);
-  assert.match(source,/x=\{82\} y=\{95\} textAnchor="middle"/);
+  assert.match(source,/<DoughnutCenterLabel percentage=\{portfolioWeight\} size=\{68\}\/>/);
+  assert.match(source,/<DoughnutCenterLabel percentage=\{percentageAllocated\} size=\{size\}\/>/);
+  assert.match(source,/width:size\*\.52,textAlign:"center",fontFamily:"Helvetica-Bold"/);
+  assert.match(source,/percentage\.toFixed\(2\)\+"%"/);
+  assert.match(source,/alignItems:"center",justifyContent:"center"/);
   assert.match(source,/fontSize:compactAllocationNameSize\(f\.name\),width:"72%"/);
   assert.doesNotMatch(source,/\{f\.name\} \(\{f\.weight\.toFixed\(2\)\}%\)/);
   assert.doesNotMatch(source,/position:"absolute",top:26,left:12/);
@@ -89,6 +90,8 @@ test("axis zero is independent of the original PRICES series values",async()=>{
   const chart=readFileSync(new URL("../src/lib/pdf/five-year-monthly-chart.tsx",import.meta.url),"utf8");
   assert.match(chart,/const values=points\.map\(point=>point\.returnPct\)/);
   assert.match(chart,/axisY\(point\.returnPct\)/);
+  assert.match(chart,/priceSegments\(fund\.priceHistory\?\?\[\]\)/);
+  assert.doesNotMatch(chart,/rebaseCumulativeSeries|chartPoints|first\.returnPct\s*[+-]/);
   assert.doesNotMatch(chart,/point\.returnPct\s*-\s*(?:first|start|initial|baseline)/i);
   console.log("Raw first PRICES observations (no chart rebasing): "+JSON.stringify(observed));
 });
@@ -124,6 +127,15 @@ test("Amount breakdown prints full long fund names on a single row alongside amo
   }}));
   const doc=await getDocumentProxy(new Uint8Array(bytes));
   try{
+    for(const pageNumber of [1,2]){
+      const currentPage=await doc.getPage(pageNumber);
+      const content=await currentPage.getTextContent();
+      const labels=content.items.filter(item=>"str" in item).map(item=>item.str);
+      assert.ok(labels.includes("100.00%"),
+        "Doughnut centre must contain the entire 100.00% text on page "+pageNumber);
+      assert.ok(!labels.includes("%"),
+        "Percentage glyph must not be separated from its number on page "+pageNumber);
+    }
     const page=await doc.getPage(2);
     const extracted=await page.getTextContent();
     const items=extracted.items.filter((item):item is typeof item & {

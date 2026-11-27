@@ -165,17 +165,23 @@ function FundRiskScale({fund}:{fund:WorkbookProposalFund}){
 function compactAllocationNameSize(name:string){
   return name.length>54?5.8:name.length>44?6.1:name.length>34?6.4:6.8;
 }
-/** SVG-centred labels use the same 164×164 coordinates as both doughnuts.
- * Avoids the font-dependent offset of absolute-positioned overlay Views. */
-function DoughnutCenterText({percentage}:{percentage:number}){
-  return <React.Fragment>
-    <Text x={82} y={81} textAnchor="middle" style={{
-      fontFamily:"Helvetica-Bold",fontSize:18.2,fill:color.wine
-    }}>{percentage.toFixed(2)}%</Text>
-    <Text x={82} y={95} textAnchor="middle" style={{
-      fontSize:8.6,fill:color.muted
+/** Render the centre copy as a single native PDF text run.
+ * SVG Text may split out the percent glyph, leaving it outside the ring.
+ * Scale the text proportionally to fit inside the white doughnut opening. */
+function DoughnutCenterLabel({percentage,size}:{percentage:number;size:number}){
+  return <View style={{
+    position:"absolute",top:0,left:0,width:size,height:size,
+    alignItems:"center",justifyContent:"center"
+  }} wrap={false}>
+    <Text wrap={false} style={{
+      width:size*.52,textAlign:"center",fontFamily:"Helvetica-Bold",
+      fontSize:size*.088,lineHeight:1.04,color:color.wine
+    }}>{percentage.toFixed(2)+"%"}</Text>
+    <Text wrap={false} style={{
+      width:size*.52,textAlign:"center",fontSize:size*.050,
+      lineHeight:1.12,color:color.muted,marginTop:1
     }}>allocated</Text>
-  </React.Fragment>;
+  </View>;
 }
 /** One-page portfolio layout: chart above, small allocation/breakdown,
  * and the original reported-return table anchored below. */
@@ -209,8 +215,8 @@ function CompactPortfolioAllocationAndBreakdown({
                 strokeWidth={24} fill="none"/>:
               paths.map(p=><Path key={p.id} d={p.path} fill={p.color}/>)}
             <Circle cx={82} cy={82} r={43} fill="#FFFFFF"/>
-            <DoughnutCenterText percentage={portfolioWeight}/>
           </Svg>
+          <DoughnutCenterLabel percentage={portfolioWeight} size={68}/>
         </View>
         <Text style={{fontFamily:"Times-Roman",fontSize:12.2,
           color:color.wine,flex:1}}>Portfolio allocation</Text>
@@ -304,8 +310,8 @@ function CoverPortfolioAllocation({portfolio,multiple}:{
             stroke={CHART_COLORS[0]} strokeWidth={24} fill="none"/>:
             paths.map(p=><Path key={p.id} d={p.d} fill={p.color}/>)}
           <Circle cx={82} cy={82} r={43} fill="#FFFFFF"/>
-          <DoughnutCenterText percentage={percentageAllocated}/>
         </Svg>
+        <DoughnutCenterLabel percentage={percentageAllocated} size={size}/>
       </View>
       <View style={{flex:1}}>
         {shown.map(f=>{
