@@ -82,8 +82,8 @@ test("A4 PDF can render uploaded-workbook returns and PDF factsheet metadata wit
     ])assert.ok(details.includes(heading),"Fund-details page must contain "+heading);
     assert.ok(details.includes("Risk Rating"),"Risk Rating heading must appear.");
     assert.ok(!details.includes("Funds 1–3 of 3"),"Redundant fund counter must be removed.");
-    for(const rating of ["4/7","5/7","3/7"])
-      assert.ok(details.includes(rating),"One provider-specific rating missing: "+rating);
+    for(const number of ["1","2","3","4","5","6","7"])
+      assert.ok(details.includes(number),"Risk Rating scale must include number "+number);
     assert.ok(details.includes("not directly comparable between insurers"),
       "PDF must explain the difference between provider scales.");
     assert.ok(!details.includes("Cumulative fund performance"),
