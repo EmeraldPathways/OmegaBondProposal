@@ -6,7 +6,7 @@
  */
 export type PolicyType = "Pension" | "Post-Retirement (ARF)" | "Investment";
 export type FundPosition = { id: string; name: string; initialAmount: number | null };
-export type ValuationEntry = { id: string; date: string; fundId: string | null; value: number };
+export type ValuationEntry = { id: string; date: string; fundId: string | null; value: number | null };
 export type FlowEntry = { id: string; date: string; fundId: string | null; kind: "contribution" | "withdrawal"; amount: number; note: string };
 export type InvestmentRecord = {
   id?: string;
@@ -46,7 +46,7 @@ export const isValidDate = (s: string) => {
   return Number.isFinite(time) && new Date(time).toISOString().slice(0, 10) === s;
 };
 const epoch = (s: string) => Date.parse(s + "T00:00:00Z");
-const finiteAmount = (n: unknown) => typeof n === "number" && Number.isFinite(n) && n >= 0;
+const finiteAmount = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n) && n >= 0;
 const closeEnough = (a: number, b: number) => Math.abs(a - b) <= 0.02;
 const rounded = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
@@ -128,7 +128,7 @@ export function checkPolicyValuations(record: InvestmentRecord, date: string): s
   const fundValues = record.funds.map(f => valuationAt(record, date, f.id));
   if (policyRows.length === 1 && record.funds.length > 0 && fundValues.every(v => v !== null)) {
     const sum = fundValues.reduce<number>((n, v) => n + (v ?? 0), 0);
-    if (!closeEnough(sum, policyRows[0].value))
+    if (finiteAmount(policyRows[0].value) && !closeEnough(sum, policyRows[0].value))
       return "Fund valuations do not reconcile to the policy valuation for " + date + ".";
   }
   return null;
