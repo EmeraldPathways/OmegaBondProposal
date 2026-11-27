@@ -115,16 +115,18 @@ export default function PerformancePdf({record,startDate,endDate,reportType}:Per
         <ValueHistory record={record} startDate={startDate} endDate={endDate}/>
         <Text style={s.headline}>Individual fund performance</Text>
         <View style={s.tableHeader}>
-          <Text style={[s.th,{width:"36%"}]}>FUND</Text>
-          <Text style={[s.th,{width:"21%",textAlign:"right"}]}>OPENING</Text>
-          <Text style={[s.th,{width:"21%",textAlign:"right"}]}>CLOSING</Text>
-          <Text style={[s.th,{width:"22%",textAlign:"right"}]}>CUM. RETURN</Text>
+          <Text style={[s.th,{width:"30%"}]}>FUND</Text>
+          <Text style={[s.th,{width:"17%",textAlign:"right"}]}>OPENING</Text>
+          <Text style={[s.th,{width:"17%",textAlign:"right"}]}>CLOSING</Text>
+          <Text style={[s.th,{width:"18%",textAlign:"right"}]}>GAIN / LOSS</Text>
+          <Text style={[s.th,{width:"18%",textAlign:"right"}]}>CUM. RETURN</Text>
         </View>
         {fundResults.map(({fund,result})=><View key={fund.id} wrap={false} style={s.tableRow}>
-          <Text style={[s.td,{width:"36%"}]}>{fund.name}</Text>
-          <Text style={[s.td,{width:"21%",textAlign:"right"}]}>{money(result.openingValue)}</Text>
-          <Text style={[s.td,{width:"21%",textAlign:"right"}]}>{money(result.closingValue)}</Text>
-          <Text style={[s.td,{width:"22%",textAlign:"right"}]}>{percentage(result.cumulativeReturnPct)}</Text>
+          <Text style={[s.td,{width:"30%"}]}>{fund.name}</Text>
+          <Text style={[s.td,{width:"17%",textAlign:"right"}]}>{money(result.openingValue)}</Text>
+          <Text style={[s.td,{width:"17%",textAlign:"right"}]}>{money(result.closingValue)}</Text>
+          <Text style={[s.td,{width:"18%",textAlign:"right"}]}>{money(result.gain)}</Text>
+          <Text style={[s.td,{width:"18%",textAlign:"right"}]}>{percentage(result.cumulativeReturnPct)}</Text>
         </View>)}
         {!fundResults.length?<Text style={s.note}>Individual fund values have not been entered.</Text>:null}
         {fundResults.filter(x=>!x.result.available).length>0?<Text style={s.note}>
