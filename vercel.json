@@ -1,3 +1,0 @@
-{
-  "buildCommand": "node --import tsx scripts/copy-v1-blobs-to-v2.mts && npx next build"
-}
