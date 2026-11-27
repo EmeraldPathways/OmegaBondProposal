@@ -7,5 +7,15 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="en"><body>{children}</body></html>;
+  const isV2Preview=process.env.VERCEL_ENV==="preview";
+  return <html lang="en"><body>
+    {isV2Preview?<div role="status" style={{
+      background:"#671E27",color:"#FFFFFF",fontSize:12,
+      lineHeight:"18px",padding:"7px 18px",textAlign:"center",
+      letterSpacing:".025em",fontFamily:"Arial, sans-serif"
+    }}>
+      OMEGA V2 · DEVELOPMENT PREVIEW · READ-ONLY — LIVE WEBSITE UNCHANGED
+    </div>:null}
+    {children}
+  </body></html>;
 }
