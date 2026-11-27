@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import "./auth.css";
+import "./v2-performance.css";
 export const metadata: Metadata = {
   title: "Omega | Bond Proposal Generator",
   description: "Omega Financial Management investment bond portfolio analysis and proposal workspace.",
