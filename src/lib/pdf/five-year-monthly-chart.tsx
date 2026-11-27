@@ -51,6 +51,8 @@ export function FiveYearMonthlyChart({funds}:{funds:WorkbookProposalFund[]}){
   const points=series.flatMap(f=>f.priceHistory??[]);
   const times=points.map(point=>Date.parse(point.date+"T00:00:00Z"));
   const leftTime=Math.min(...times),rightTime=Math.max(...times);
+  // Tick placement must never rebase or reset any source return observation.
+  // Series paths below use each uploaded PRICES returnPct unchanged.
   const values=points.map(point=>point.returnPct);
   const {domainMin,domainMax,ticks:yTicks,step}=performanceAxisTicks(values);
   const width=505,plotLeft=50,plotRight=487,plotTop=14,plotBottom=239;

@@ -135,7 +135,7 @@ function ringWedge(cx:number,cy:number,outer:number,inner:number,start:number,en
 }
 
 /** Fund-level provider rating, displayed on its original 1–7 scale.
- * The white outline highlights the selected segment, like the factsheets.
+ * An outer black outline clearly highlights the selected segment.
  */
 export const PDF_RISK_COLORS=[
   "#77777B","#3879B9","#727D34","#008B79",
@@ -145,24 +145,37 @@ function FundRiskScale({fund}:{fund:WorkbookProposalFund}){
   const rating=getFundRiskRating(fund)?.rating??null;
   return <View style={{width:119,alignItems:"center"}}>
     <Text style={{fontFamily:"Helvetica-Bold",fontSize:7.3,
-      color:color.wine,marginBottom:3}}>
-      Risk rating: {rating===null?"Not verified":rating+"/7"}
-    </Text>
-    <Svg width={112} height={24} viewBox="0 0 112 24">
+      color:color.wine,marginBottom:3}}>Risk Rating</Text>
+    <Svg width={116} height={25} viewBox="0 0 116 25">
       {PDF_RISK_COLORS.map((fill,i)=><React.Fragment key={i}>
-        <Rect x={i*16} y={2} width={14} height={19} fill={fill}/>
-        <Text x={i*16+7} y={15} textAnchor="middle"
+        <Rect x={i*16+2} y={3} width={14} height={18} fill={fill}/>
+        <Text x={i*16+9} y={15.5} textAnchor="middle"
           style={{fontSize:10.2,fontFamily:"Helvetica-Bold",fill:"#FFFFFF"}}>
           {i+1}
         </Text>
-        {rating===i+1?<Rect x={i*16-1} y={0} width={16} height={23}
-          fill="none" stroke="#FFFFFF" strokeWidth={2.8}/>:null}
       </React.Fragment>)}
+      {rating!==null?<Rect x={(rating-1)*16+1} y={1} width={16} height={22}
+        fill="none" stroke="#101010" strokeWidth={2.2}/>:null}
     </Svg>
+    {rating===null?<Text style={{fontSize:6.5,color:color.muted}}>
+      Not verified
+    </Text>:null}
   </View>;
 }
 function compactAllocationNameSize(name:string){
   return name.length>54?5.8:name.length>44?6.1:name.length>34?6.4:6.8;
+}
+/** SVG-centred labels use the same 164×164 coordinates as both doughnuts.
+ * Avoids the font-dependent offset of absolute-positioned overlay Views. */
+function DoughnutCenterText({percentage}:{percentage:number}){
+  return <React.Fragment>
+    <Text x={82} y={81} textAnchor="middle" style={{
+      fontFamily:"Helvetica-Bold",fontSize:18.2,fill:color.wine
+    }}>{percentage.toFixed(2)}%</Text>
+    <Text x={82} y={95} textAnchor="middle" style={{
+      fontSize:8.6,fill:color.muted
+    }}>allocated</Text>
+  </React.Fragment>;
 }
 /** One-page portfolio layout: chart above, small allocation/breakdown,
  * and the original reported-return table anchored below. */
@@ -196,14 +209,8 @@ function CompactPortfolioAllocationAndBreakdown({
                 strokeWidth={24} fill="none"/>:
               paths.map(p=><Path key={p.id} d={p.path} fill={p.color}/>)}
             <Circle cx={82} cy={82} r={43} fill="#FFFFFF"/>
+            <DoughnutCenterText percentage={portfolioWeight}/>
           </Svg>
-          <View style={{position:"absolute",top:26,left:12,width:44,
-            alignItems:"center"}}>
-            <Text style={{fontFamily:"Helvetica-Bold",fontSize:8.1,color:color.wine}}>
-              {portfolioWeight.toFixed(2)}%
-            </Text>
-            <Text style={{fontSize:4.7,color:color.muted}}>allocated</Text>
-          </View>
         </View>
         <Text style={{fontFamily:"Times-Roman",fontSize:12.2,
           color:color.wine,flex:1}}>Portfolio allocation</Text>
@@ -243,14 +250,16 @@ function CompactPortfolioAllocationAndBreakdown({
         </Text>
       </View>
       {funds.map(f=><View key={f.id} style={{
-        flexDirection:"row",justifyContent:"space-between",
+        flexDirection:"row",alignItems:"center",justifyContent:"space-between",
         borderBottomWidth:.4,borderBottomColor:color.border,
         paddingVertical:dense?3:5
-      }}>
-        <Text style={{fontSize:dense?6.7:7.4,width:"73%",lineHeight:1.2}}>
-          {f.name} ({f.weight.toFixed(2)}%)
+      }} wrap={false}>
+        <Text wrap={false} hyphenationCallback={word=>[word]}
+          style={{fontSize:compactAllocationNameSize(f.name),width:"72%",
+            lineHeight:1.15,color:color.ink}}>
+          {f.name}
         </Text>
-        <Text style={{fontSize:dense?7:7.5,textAlign:"right"}}>
+        <Text wrap={false} style={{fontSize:6.5,width:"28%",textAlign:"right"}}>
           {euro(f.allocatedAmount)}
         </Text>
       </View>)}
@@ -295,20 +304,8 @@ function CoverPortfolioAllocation({portfolio,multiple}:{
             stroke={CHART_COLORS[0]} strokeWidth={24} fill="none"/>:
             paths.map(p=><Path key={p.id} d={p.d} fill={p.color}/>)}
           <Circle cx={82} cy={82} r={43} fill="#FFFFFF"/>
+          <DoughnutCenterText percentage={percentageAllocated}/>
         </Svg>
-        <View style={{
-          position:"absolute",
-          top:expanded?59:multiple?31:40,
-          left:expanded?29:multiple?11:16,
-          width:expanded?102:multiple?62:77,alignItems:"center"
-        }}>
-          <Text style={{fontFamily:"Helvetica-Bold",
-            fontSize:expanded?17:multiple?9:11.5,color:color.wine}}>
-            {percentageAllocated.toFixed(2)}%
-          </Text>
-          <Text style={{fontSize:expanded?8:multiple?6:7,
-            color:color.muted}}>allocated</Text>
-        </View>
       </View>
       <View style={{flex:1}}>
         {shown.map(f=>{
