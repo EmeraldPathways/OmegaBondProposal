@@ -5,10 +5,11 @@ import { signOut } from "next-auth/react";
 import {
   ArrowRight, BookOpen, ChevronDown, Database,
   FileText, LogOut,
-  Menu, Plus, Search, ShieldAlert, SlidersHorizontal, UploadCloud, X
+  Menu, Plus, Search, ShieldAlert, SlidersHorizontal, UploadCloud, X, TrendingUp, ArrowDownCircle
 } from "lucide-react";
 import OmegaLogo from "@/components/omega-logo";
 import SecureFundUploads from "@/components/secure-fund-uploads";
+import PerformanceWorkspace from "@/components/performance-workspace";
 import ProposalPdfViewer from "@/components/proposal-pdf-viewer";
 import FundPriceHistoryChart from "@/components/fund-price-history-chart";
 import { APPROVED_FUND_GROUPS, type ApprovedFund } from "@/lib/approved-funds";
@@ -20,13 +21,15 @@ import {allocateInvestment,allocationBasisPoints,displayAllocationTotal,
 import {weightedPublishedPortfolioReturn,type WeightedPublishedReturn} from "@/lib/reconciliation/portfolio-performance";
 import {getFundRiskRating,riskRatingLabel,RISK_RATING_CAVEAT} from "@/lib/fund-risk-ratings";
 
-type View = "funds" | "imports" | "builder" | "compare" | "proposal";
+type View = "funds" | "imports" | "builder" | "compare" | "proposal" | "performance" | "withdrawals";
 const NAV: { key: View; label: string; icon: typeof Database }[] = [
   { key: "funds", label: "Fund library", icon: Database },
   { key: "imports", label: "Fund uploads", icon: UploadCloud },
   { key: "builder", label: "Portfolio builder", icon: SlidersHorizontal },
   { key: "compare", label: "Compare portfolios", icon: BookOpen },
-  { key: "proposal", label: "Client proposal", icon: FileText },
+  { key: "proposal", label: "Proposal", icon: FileText },
+  { key: "performance", label: "Performance", icon: TrendingUp },
+  { key: "withdrawals", label: "Withdrawals", icon: ArrowDownCircle },
 ];
 
 const INITIAL_PORTFOLIOS: Portfolio[] = [
@@ -260,6 +263,9 @@ export default function Workspace() {
         </>}
 
         {view === "imports" && <SecureFundUploads/>}
+
+        {(view === "performance" || view === "withdrawals") &&
+          <PerformanceWorkspace mode={view}/>}
 
         {view === "builder" && <>
           <div className="page-heading"><div><span className="eyebrow">PORTFOLIO CONSTRUCTION</span><h1>Portfolio builder</h1>
