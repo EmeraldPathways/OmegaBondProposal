@@ -78,6 +78,8 @@ export default function PerformancePdf({record,startDate,endDate,reportType}:Per
   const transactions=record.flows.filter(f=>f.date>startDate&&f.date<=endDate)
     .slice().sort((a,b)=>a.date.localeCompare(b.date));
   const fundResults=record.funds.map(f=>({fund:f,result:calculatePerformance(record,startDate,endDate,f.id)}));
+  const lifetimeAdded=record.flows.filter(f=>f.kind==="contribution").reduce((n,f)=>n+f.amount,0);
+  const lifetimeWithdrawn=record.flows.filter(f=>f.kind==="withdrawal").reduce((n,f)=>n+f.amount,0);
   const observations=[startDate,endDate].map(d=>checkPolicyValuations(record,d)).filter((v):v is string=>!!v);
   const isWithdrawal=reportType==="withdrawals";
   const issued=new Intl.DateTimeFormat("en-IE",{timeZone:"Europe/Dublin",day:"numeric",month:"long",year:"numeric"}).format(new Date());
@@ -99,6 +101,9 @@ export default function PerformancePdf({record,startDate,endDate,reportType}:Per
       <Text style={s.headline}>{isWithdrawal?"Cash flow overview":"Actual performance summary"}</Text>
       <View style={s.metricGrid}>
         <Metric label="Original investment" value={money(record.originalInvestment)}/>
+        <Metric label="Lifetime contributions" value={money(record.originalInvestment+lifetimeAdded)}/>
+        <Metric label="Lifetime withdrawals" value={money(lifetimeWithdrawn)}/>
+        <Metric label="Net invested capital" value={money(record.originalInvestment+lifetimeAdded-lifetimeWithdrawn)}/>
         <Metric label="Period opening value" value={money(perf.openingValue)}/>
         <Metric label="Current / closing value" value={money(perf.closingValue)}/>
         <Metric label="Further contributions" value={money(perf.contributions)}/>
