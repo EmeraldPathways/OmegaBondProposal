@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  const isV2Preview=process.env.VERCEL_ENV==="preview";
+  const isV2Preview=true; // V2 branch only: show warning on every deployment target.
   return <html lang="en"><body>
     {isV2Preview?<div role="status" style={{
       background:"#671E27",color:"#FFFFFF",fontSize:12,

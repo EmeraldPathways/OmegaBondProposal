@@ -11,7 +11,9 @@ import {NextRequest,NextResponse} from "next/server";
  * branch and nothing is merged into main.
  */
 export function middleware(request:NextRequest){
-  if(process.env.VERCEL_ENV!=="preview")return NextResponse.next();
+  // This guard is intentionally permanent throughout V2 development.
+  // It also applies when V2 uses a dedicated Vercel project, where
+  // VERCEL_ENV may be "production" despite being separate from live V1.
   const pathname=request.nextUrl.pathname;
   if(["GET","HEAD","OPTIONS"].includes(request.method))
     return NextResponse.next();

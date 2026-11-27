@@ -16,7 +16,7 @@ Created from production commit `dda7bd9d43462e7a388d917ff9ce3905881e06eb` on 27 
 Vercel Preview environment variables could inherit production database connections; their targets could not be inspected with the current Vercel permissions. **Do not assume the preview has its own database.**
 
 Until an independent V2 database and blob storage are provisioned:
-- Branch-only middleware rejects all data-changing API requests on Vercel Preview.
+- Branch-only middleware rejects data-changing API requests on all V2 deployments, even if a separate Vercel project calls its target 'production'.
 - Authentication and read-only PDF export remain available.
 - Read-only queries may use the existing configured provider data; never enter genuine client information for testing.
 - Do not enable importing, deleting, approving, enriching or writing financial records on Preview.
