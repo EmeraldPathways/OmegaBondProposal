@@ -173,7 +173,8 @@ test("client headings and PDF print refinements exclude redundant copy",()=>{
   assert.match(pdf,/<FundRiskScale fund=\{f\}\/>/);
   assert.match(pdf,/PDF_RISK_COLORS/);
   assert.match(pdf,/compactAllocationNameSize\(f\.name\)/);
-  assert.match(pdf,/fontSize:expanded\?17:multiple\?9:11\.5/);
+  assert.match(pdf,/<DoughnutCenterText percentage=\{percentageAllocated\}\/>/);
+  assert.match(pdf,/<DoughnutCenterText percentage=\{portfolioWeight\}\/>/);
   assert.match(chart,/marginLeft:48,marginRight:17/);
   assert.match(chart,/performanceAxisTicks\(values\)/);
   assert.doesNotMatch(pdf,/Cumulative returns, not annualised · — indicates unavailable data/);
