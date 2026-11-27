@@ -27,7 +27,7 @@ const NAV: { key: View; label: string; icon: typeof Database }[] = [
   { key: "imports", label: "Fund uploads", icon: UploadCloud },
   { key: "builder", label: "Portfolio builder", icon: SlidersHorizontal },
   { key: "compare", label: "Compare portfolios", icon: BookOpen },
-  { key: "proposal", label: "Proposal", icon: FileText },
+  { key: "proposal", label: "Client proposal", icon: FileText },
   { key: "performance", label: "Performance", icon: TrendingUp },
   { key: "withdrawals", label: "Withdrawals", icon: ArrowDownCircle },
 ];

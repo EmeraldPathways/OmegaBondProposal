@@ -68,7 +68,7 @@ export async function POST(request:Request) {
   if(input.record.flows.filter(f=>f.date>input.startDate&&f.date<=input.endDate).length>500)
     return error("Select a shorter reporting period. A single PDF supports up to 500 dated cash flows.",422);
   try{
-    const pdf=await renderToBuffer(PerformancePdf(input));
+    const pdf=await renderToBuffer(PerformancePdf({record:input.record,startDate:input.startDate,endDate:input.endDate,reportType:input.reportType}));
     return new Response(new Uint8Array(pdf),{status:200,headers:{
       ...headers,"Content-Type":"application/pdf",
       "Content-Disposition":"attachment; filename="+(input.reportType==="performance"?"\"Omega-Investment-Performance.pdf\"":"\"Omega-Withdrawals-Statement.pdf\""),
