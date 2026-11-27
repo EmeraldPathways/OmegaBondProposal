@@ -421,6 +421,20 @@ export default function Workspace() {
             </div>
             {!readyForProposal&&<p className="notice neutral" role="status">{pdfBlockReason}</p>}
           </section>
+          {!readyForProposal&&<section className="pdf-document-section omega-report-pdf" aria-label="Proposal A4 PDF preview">
+            <div className="pdf-toolbar">
+              <div className="pdf-toolbar-label"><FileText size={18} aria-hidden="true"/>
+                <div><strong>Live A4 PDF preview</strong>
+                  <span>The proposal preview and download will appear here when the portfolio is ready.</span>
+                </div>
+              </div>
+            </div>
+            <div className="omega-report-pdf-empty" role="status">
+              <FileText size={30} aria-hidden="true"/>
+              <strong>Complete the proposal to preview its PDF</strong>
+              <span>{pdfBlockReason}</span>
+            </div>
+          </section>}
           {readyForProposal&&<ProposalPdfViewer input={{
             proposalTitle:proposalTitle.trim()||"Investment bond proposal",
             client,adviser,objective,investment,portfolios:proposalPortfolios

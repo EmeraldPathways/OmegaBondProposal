@@ -72,3 +72,20 @@
 .omega-v2-confirmation span{display:flex;flex-direction:column;gap:4px}
 .omega-v2-confirmation strong{font-size:13px;color:#31342f}
 .omega-v2-confirmation small{font-size:12px;line-height:1.55;color:#72766f}
+
+/* Consistent inline A4 PDF viewers for Performance, Withdrawals and combined reports. */
+.omega-report-pdf{margin-top:0;scroll-margin-top:32px}
+.omega-report-pdf .pdf-toolbar-buttons .btn{min-width:145px}
+.omega-report-pdf-empty{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;
+  min-height:295px;padding:24px;text-align:center;background:#f2f1ee;color:#72766f
+}
+.omega-report-pdf-empty svg{color:#988b54}
+.omega-report-pdf-empty strong{font-size:16px;color:#31342f}
+.omega-report-pdf-empty span{font-size:12px;line-height:1.55;max-width:390px}
+.omega-report-pdf-warning{margin:14px 18px;font-size:12px;line-height:1.55}
+@media(max-width:620px){
+  .omega-report-pdf .pdf-toolbar-buttons{flex-direction:column;align-items:stretch}
+  .omega-report-pdf .pdf-toolbar-buttons .btn{width:100%;min-width:0}
+  .omega-report-pdf .pdf-document-frame{height:74vh;min-height:500px}
+}

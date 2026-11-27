@@ -1,13 +1,14 @@
 "use client";
 
 import {useEffect, useMemo, useState} from "react";
-import {ArrowDownToLine, ClipboardPaste, FileText, Plus, Save, Trash2} from "lucide-react";
+import {ClipboardPaste, FileText, Plus, Save, Trash2} from "lucide-react";
 import {
   type InvestmentRecord, type FundPosition, type FlowEntry, type ValuationEntry,
   calculatePerformance, checkPolicyValuations, emptyRecord, portfolioChartSeries
 } from "@/lib/v2-investment-performance";
 import {calculateCombinedPortfolio,reconcileStatementTotals,portfolioWarnings} from "@/lib/v2-policy-portfolios";
 import {parseValuationTable,parseValuationMatrix,parseCashFlowTable} from "@/lib/v2-manual-table";
+import ActualReportPdfViewer from "@/components/actual-report-pdf-viewer";
 
 type Mode = "performance" | "withdrawals";
 type SavedRecord = InvestmentRecord & {updatedAt?: string};
@@ -84,7 +85,6 @@ export default function PerformanceWorkspace({mode}:{mode:Mode}) {
   const [status,setStatus]=useState("");
   const [loading,setLoading]=useState(true);
   const [saving,setSaving]=useState(false);
-  const [exporting,setExporting]=useState(false);
   const [repeatDate,setRepeatDate]=useState("");
   const [repeatAmount,setRepeatAmount]=useState<number|null>(null);
   const [repeatCadence,setRepeatCadence]=useState<"monthly"|"annually">("monthly");
@@ -93,7 +93,6 @@ export default function PerformanceWorkspace({mode}:{mode:Mode}) {
   const [pasteMode,setPasteMode]=useState<"dates"|"matrix"|"cash"|null>(null);
   const [pasteSource,setPasteSource]=useState("");
   const [includedPolicyIds,setIncludedPolicyIds]=useState<string[]>([]);
-  const [combinedExporting,setCombinedExporting]=useState(false);
 
   useEffect(()=>{
     let cancelled=false;
@@ -150,26 +149,6 @@ export default function PerformanceWorkspace({mode}:{mode:Mode}) {
     }catch(error){setStatus(error instanceof Error?error.message:"Unable to save.");}
     finally{setSaving(false);}
   }
-  async function exportPdf(){
-    if(!record.cashFlowsConfirmed){setStatus("Confirm that all dated contributions and withdrawals are complete before exporting a client PDF.");return;}
-    if(mode==="performance"&&!performance.available){setStatus("Complete the reporting valuations before exporting a performance PDF.");return;}
-    setExporting(true);setStatus("");
-    try{
-      const response=await fetch("/api/v2/performance/pdf",{
-        method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({record,startDate:start,endDate:end,reportType:mode})
-      });
-      if(!response.ok){const json=await response.json();throw new Error(json.error||"Could not produce PDF");}
-      const url=URL.createObjectURL(await response.blob());
-      const a=document.createElement("a");
-      a.href=url;
-      a.download=mode==="performance"?"Omega-Investment-Performance.pdf":"Omega-Withdrawals-Statement.pdf";
-      document.body.appendChild(a);a.click();a.remove();
-      window.setTimeout(()=>URL.revokeObjectURL(url),5000);
-      setStatus("PDF generated from the currently displayed values.");
-    }catch(error){setStatus(error instanceof Error?error.message:"Could not export PDF.");}
-    finally{setExporting(false);}
-  }
   function changeFund(id:string,changes:Partial<FundPosition>){
     edit({funds:record.funds.map(f=>f.id===id?{...f,...changes}:f)});
   }
@@ -211,6 +190,28 @@ export default function PerformanceWorkspace({mode}:{mode:Mode}) {
   const lifetimeAdded=record.flows.filter(f=>f.kind==="contribution").reduce((n,f)=>n+f.amount,0);
   const lifetimeWithdrawn=record.flows.filter(f=>f.kind==="withdrawal").reduce((n,f)=>n+f.amount,0);
   const showCashTable=mode==="withdrawals";
+  const reportWarnings=portfolioWarnings([record],start,end);
+  const reportDisabledReason=!record.clientName.trim()||!record.policyName.trim()
+    ?"Enter the client and policy names to prepare a PDF."
+    :!record.investmentDate||!start||!end||start>=end||start<record.investmentDate
+    ?"Select valid reporting dates from the original investment onwards."
+    :!record.cashFlowsConfirmed
+    ?"Confirm that the dated contributions and withdrawals are complete before preparing a client PDF."
+    :reportWarnings.length>0
+    ?"Resolve valuation and statement reconciliation warnings before generating a client report."
+    :mode==="performance"&&!performance.available
+    ?"Enter the opening and closing valuations to calculate actual performance."
+    :null;
+  const combinedWarnings=portfolioWarnings(selectedPolicies,start,end);
+  const combinedDisabledReason=selectedPolicies.length<2
+    ?"Select at least two saved policies for the same client and group."
+    :selectedPolicies.some(p=>!p.cashFlowsConfirmed)
+    ?"Confirm the dated cash flows for each selected policy."
+    :!combined.available
+    ?combined.reason
+    :combinedWarnings.length>0
+    ?"Resolve policy reconciliation warnings before preparing the combined PDF."
+    :null;
   function applyPastedRows(){
     if(!pasteMode)return;
     if(pasteMode==="cash"){
@@ -239,27 +240,6 @@ export default function PerformanceWorkspace({mode}:{mode:Mode}) {
     setPasteMode(null);setPasteSource("");
     setStatus(String(parsed.rows.length)+" dated valuations added to the draft. Review and save the record.");
   }
-  async function exportCombinedPdf(){
-    if(selectedPolicies.some(p=>!p.cashFlowsConfirmed)){setStatus("Every included policy must have its dated cash flows confirmed before exporting.");return;}
-    if(!combined.available||selectedPolicies.length<2){setStatus(combined.reason||"Select two policies.");return;}
-    const issues=portfolioWarnings(selectedPolicies,start,end);
-    if(issues.length){setStatus("Resolve portfolio reconciliation warnings before exporting: "+issues[0]);return;}
-    setCombinedExporting(true);
-    try{
-      const response=await fetch("/api/v2/performance/pdf",{
-        method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({records:selectedPolicies,startDate:start,endDate:end,reportType:"portfolio"})
-      });
-      if(!response.ok){const json=await response.json();throw new Error(json.error||"Could not produce combined report.");}
-      const url=URL.createObjectURL(await response.blob());
-      const a=document.createElement("a");
-      a.href=url;a.download="Omega-Combined-Portfolio-Performance.pdf";
-      document.body.appendChild(a);a.click();a.remove();
-      window.setTimeout(()=>URL.revokeObjectURL(url),5000);
-      setStatus("Combined client portfolio PDF downloaded.");
-    }catch(error){setStatus(error instanceof Error?error.message:"Could not export combined PDF.");}
-    finally{setCombinedExporting(false);}
-  }
   return <section className="omega-v2-workspace">
     <div className="page-heading"><div>
       <span className="eyebrow">{showCashTable?"CASH FLOW RECORDS":"ACTUAL INVESTMENT PERFORMANCE"}</span>
@@ -275,8 +255,7 @@ export default function PerformanceWorkspace({mode}:{mode:Mode}) {
       </label>
       <button className="btn quiet" onClick={newCase} type="button"><Plus size={16}/> New policy</button>
       <button className="btn primary" disabled={saving} onClick={save} type="button"><Save size={16}/>{saving?"Saving…":"Save policy"}</button>
-      <button className="btn quiet" disabled={exporting||!record.cashFlowsConfirmed||(!showCashTable&&!performance.available)}
-        onClick={exportPdf} type="button"><ArrowDownToLine size={16}/>{exporting?"Preparing…":"Download PDF"}</button>
+      <a className="btn quiet" href="#omega-pdf-viewer"><FileText size={16}/> Go to PDF preview</a>
     </div>
     {(loading||status)&&<p role="status" className="omega-v2-status">{loading?"Loading policies…":status}</p>}
 
@@ -401,7 +380,7 @@ export default function PerformanceWorkspace({mode}:{mode:Mode}) {
     <div className="panel padded omega-v2-section">
       <div className="omega-v2-section-head"><div><span className="eyebrow">06 · {showCashTable?"CASH FLOW SUMMARY":"PERFORMANCE SUMMARY"}</span>
         <h2>{showCashTable?"Withdrawals statement":"Investment performance report"}</h2></div>
-        <button className="btn primary" type="button" disabled={exporting||(!showCashTable&&!performance.available)} onClick={exportPdf}><FileText size={16}/> Export PDF</button>
+        <a className="btn primary" href="#omega-pdf-viewer"><FileText size={16}/> Preview and download PDF</a>
       </div>
       <div className="omega-v2-metrics">
         <Metric label="Original investment" value={euro(record.originalInvestment)}/>
@@ -440,6 +419,16 @@ export default function PerformanceWorkspace({mode}:{mode:Mode}) {
       <p className="fineprint">Methodology: cumulative Modified Dietz return measures investment gain after adjusting for dated external cash flows and the capital invested for the remaining portion of the period. Not a time-weighted return or annualised figure. Assumes flows occur at the close of their entered date. Reported valuation accuracy, fees, tax treatment and transaction dates must be checked against provider statements before client use.</p>
     </div>
 
+    <ActualReportPdfViewer key={mode}
+      id="omega-pdf-viewer"
+      title={showCashTable?"Withdrawals PDF preview":"Performance PDF preview"}
+      description={showCashTable
+        ?"Review the dated contributions and withdrawals statement before downloading the same A4 PDF."
+        :"Review actual cumulative, cash-flow-adjusted performance before downloading the same A4 PDF."}
+      filename={showCashTable?"Omega-Withdrawals-Statement.pdf":"Omega-Investment-Performance.pdf"}
+      request={{record,startDate:start,endDate:end,reportType:mode}}
+      disabledReason={reportDisabledReason}/>
+
     {portfolioCandidates.length>=2&&<div className="panel padded omega-v2-section">
       <span className="eyebrow">07 · COMBINED CLIENT PORTFOLIO</span>
       <h2>Combined policy performance</h2>
@@ -468,10 +457,13 @@ export default function PerformanceWorkspace({mode}:{mode:Mode}) {
             <td>{p.policyName}</td><td>{euro(v.openingValue)}</td><td>{euro(v.closingValue)}</td><td>{euro(v.gain)}</td><td>{pct(v.cumulativeReturnPct)}</td>
           </tr>)}</tbody>
         </table></div>
-        <button className="btn primary" type="button" onClick={exportCombinedPdf}
-          disabled={!combined.available||combinedExporting||selectedPolicies.some(p=>!p.cashFlowsConfirmed)||portfolioWarnings(selectedPolicies,start,end).length>0}>
-          <FileText size={16}/>{combinedExporting?"Generating…":"Export combined portfolio PDF"}
-        </button>
+        <ActualReportPdfViewer
+          id="omega-combined-pdf-viewer"
+          title="Combined portfolio PDF preview"
+          description="Review all selected policies, cumulative results and dated cash flows before downloading."
+          filename="Omega-Combined-Portfolio-Performance.pdf"
+          request={{records:selectedPolicies,startDate:start,endDate:end,reportType:"portfolio"}}
+          disabledReason={combinedDisabledReason}/>
       </>}
     </div>}
 
