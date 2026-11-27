@@ -143,5 +143,8 @@ test("Amount breakdown prints full long fund names on a single row alongside amo
       assert.ok(label.transform[4]+label.width<=amount.transform[4]+1,
         "Fund name overlaps euro value in the Amount breakdown: "+name);
     }
-  }finally{await doc.destroy();}
+  }finally{
+    const disposable=doc as unknown as {destroy?:()=>Promise<void>};
+    if(typeof disposable.destroy==="function")await disposable.destroy();
+  }
 });

@@ -80,7 +80,7 @@ test("A4 PDF can render uploaded-workbook returns and PDF factsheet metadata wit
     for(const heading of [
       "Fund details","Aviva Fixed ESG 60 Series 1","Zurich International Equity"
     ])assert.ok(details.includes(heading),"Fund-details page must contain "+heading);
-    assert.ok(details.includes("Risk rating:"),"Risk rating label must appear.");
+    assert.ok(details.includes("Risk Rating"),"Risk Rating heading must appear.");
     assert.ok(!details.includes("Funds 1–3 of 3"),"Redundant fund counter must be removed.");
     for(const rating of ["4/7","5/7","3/7"])
       assert.ok(details.includes(rating),"One provider-specific rating missing: "+rating);
