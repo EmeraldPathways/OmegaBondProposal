@@ -1,6 +1,6 @@
 "use client";
 
-import {useEffect,useRef,useState} from "react";
+import React,{useEffect,useRef,useState} from "react";
 import {ArrowDownToLine,FileText,RefreshCw,ShieldCheck} from "lucide-react";
 import type {InvestmentRecord} from "@/lib/v2-investment-performance";
 
