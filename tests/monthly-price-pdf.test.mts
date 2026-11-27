@@ -83,6 +83,10 @@ test("five-fund proposal: page one allocations, page two full-size historical ch
   assert.match(sample.texts[1],/Five-year fund performance/);
   assert.match(sample.texts[1],/Reported cumulative returns/);
   assert.match(sample.texts[1],/0%/,"Performance chart must have an explicit 0% tick.");
+  assert.match(sample.texts[1],/Nov 2021/,"The axis must state the actual reporting month, not just 2021.");
+  assert.match(sample.texts[1],/Nov 2026/,"The end-axis label must include the month.");
+  assert.match(sample.texts[1],/Each line begins at its first available reporting date/,
+    "The chart must explain source-limited fund start dates.");
   assert.ok(!sample.texts[2].includes("Funds 1–3 of 5"));
   assert.ok(!sample.texts[3].includes("Funds 4–5 of 5"));
   assert.ok(sample.texts[1].includes(history.funds[0].name));
@@ -151,4 +155,39 @@ test("a long custom title wraps without introducing extra pages",async()=>{
   assert.equal(sample.pages,3);
   assert.ok(sample.texts[0].replace(/-\s+(?=[A-Za-z])/g,"").includes(title),
     "Long title should appear completely in the cover PDF");
+});
+
+
+test("both uploaded PDF portfolios start each fund at its first source observation",()=>{
+  const selected=new Set([
+    "Aviva Concept K Series 1",
+    "New Ireland PBIS Exempt Dynamic",
+    "New Ireland Goodbody Dividend Income 3",
+    "Zurich Prisma 4",
+    "New Ireland PRIME 5",
+    "Aviva Multi Asset ESG Passive Plus 4 Series 1",
+    "New Ireland Pension Passive Multi-Asset"
+  ]);
+  let seen=0;
+  for(const [provider,name,values] of source.funds){
+    if(!selected.has(name))continue;
+    const validIndices=values.map((v,i)=>v===null?-1:i).filter(i=>i>=0);
+    assert.ok(validIndices.length>1,name+" should have a source history");
+    const firstIdx=validIndices[0];
+    const actual=history.funds.find(f=>f.provider===provider&&f.name===name);
+    assert.ok(actual,name+" must exist in the validated active snapshot");
+    assert.equal(actual.points[0].date,history.periods[firstIdx].date,
+      name+" line must start at the first non-empty uploaded date");
+    assert.equal(actual.points[0].returnPct,values[firstIdx],
+      name+" first plotted value must match the source (never fabricated 0%)");
+    assert.ok(!actual.points.some(p=>p.date<actual.points[0].date),
+      "No invented early observations for "+name);
+    seen++;
+  }
+  assert.equal(seen,selected.size);
+  const concept=history.funds.find(f=>f.name==="Aviva Concept K Series 1")!;
+  assert.equal(concept.points[0].date,"2023-10-31");
+  assert.equal(concept.points[0].returnPct,-1.2);
+  assert.ok(history.funds.filter(f=>f.points[0].date==="2021-11-30").length>0,
+    "Funds with actual Nov 2021 values legitimately appear at the left edge.");
 });

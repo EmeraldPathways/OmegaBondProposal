@@ -90,7 +90,11 @@ test("axis zero is independent of the original PRICES series values",async()=>{
   const chart=readFileSync(new URL("../src/lib/pdf/five-year-monthly-chart.tsx",import.meta.url),"utf8");
   assert.match(chart,/const values=points\.map\(point=>point\.returnPct\)/);
   assert.match(chart,/axisY\(point\.returnPct\)/);
-  assert.match(chart,/priceSegments\(fund\.priceHistory\?\?\[\]\)/);
+  assert.match(chart,/priceSegments\(fund\.observations\)/);
+  assert.match(chart,/cx=\{axisX\(first\.date\)\}/);
+  assert.match(chart,/cy=\{axisY\(first\.returnPct\)\}/);
+  assert.match(chart,/dateLabel:new Date\(stamp\)\.toLocaleDateString/);
+  assert.doesNotMatch(chart,/tick\.year/);
   assert.doesNotMatch(chart,/rebaseCumulativeSeries|chartPoints|first\.returnPct\s*[+-]/);
   assert.doesNotMatch(chart,/point\.returnPct\s*-\s*(?:first|start|initial|baseline)/i);
   console.log("Raw first PRICES observations (no chart rebasing): "+JSON.stringify(observed));

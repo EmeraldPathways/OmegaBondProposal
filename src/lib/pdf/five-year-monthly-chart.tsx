@@ -1,5 +1,5 @@
 import React from "react";
-import {View,Text,Svg,Path,Rect,Line} from "@react-pdf/renderer";
+import {View,Text,Svg,Path,Rect,Line,Circle} from "@react-pdf/renderer";
 import type {WorkbookProposalFund} from "@/lib/pdf/workbook-proposal";
 import type {PriceHistoryPoint} from "@/lib/reconciliation/monthly-prices";
 
@@ -46,9 +46,14 @@ export function performanceAxisTicks(values:readonly number[]){
 }
 /** Full-sized five-year chart built exclusively from the saved PRICES observations. */
 export function FiveYearMonthlyChart({funds}:{funds:WorkbookProposalFund[]}){
-  const series=funds.filter(f=>(f.priceHistory?.length??0)>=2);
+  // Plot exactly the dated observations found in the PRICES source. Never
+  // prepend 0% or extend a fund backwards to the earliest chart date.
+  const series=funds
+    .map(f=>({...f,observations:[...(f.priceHistory??[])].sort(
+      (a,b)=>a.date.localeCompare(b.date))}))
+    .filter(f=>f.observations.length>=1);
   if(!series.length)return null;
-  const points=series.flatMap(f=>f.priceHistory??[]);
+  const points=series.flatMap(f=>f.observations);
   const times=points.map(point=>Date.parse(point.date+"T00:00:00Z"));
   const leftTime=Math.min(...times),rightTime=Math.max(...times);
   // Tick placement must never rebase or reset any source return observation.
@@ -64,7 +69,9 @@ export function FiveYearMonthlyChart({funds}:{funds:WorkbookProposalFund[]}){
   const xTicks=Array.from({length:6},(_,index)=>{
     const stamp=leftTime+(rightTime-leftTime)*index/5;
     return {stamp,x:plotLeft+(plotRight-plotLeft)*index/5,
-      year:new Date(stamp).getUTCFullYear()};
+      dateLabel:new Date(stamp).toLocaleDateString("en-IE",{
+        month:"short",year:"numeric",timeZone:"UTC"
+      })};
   });
   const startLabel=new Date(leftTime).toLocaleDateString("en-IE",
     {month:"short",year:"numeric",timeZone:"UTC"});
@@ -102,10 +109,10 @@ export function FiveYearMonthlyChart({funds}:{funds:WorkbookProposalFund[]}){
           stroke="#F1F0ED" strokeWidth={.6}/>
         <Text x={tick.x} y={plotBottom+18}
           textAnchor={i===0?"start":i===xTicks.length-1?"end":"middle"}
-          style={{fill:color.muted,fontSize:9}}>{String(tick.year)}</Text>
+          style={{fill:color.muted,fontSize:8.5}}>{tick.dateLabel}</Text>
       </React.Fragment>)}
       {series.flatMap((fund,i)=>
-        priceSegments(fund.priceHistory??[]).map((segment,j)=>
+        priceSegments(fund.observations).filter(segment=>segment.length>1).map((segment,j)=>
           <Path key={fund.id+"-line-"+j}
             d={segment.map((point,k)=>
               (k?"L":"M")+axisX(point.date).toFixed(2)+" "+
@@ -114,6 +121,15 @@ export function FiveYearMonthlyChart({funds}:{funds:WorkbookProposalFund[]}){
             strokeWidth={2.1} strokeLinecap="round" strokeLinejoin="round"/>
         )
       )}
+      {/* A small dot shows the exact first date/value of each fund. A late
+          starting fund has no line or point before its real first observation. */}
+      {series.map((fund,i)=>{
+        const first=fund.observations[0];
+        return <Circle key={fund.id+"-first"} cx={axisX(first.date)}
+          cy={axisY(first.returnPct)} r={2.6}
+          fill={FIVE_YEAR_CHART_COLORS[i%FIVE_YEAR_CHART_COLORS.length]}
+          stroke="#FFFFFF" strokeWidth={.65}/>;
+      })}
     </Svg>
     <View style={{flexDirection:"row",flexWrap:"wrap",marginTop:4,
       marginLeft:48,marginRight:17}}>
@@ -127,6 +143,9 @@ export function FiveYearMonthlyChart({funds}:{funds:WorkbookProposalFund[]}){
         </Text>
       </View>)}
     </View>
-
+    <Text style={{fontSize:7,color:color.muted,marginTop:4,lineHeight:1.3}}>
+      Each line begins at its first available reporting date in the uploaded
+      PRICES data. No earlier returns are inferred.
+    </Text>
   </View>;
 }

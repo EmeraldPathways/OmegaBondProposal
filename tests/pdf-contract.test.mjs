@@ -42,7 +42,7 @@ test("new A4 Omega PDF displays actual workbook fund charts and PDF metadata wit
   assert.doesNotMatch(pdf,/DRAFT|NOT APPROVED FOR CLIENT DISTRIBUTION/);
   assert.match(pdf,/CompactPortfolioAllocationAndBreakdown/);
   assert.match(pdf,/FiveYearMonthlyChart/);
-  assert.match(read("src/lib/pdf/five-year-monthly-chart.tsx"),/priceSegments\(fund\.priceHistory/);
+  assert.match(read("src/lib/pdf/five-year-monthly-chart.tsx"),/priceSegments\(fund\.observations/);
   assert.doesNotMatch(pdf,/FundPriceSparkline/);
   assert.match(pdf,/f\.priceHistory/);
   assert.match(read("src/components/fund-price-history-chart.tsx"),/Reported cumulative return/);
@@ -112,7 +112,7 @@ test("cover contains investment details and the allocation-return table; single 
   assert.match(pdf,/marginTop:11,marginBottom:4/);
   assert.match(pdf,/FundAllocationReturnsTable/);
   assert.match(pdf,/FiveYearMonthlyChart/);
-  assert.match(read("src/lib/pdf/five-year-monthly-chart.tsx"),/priceSegments\(fund\.priceHistory/);
+  assert.match(read("src/lib/pdf/five-year-monthly-chart.tsx"),/priceSegments\(fund\.observations/);
   assert.doesNotMatch(pdf,/FundPriceSparkline/);
 });
 
