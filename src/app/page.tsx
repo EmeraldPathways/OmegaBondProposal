@@ -25,7 +25,7 @@ export default async function Page() {
             <div><strong>OMEGA_LOGIN_PASSWORD:</strong> {passwordReady ? "Configured correctly" : "Missing or fewer than 16 characters"}</div>
           </div>
           <p>Both variables must be saved under this project's <strong>Production</strong> environment. Use a randomly generated secret of at least 32 characters and a unique password of at least 16 characters, without surrounding quotation marks. Redeploy after saving the variables. Never enter credentials in GitHub or this chat.</p>
-          <a className="auth-button auth-link" href="https://vercel.com/goemeraldpathways-gmailcoms-projects/omega-bond-proposal/settings/environment-variables">Open Vercel environment settings</a>
+          <a className="auth-button auth-link" href="https://vercel.com/goemeraldpathways-gmailcoms-projects/omega-funds-v2/settings/environment-variables">Open Vercel environment settings</a>
           <p className="auth-legal">OFM Financial Ltd T/A Omega Financial Management, regulated by the Central Bank of Ireland.</p>
         </section>
       </main>

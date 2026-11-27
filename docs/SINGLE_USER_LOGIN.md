@@ -6,9 +6,9 @@ The application uses Auth.js Credentials to authenticate one fixed email address
 
 ## Initial setup (Vercel)
 
-Open: https://vercel.com/goemeraldpathways-gmailcoms-projects/omega-bond-proposal/settings/environment-variables
+Open: https://vercel.com/goemeraldpathways-gmailcoms-projects/omega-funds-v2/settings/environment-variables
 
-Add these **Production** environment variables with Sensitive/Secret enabled:
+Add these **Production** environment variables to the **omega-funds-v2** project (NOT omega-bond-proposal) with Sensitive/Secret enabled:
 
 | Key | Value |
 | --- | --- |
@@ -17,7 +17,7 @@ Add these **Production** environment variables with Sensitive/Secret enabled:
 
 **Do not paste either secret into ChatGPT, GitHub, or a support ticket.** The email is fixed in source; there is no need for a separate email environment variable. Do not add secrets under `NEXT_PUBLIC_`.
 
-After saving, **Redeploy** the latest `main` branch so the deployment picks up the variables.
+After saving, **Redeploy** the latest `v2-development` branch on the separate `omega-funds-v2` Vercel project so the deployment picks up the variables. Do not redeploy the V1 `omega-bond-proposal` project for V2 credentials.
 
 ## Behaviour
 
